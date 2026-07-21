@@ -136,6 +136,40 @@ const buildAndSendNotifications = async (services, board, card, notification, ac
   );
 };
 
+const buildAndSendWebPushNotification = async (
+  board,
+  card,
+  notification,
+  actorUser,
+  notifiableUser,
+) => {
+  try {
+    const pushSubscriptions = await PushSubscription.qm.getActiveByUserIds([notification.userId]);
+
+    if (pushSubscriptions.length === 0) {
+      return;
+    }
+
+    const t = sails.helpers.utils.makeTranslator(notifiableUser.language);
+
+    const title = buildTitle(notification, t);
+    const bodyByFormat = buildBodyByFormat(board, card, notification, actorUser, t);
+
+    if (!title || !bodyByFormat) {
+      return;
+    }
+
+    await sails.helpers.utils.sendWebPush.with({
+      subscriptions: pushSubscriptions,
+      title,
+      body: bodyByFormat.text,
+      url: `${sails.config.custom.baseUrl}/cards/${card.id}`,
+    });
+  } catch (error) {
+    sails.log.error(`Error sending web push notification:\n${error}`);
+  }
+};
+
 // TODO: use templates (views) to build html
 const buildAndSendEmail = async (
   transporter,
@@ -282,6 +316,16 @@ module.exports = {
     });
 
     if (notifiableUser) {
+      if (sails.config.custom.webPushEnabled) {
+        buildAndSendWebPushNotification(
+          inputs.board,
+          values.card,
+          notification,
+          values.creatorUser,
+          notifiableUser,
+        ); // Fire-and-forget
+      }
+
       const notificationServices = await NotificationService.qm.getByUserId(notification.userId);
       const { transporter } = await sails.helpers.utils.makeSmtpTransporter();
 

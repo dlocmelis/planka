@@ -233,6 +233,11 @@ module.exports.routes = {
   'POST /api/notification-services/:id/test': 'notification-services/test',
   'DELETE /api/notification-services/:id': 'notification-services/delete',
 
+  'GET /api/push-subscriptions': 'push-subscriptions/index',
+  'POST /api/push-subscriptions': 'push-subscriptions/create',
+  'POST /api/push-subscriptions/test': 'push-subscriptions/test',
+  'DELETE /api/push-subscriptions': 'push-subscriptions/delete',
+
   'PATCH /api/_internal/config': '_internal/update-config',
 
   'GET /swagger.json': 'swagger/show',

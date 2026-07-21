@@ -37,6 +37,12 @@ module.exports = {
       data.isDemoMode = true;
     }
 
+    if (sails.config.custom.webPushEnabled && sails.config.custom.webPushVapidPublicKey) {
+      data.webPush = {
+        vapidPublicKey: sails.config.custom.webPushVapidPublicKey,
+      };
+    }
+
     return data;
   },
 };

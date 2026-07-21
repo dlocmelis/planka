@@ -136,6 +136,51 @@ const buildAndSendNotifications = async (services, board, card, notification, ac
   );
 };
 
+const buildAndSendWebPushNotifications = async (
+  board,
+  notifications,
+  valuesById,
+  notifiableUser,
+) => {
+  try {
+    const pushSubscriptions = await PushSubscription.qm.getActiveByUserIds([notifiableUser.id]);
+
+    if (pushSubscriptions.length === 0) {
+      return;
+    }
+
+    const t = sails.helpers.utils.makeTranslator(notifiableUser.language);
+
+    await Promise.all(
+      notifications.map(async (notification) => {
+        const values = valuesById[notification.id];
+
+        const title = buildTitle(notification, t);
+        const bodyByFormat = buildBodyByFormat(
+          board,
+          values.card,
+          notification,
+          values.creatorUser,
+          t,
+        );
+
+        if (!title || !bodyByFormat) {
+          return;
+        }
+
+        await sails.helpers.utils.sendWebPush.with({
+          subscriptions: pushSubscriptions,
+          title,
+          body: bodyByFormat.text,
+          url: `${sails.config.custom.baseUrl}/cards/${values.card.id}`,
+        });
+      }),
+    );
+  } catch (error) {
+    sails.log.error(`Error sending web push notifications:\n${error}`);
+  }
+};
+
 // TODO: use templates (views) to build html
 const buildEmail = (board, card, notification, actorUser, notifiableUser, t) => {
   const cardLink = `<a href="${sails.config.custom.baseUrl}/cards/${card.id}">${escapeHtml(card.name)}</a>`;
@@ -306,6 +351,17 @@ module.exports = {
 
       const notificationServices = await NotificationService.qm.getByUserIds(notifiableUserIds);
       const { transporter } = await sails.helpers.utils.makeSmtpTransporter();
+
+      if (sails.config.custom.webPushEnabled) {
+        notifiableUsers.forEach((notifiableUser) => {
+          buildAndSendWebPushNotifications(
+            inputs.board,
+            notificationsByUserId[notifiableUser.id],
+            valuesById,
+            notifiableUser,
+          ); // Fire-and-forget
+        });
+      }
 
       if (notificationServices.length > 0 || transporter) {
         const notificationServicesByUserId = _.groupBy(notificationServices, 'userId');

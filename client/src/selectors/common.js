@@ -11,6 +11,8 @@ export const selectBootstrap = ({ common: { bootstrap } }) => bootstrap;
 
 export const selectOidcBootstrap = (state) => selectBootstrap(state).oidc;
 
+export const selectWebPushBootstrap = (state) => selectBootstrap(state).webPush;
+
 export const selectActiveUsersLimit = (state) => selectBootstrap(state).activeUsersLimit;
 
 export const selectAccessToken = ({ auth: { accessToken } }) => accessToken;
@@ -23,15 +25,19 @@ export const selectProjectCreateForm = ({ ui: { projectCreateForm } }) => projec
 
 export const selectSmtpTestState = ({ ui: { smtpTestState } }) => smtpTestState;
 
+export const selectWebPushState = ({ ui: { webPushState } }) => webPushState;
+
 export default {
   selectIsSocketDisconnected,
   selectIsInitializing,
   selectBootstrap,
   selectOidcBootstrap,
+  selectWebPushBootstrap,
   selectActiveUsersLimit,
   selectAccessToken,
   selectAuthenticateForm,
   selectUserCreateForm,
   selectProjectCreateForm,
   selectSmtpTestState,
+  selectWebPushState,
 };

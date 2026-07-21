@@ -4,6 +4,15 @@
  */
 
 :global(#app) {
+  .button {
+    margin-bottom: 16px;
+  }
+
+  .radio {
+    margin-bottom: 16px;
+    width: 100%;
+  }
+
   .wrapper {
     border: none;
     box-shadow: none;

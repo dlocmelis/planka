@@ -111,6 +111,11 @@ module.exports.custom = {
   smtpPassword: process.env.SMTP_PASSWORD,
   smtpFrom: process.env.SMTP_FROM,
 
+  webPushEnabled: process.env.WEB_PUSH_ENABLED === 'true',
+  webPushVapidPublicKey: process.env.WEB_PUSH_VAPID_PUBLIC_KEY,
+  webPushVapidPrivateKey: process.env.WEB_PUSH_VAPID_PRIVATE_KEY,
+  webPushVapidSubject: process.env.WEB_PUSH_VAPID_SUBJECT,
+
   gravatarBaseUrl: process.env.GRAVATAR_BASE_URL,
 
   /* Internal */

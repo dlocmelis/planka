@@ -5,6 +5,7 @@
 
 import { call, put, select } from 'redux-saga/effects';
 
+import { syncPushSubscription } from './push-subscriptions';
 import request from '../request';
 import requests from '../requests';
 import selectors from '../../../selectors';
@@ -17,6 +18,10 @@ export function* initializeCore() {
   const { item: bootstrap } = yield call(request, api.getBootstrap); // TODO: handle error
 
   yield put(actions.initializeCore.fetchBootstrap(bootstrap));
+
+  if (bootstrap.webPush) {
+    yield call(syncPushSubscription);
+  }
 
   const {
     config,

@@ -32,6 +32,7 @@ import comments from './comments';
 import activities from './activities';
 import notifications from './notifications';
 import notificationServices from './notification-services';
+import pushSubscriptions from './push-subscriptions';
 
 export { http, socket };
 
@@ -63,4 +64,5 @@ export default {
   ...activities,
   ...notifications,
   ...notificationServices,
+  ...pushSubscriptions,
 };
