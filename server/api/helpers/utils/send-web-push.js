@@ -44,11 +44,16 @@ module.exports = {
     }
 
     if (!vapidDetailsSet) {
-      webpush.setVapidDetails(
-        webPushVapidSubject || 'mailto:admin@example.com',
-        webPushVapidPublicKey,
-        webPushVapidPrivateKey,
-      );
+      try {
+        webpush.setVapidDetails(
+          webPushVapidSubject || 'mailto:admin@example.com',
+          webPushVapidPublicKey,
+          webPushVapidPrivateKey,
+        );
+      } catch (error) {
+        sails.log.error(`Error setting VAPID details for web push:\n${error}`);
+        return;
+      }
 
       vapidDetailsSet = true;
     }
@@ -70,23 +75,28 @@ module.exports = {
         };
 
         const updateLastUsedAt = () =>
-          PushSubscription.qm.updateOne(
-            { id: subscription.id },
-            { lastUsedAt: new Date().toISOString() },
-          );
+          PushSubscription.qm
+            .updateOne({ id: subscription.id }, { lastUsedAt: new Date().toISOString() })
+            .catch((updateError) => {
+              sails.log.error(`Error updating push subscription last used at:\n${updateError}`);
+            });
+
+        const disableSubscription = async () => {
+          try {
+            await PushSubscription.qm.updateOne(
+              { id: subscription.id },
+              { disabledAt: new Date().toISOString() },
+            );
+          } catch (updateError) {
+            sails.log.error(`Error disabling push subscription:\n${updateError}`);
+          }
+        };
 
         try {
           await webpush.sendNotification(webPushSubscription, payload);
         } catch (error) {
           if (error.statusCode === 404 || error.statusCode === 410) {
-            try {
-              await PushSubscription.qm.updateOne(
-                { id: subscription.id },
-                { disabledAt: new Date().toISOString() },
-              );
-            } catch (updateError) {
-              sails.log.error(`Error disabling push subscription:\n${updateError}`);
-            }
+            await disableSubscription();
 
             return;
           }
@@ -96,11 +106,19 @@ module.exports = {
 
             try {
               await webpush.sendNotification(webPushSubscription, payload);
-
-              updateLastUsedAt(); // Fire-and-forget
             } catch (retryError) {
+              if (retryError.statusCode === 404 || retryError.statusCode === 410) {
+                await disableSubscription();
+
+                return;
+              }
+
               sails.log.error(`Error sending web push notification (retry):\n${retryError}`);
+
+              return;
             }
+
+            updateLastUsedAt(); // Fire-and-forget
 
             return;
           }

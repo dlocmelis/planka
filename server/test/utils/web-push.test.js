@@ -111,6 +111,18 @@ describe('web-push', () => {
       sails.config.custom.webPushVapidPublicKey = webPushVapidPublicKey;
     });
 
+    it('should not throw when VAPID keys are malformed', async () => {
+      const { webPushVapidPrivateKey } = sails.config.custom;
+      sails.config.custom.webPushVapidPrivateKey = 'invalid';
+
+      await sendWebPush.fn(INPUTS);
+
+      expect(sendNotificationCalls).to.have.lengthOf(0);
+      expect(updateOneCalls).to.have.lengthOf(0);
+
+      sails.config.custom.webPushVapidPrivateKey = webPushVapidPrivateKey;
+    });
+
     it('should update lastUsedAt on successful send', async () => {
       await sendWebPush.fn(INPUTS);
 
@@ -146,6 +158,51 @@ describe('web-push', () => {
 
       expect(sendNotificationCalls).to.have.lengthOf(1);
       expect(updateOneCalls).to.have.lengthOf(0);
+    });
+
+    it('should retry once on server error without throwing when retry also fails', async () => {
+      sendNotificationError = { statusCode: 500 };
+
+      await sendWebPush.fn(INPUTS);
+
+      expect(sendNotificationCalls).to.have.lengthOf(2);
+      expect(updateOneCalls).to.have.lengthOf(0);
+    });
+
+    it('should update lastUsedAt when retry succeeds', async () => {
+      sendNotificationError = { statusCode: 500 };
+
+      const promise = sendWebPush.fn(INPUTS);
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
+      sendNotificationError = null;
+
+      await promise;
+
+      expect(sendNotificationCalls).to.have.lengthOf(2);
+      expect(updateOneCalls).to.have.lengthOf(1);
+      expect(updateOneCalls[0].criteria).to.deep.equal({ id: SUBSCRIPTION.id });
+      expect(updateOneCalls[0].values).to.have.property('lastUsedAt');
+    });
+
+    it('should disable subscription when retry fails with 410', async () => {
+      sendNotificationError = { statusCode: 500 };
+
+      const promise = sendWebPush.fn(INPUTS);
+
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
+      sendNotificationError = { statusCode: 410 };
+
+      await promise;
+
+      expect(sendNotificationCalls).to.have.lengthOf(2);
+      expect(updateOneCalls).to.have.lengthOf(1);
+      expect(updateOneCalls[0].criteria).to.deep.equal({ id: SUBSCRIPTION.id });
+      expect(updateOneCalls[0].values).to.have.property('disabledAt');
     });
   });
 });
