@@ -3,8 +3,8 @@
  * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
  */
 
-exports.up = (knex) =>
-  knex.schema.createTable('push_subscription', (table) => {
+exports.up = async (knex) => {
+  await knex.schema.createTable('push_subscription', (table) => {
     /* Columns */
 
     table.bigInteger('id').primary().defaultTo(knex.raw('next_id()'));
@@ -12,7 +12,6 @@ exports.up = (knex) =>
     table.bigInteger('user_id').notNullable();
 
     table.text('endpoint').notNullable();
-    table.text('keys_p256dh').notNullable();
     table.text('keys_auth').notNullable();
     table.text('user_agent');
 
@@ -26,5 +25,11 @@ exports.up = (knex) =>
     table.index('user_id');
     table.unique('endpoint');
   });
+
+  // `wrapIdentifier` (see knexfile.js) runs `_.snakeCase` on every identifier, which
+  // splits on digit boundaries: `keys_p256dh` would become `keys_p_256_dh`. Column
+  // names containing digits must therefore be created via raw SQL.
+  await knex.raw('ALTER TABLE push_subscription ADD COLUMN keys_p256dh text NOT NULL');
+};
 
 exports.down = (knex) => knex.schema.dropTable('push_subscription');
