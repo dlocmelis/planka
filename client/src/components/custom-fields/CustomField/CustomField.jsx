@@ -17,6 +17,8 @@ import ValueField from './ValueField';
 
 import styles from './CustomField.module.scss';
 
+const SECRET_MASK = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
+
 const CustomField = React.memo(({ id, customFieldGroupId }) => {
   const selectCustomFieldById = useMemo(() => selectors.makeSelectCustomFieldById(), []);
   const selectCustomFieldValueById = useMemo(() => selectors.makeSelectCustomFieldValueById(), []);
@@ -87,14 +89,17 @@ const CustomField = React.memo(({ id, customFieldGroupId }) => {
           <ValueField
             defaultValue={customFieldValue && customFieldValue.content}
             disabled={!customField.isPersisted}
+            isSecret={customField.isSecret}
             onUpdate={handleValueUpdate}
           />
         ) : (
           <div className={styles.value}>
-            {customFieldValue ? customFieldValue.content : '\u00A0'}
+            {customFieldValue && customField.isSecret && SECRET_MASK}
+            {customFieldValue && !customField.isSecret && customFieldValue.content}
+            {!customFieldValue && '\u00A0'}
           </div>
         )}
-        {customFieldValue && customFieldValue.content && (
+        {customFieldValue && customFieldValue.content && !customField.isSecret && (
           <Button className={styles.copyButton} onClick={handleCopyClick}>
             <Icon fitted name={isCopied ? 'check' : 'copy'} />
           </Button>
