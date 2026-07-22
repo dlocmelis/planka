@@ -55,6 +55,14 @@ const CustomFieldEditor = React.forwardRef(({ data, onFieldChange }, ref) => {
         className={classNames(styles.field, styles.fieldRadio)}
         onChange={onFieldChange}
       />
+      <Radio
+        toggle
+        name="isSecret"
+        checked={data.isSecret}
+        label={t('common.secretInputOnly')}
+        className={classNames(styles.field, styles.fieldRadio)}
+        onChange={onFieldChange}
+      />
     </>
   );
 });

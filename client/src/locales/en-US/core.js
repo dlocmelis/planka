@@ -294,6 +294,7 @@ export default {
       searchProjects: 'Search projects...',
       searchUsers: 'Search users...',
       seconds: 'Seconds',
+      secretInputOnly: 'Secret (input-only)',
       selectAssignee_title: 'Select Assignee',
       selectBoard: 'Select board',
       selectList: 'Select list',

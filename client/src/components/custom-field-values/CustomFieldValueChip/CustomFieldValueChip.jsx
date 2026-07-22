@@ -13,6 +13,8 @@ import selectors from '../../../selectors';
 
 import styles from './CustomFieldValueChip.module.scss';
 
+const SECRET_MASK = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022';
+
 const Sizes = {
   TINY: 'tiny',
   SMALL: 'small',
@@ -31,15 +33,23 @@ const CustomFieldValueChip = React.memo(({ id, size, onClick }) => {
 
   const contentNode = (
     <span
-      title={`${customField.name}: ${customFieldValue.content}`}
+      title={
+        customField.isSecret ? customField.name : `${customField.name}: ${customFieldValue.content}`
+      }
       className={classNames(
         styles.wrapper,
         styles[`wrapper${upperFirst(size)}`],
         onClick && styles.wrapperHoverable,
       )}
     >
-      {!Number.isNaN(parseFloat(customFieldValue.content)) && `${customField.name}: `}
-      {customFieldValue.content}
+      {customField.isSecret ? (
+        SECRET_MASK
+      ) : (
+        <>
+          {!Number.isNaN(parseFloat(customFieldValue.content)) && `${customField.name}: `}
+          {customFieldValue.content}
+        </>
+      )}
     </span>
   );
 
