@@ -105,7 +105,15 @@ module.exports = {
       }
     }
 
-    const customFields = await CustomField.qm.getByCustomFieldGroupId(customFieldGroup.id);
+    let customFields = await CustomField.qm.getByCustomFieldGroupId(customFieldGroup.id);
+
+    if (customFieldGroup.baseCustomFieldGroupId) {
+      const baseCustomFields = await CustomField.qm.getByBaseCustomFieldGroupId(
+        customFieldGroup.baseCustomFieldGroupId,
+      );
+
+      customFields = [...customFields, ...baseCustomFields];
+    }
 
     let customFieldValues = customFieldGroup.cardId
       ? await CustomFieldValue.qm.getByCustomFieldGroupId(customFieldGroup.id)

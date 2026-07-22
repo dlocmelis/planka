@@ -60,10 +60,16 @@ describe('secret-custom-fields', () => {
       expect(maskCustomFieldValue(customFieldValue, customField)).to.be.equal(customFieldValue);
     });
 
-    it('should return the same reference when the custom field is undefined', () => {
+    it('should mask the value when the custom field is undefined (fail closed)', () => {
       const customFieldValue = { id: '1', customFieldId: '30', content: 'visible' };
 
-      expect(maskCustomFieldValue(customFieldValue, undefined)).to.be.equal(customFieldValue);
+      const maskedValue = maskCustomFieldValue(customFieldValue, undefined);
+
+      expect(maskedValue).to.not.be.equal(customFieldValue);
+      expect(maskedValue.content).to.be.equal(SECRET_CONTENT_SENTINEL);
+      expect(maskedValue.id).to.be.equal('1');
+      expect(maskedValue.customFieldId).to.be.equal('30');
+      expect(customFieldValue.content).to.be.equal('visible');
     });
 
     it('should return the value unchanged when the value is undefined', () => {
@@ -74,7 +80,7 @@ describe('secret-custom-fields', () => {
   });
 
   describe('#maskCustomFieldValues(customFieldValues, customFields)', () => {
-    it('should mask only values whose custom field is secret', () => {
+    it('should mask values whose custom field is secret or unresolvable', () => {
       const customFieldValues = [
         {
           id: '1',
@@ -104,8 +110,9 @@ describe('secret-custom-fields', () => {
       expect(maskedValues[0].content).to.be.equal(SECRET_CONTENT_SENTINEL);
       expect(maskedValues[1].content).to.be.equal('visible');
       expect(maskedValues[1]).to.be.equal(customFieldValues[1]);
-      expect(maskedValues[2].content).to.be.equal('orphan');
-      expect(maskedValues[2]).to.be.equal(customFieldValues[2]);
+      expect(maskedValues[2].content).to.be.equal(SECRET_CONTENT_SENTINEL);
+      expect(maskedValues[2]).to.not.be.equal(customFieldValues[2]);
+      expect(maskedValues[2].customFieldId).to.be.equal('32');
     });
 
     it('should not mutate the input array or its items', () => {

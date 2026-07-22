@@ -5,8 +5,14 @@
 
 const SECRET_CONTENT_SENTINEL = '••••••••';
 
+// Fails closed: a value whose custom field cannot be resolved is masked too,
+// so an incomplete custom field list degrades to over-masking, not a leak
 const maskCustomFieldValue = (customFieldValue, customField) => {
-  if (!customFieldValue || !customField || !customField.isSecret) {
+  if (!customFieldValue) {
+    return customFieldValue;
+  }
+
+  if (customField && !customField.isSecret) {
     return customFieldValue;
   }
 

@@ -280,6 +280,22 @@ module.exports = {
       !!values.project,
     );
 
+    // Values on non-detached board-level or base-linked groups keep referencing
+    // the original custom fields, so those are needed to resolve (and mask) them
+    const nextCustomFieldIds = new Set(sails.helpers.utils.mapRecords(nextCustomFields));
+
+    const fallbackCustomFieldIds = _.difference(
+      sails.helpers.utils.mapRecords(nextCustomFieldValues, 'customFieldId', true),
+      [...nextCustomFieldIds],
+    );
+
+    const fallbackCustomFields =
+      fallbackCustomFieldIds.length > 0
+        ? await CustomField.qm.getByIds(fallbackCustomFieldIds)
+        : [];
+
+    const allNextCustomFields = [...nextCustomFields, ...fallbackCustomFields];
+
     sails.sockets.broadcast(
       `board:${card.boardId}`,
       'cardCreate',
@@ -306,8 +322,8 @@ module.exports = {
           tasks: nextTasks,
           attachments: sails.helpers.attachments.presentMany(nextAttachments),
           customFieldGroups: nextCustomFieldGroups,
-          customFields: nextCustomFields,
-          customFieldValues: maskCustomFieldValues(nextCustomFieldValues, nextCustomFields),
+          customFields: allNextCustomFields,
+          customFieldValues: maskCustomFieldValues(nextCustomFieldValues, allNextCustomFields),
         },
       }),
       user: values.creatorUser,
@@ -359,7 +375,7 @@ module.exports = {
       tasks: nextTasks,
       attachments: nextAttachments,
       customFieldGroups: nextCustomFieldGroups,
-      customFields: nextCustomFields,
+      customFields: allNextCustomFields,
       customFieldValues: nextCustomFieldValues,
     };
   },
