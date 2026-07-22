@@ -107,6 +107,7 @@
  */
 
 const { idInput } = require('../../../utils/inputs');
+const { maskCustomFieldValues } = require('../../utils/secret-custom-fields');
 
 const Errors = {
   CARD_NOT_FOUND: {
@@ -169,7 +170,11 @@ module.exports = {
     const customFieldGroupIds = sails.helpers.utils.mapRecords(customFieldGroups);
 
     const customFields = await CustomField.qm.getByCustomFieldGroupIds(customFieldGroupIds);
-    const customFieldValues = await CustomFieldValue.qm.getByCardId(card.id);
+    let customFieldValues = await CustomFieldValue.qm.getByCardId(card.id);
+
+    if (currentUser.role !== User.Roles.ADMIN) {
+      customFieldValues = maskCustomFieldValues(customFieldValues, customFields);
+    }
 
     return {
       item: card,

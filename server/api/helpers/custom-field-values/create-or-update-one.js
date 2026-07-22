@@ -3,6 +3,8 @@
  * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
  */
 
+const { maskCustomFieldValue } = require('../../utils/secret-custom-fields');
+
 module.exports = {
   inputs: {
     values: {
@@ -40,11 +42,13 @@ module.exports = {
       customFieldId: values.customField.id,
     });
 
+    const maskedCustomFieldValue = maskCustomFieldValue(customFieldValue, values.customField);
+
     sails.sockets.broadcast(
       `board:${inputs.board.id}`,
       'customFieldValueUpdate',
       {
-        item: customFieldValue,
+        item: maskedCustomFieldValue,
       },
       inputs.request,
     );
@@ -56,7 +60,7 @@ module.exports = {
       webhooks,
       event: Webhook.Events.CUSTOM_FIELD_VALUE_UPDATE,
       buildData: () => ({
-        item: customFieldValue,
+        item: maskedCustomFieldValue,
         included: {
           projects: [inputs.project],
           boards: [inputs.board],

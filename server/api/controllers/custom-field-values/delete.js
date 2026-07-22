@@ -57,6 +57,7 @@
  */
 
 const { idInput } = require('../../../utils/inputs');
+const { maskCustomFieldValue } = require('../../utils/secret-custom-fields');
 
 const Errors = {
   NOT_ENOUGH_RIGHTS: {
@@ -141,12 +142,15 @@ module.exports = {
       throw Errors.CUSTOM_FIELD_VALUE_NOT_FOUND;
     }
 
+    const customField = await CustomField.qm.getOneById(inputs.customFieldId);
+
     customFieldValue = await sails.helpers.customFieldValues.deleteOne.with({
       project,
       board,
       list,
       card,
       customFieldGroup,
+      customField,
       record: customFieldValue,
       actorUser: currentUser,
       request: this.req,
@@ -157,7 +161,7 @@ module.exports = {
     }
 
     return {
-      item: customFieldValue,
+      item: maskCustomFieldValue(customFieldValue, customField),
     };
   },
 };
