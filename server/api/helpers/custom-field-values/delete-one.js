@@ -3,6 +3,8 @@
  * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
  */
 
+const { maskCustomFieldValue } = require('../../utils/secret-custom-fields');
+
 module.exports = {
   inputs: {
     record: {
@@ -29,6 +31,10 @@ module.exports = {
       type: 'ref',
       required: true,
     },
+    customField: {
+      type: 'ref',
+      required: true,
+    },
     actorUser: {
       type: 'ref',
       required: true,
@@ -42,11 +48,13 @@ module.exports = {
     const customFieldValue = await CustomFieldValue.qm.deleteOne(inputs.record.id);
 
     if (customFieldValue) {
+      const maskedCustomFieldValue = maskCustomFieldValue(customFieldValue, inputs.customField);
+
       sails.sockets.broadcast(
         `board:${inputs.board.id}`,
         'customFieldValueDelete',
         {
-          item: customFieldValue,
+          item: maskedCustomFieldValue,
         },
         inputs.request,
       );
@@ -57,7 +65,7 @@ module.exports = {
         webhooks,
         event: Webhook.Events.CUSTOM_FIELD_VALUE_DELETE,
         buildData: () => ({
-          item: customFieldValue,
+          item: maskedCustomFieldValue,
           included: {
             projects: [inputs.project],
             boards: [inputs.board],

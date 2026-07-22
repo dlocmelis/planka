@@ -113,6 +113,7 @@
  */
 
 const { idInput } = require('../../../utils/inputs');
+const { maskCustomFieldValues } = require('../../utils/secret-custom-fields');
 
 const Errors = {
   LIST_NOT_FOUND: {
@@ -178,11 +179,27 @@ module.exports = {
     const tasks = await Task.qm.getByTaskListIds(taskListIds);
     const attachments = await Attachment.qm.getByCardIds(cardIds);
 
-    const customFieldGroups = await CustomFieldGroup.qm.getByCardIds(cardIds);
-    const customFieldGroupIds = sails.helpers.utils.mapRecords(customFieldGroups);
+    const boardCustomFieldGroups = await CustomFieldGroup.qm.getByBoardId(list.boardId);
+    const cardCustomFieldGroups = await CustomFieldGroup.qm.getByCardIds(cardIds);
 
-    const customFields = await CustomField.qm.getByCustomFieldGroupIds(customFieldGroupIds);
-    const customFieldValues = await CustomFieldValue.qm.getByCardIds(cardIds);
+    const customFieldGroups = [...boardCustomFieldGroups, ...cardCustomFieldGroups];
+    const customFieldGroupIds = sails.helpers.utils.mapRecords(customFieldGroups);
+    const baseCustomFieldGroupIds = sails.helpers.utils.mapRecords(
+      customFieldGroups,
+      'baseCustomFieldGroupId',
+      true,
+      true,
+    );
+
+    const customFields = [
+      ...(await CustomField.qm.getByCustomFieldGroupIds(customFieldGroupIds)),
+      ...(await CustomField.qm.getByBaseCustomFieldGroupIds(baseCustomFieldGroupIds)),
+    ];
+    let customFieldValues = await CustomFieldValue.qm.getByCardIds(cardIds);
+
+    if (currentUser.role !== User.Roles.ADMIN) {
+      customFieldValues = maskCustomFieldValues(customFieldValues, customFields);
+    }
 
     const cardSubscriptions = await CardSubscription.qm.getByCardIdsAndUserId(
       cardIds,

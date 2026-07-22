@@ -125,6 +125,7 @@
  */
 
 const { idInput } = require('../../../utils/inputs');
+const { maskCustomFieldValues } = require('../../utils/secret-custom-fields');
 
 const Errors = {
   NOT_ENOUGH_RIGHTS: {
@@ -279,6 +280,12 @@ module.exports = {
       .intercept('positionMustBeInValues', () => Errors.POSITION_MUST_BE_PRESENT)
       .intercept('listMustBeInValues', () => Errors.LIST_MUST_BE_PRESENT);
 
+    let includedCustomFieldValues = customFieldValues;
+
+    if (currentUser.role !== User.Roles.ADMIN) {
+      includedCustomFieldValues = maskCustomFieldValues(customFieldValues, customFields);
+    }
+
     return {
       item: nextCard,
       included: {
@@ -288,7 +295,7 @@ module.exports = {
         tasks,
         customFieldGroups,
         customFields,
-        customFieldValues,
+        customFieldValues: includedCustomFieldValues,
         attachments: sails.helpers.attachments.presentMany(attachments),
       },
     };

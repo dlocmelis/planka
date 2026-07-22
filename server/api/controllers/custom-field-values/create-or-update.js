@@ -46,7 +46,7 @@
  *               content:
  *                 type: string
  *                 maxLength: 512
- *                 description: Content/value of the custom field
+ *                 description: Content/value of the custom field. For secret fields, content equal to the masking sentinel is rejected with 400
  *                 example: High Priority
  *     responses:
  *       200:
@@ -71,6 +71,10 @@
  */
 
 const { idInput } = require('../../../utils/inputs');
+const {
+  SECRET_CONTENT_SENTINEL,
+  maskCustomFieldValue,
+} = require('../../utils/secret-custom-fields');
 
 const Errors = {
   NOT_ENOUGH_RIGHTS: {
@@ -84,6 +88,9 @@ const Errors = {
   },
   CUSTOM_FIELD_NOT_FOUND: {
     customFieldNotFound: 'Custom field not found',
+  },
+  CONTENT_IS_MASKING_SENTINEL: {
+    contentIsMaskingSentinel: 'Content must not be the masking sentinel',
   },
 };
 
@@ -120,6 +127,9 @@ module.exports = {
     },
     customFieldNotFound: {
       responseType: 'notFound',
+    },
+    contentIsMaskingSentinel: {
+      responseType: 'badRequest',
     },
   },
 
@@ -173,6 +183,10 @@ module.exports = {
       throw Errors.CUSTOM_FIELD_NOT_FOUND;
     }
 
+    if (customField.isSecret && inputs.content === SECRET_CONTENT_SENTINEL) {
+      throw Errors.CONTENT_IS_MASKING_SENTINEL;
+    }
+
     const values = _.pick(inputs, ['content']);
 
     const customFieldValue = await sails.helpers.customFieldValues.createOrUpdateOne.with({
@@ -190,7 +204,7 @@ module.exports = {
     });
 
     return {
-      item: customFieldValue,
+      item: maskCustomFieldValue(customFieldValue, customField),
     };
   },
 };

@@ -58,6 +58,7 @@
  */
 
 const { idInput } = require('../../../utils/inputs');
+const { maskCustomFieldValues } = require('../../utils/secret-custom-fields');
 
 const Errors = {
   CUSTOM_FIELD_GROUP_NOT_FOUND: {
@@ -104,11 +105,23 @@ module.exports = {
       }
     }
 
-    const customFields = await CustomField.qm.getByCustomFieldGroupId(customFieldGroup.id);
+    let customFields = await CustomField.qm.getByCustomFieldGroupId(customFieldGroup.id);
 
-    const customFieldValues = customFieldGroup.cardId
+    if (customFieldGroup.baseCustomFieldGroupId) {
+      const baseCustomFields = await CustomField.qm.getByBaseCustomFieldGroupId(
+        customFieldGroup.baseCustomFieldGroupId,
+      );
+
+      customFields = [...customFields, ...baseCustomFields];
+    }
+
+    let customFieldValues = customFieldGroup.cardId
       ? await CustomFieldValue.qm.getByCustomFieldGroupId(customFieldGroup.id)
       : [];
+
+    if (currentUser.role !== User.Roles.ADMIN) {
+      customFieldValues = maskCustomFieldValues(customFieldValues, customFields);
+    }
 
     return {
       item: customFieldGroup,
