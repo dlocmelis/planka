@@ -43,7 +43,7 @@
  *                 example: false
  *               isSecret:
  *                 type: boolean
- *                 description: Whether the field value is secret (masked for non-admin users)
+ *                 description: Whether the field value is secret (masked for non-admin users). Can only be changed by admin users
  *                 example: false
  *     responses:
  *       200:
@@ -122,6 +122,18 @@ module.exports = {
 
     const values = _.pick(inputs, ['position', 'name', 'showOnFrontOfCard', 'isSecret']);
 
+    // Only admins may change the secrecy of a field: flipping isSecret off
+    // would expose the stored value to every board member.
+    const throwIfIsSecretChangeNotAllowed = () => {
+      if (
+        !_.isUndefined(values.isSecret) &&
+        values.isSecret !== customField.isSecret &&
+        currentUser.role !== User.Roles.ADMIN
+      ) {
+        throw Errors.NOT_ENOUGH_RIGHTS;
+      }
+    };
+
     if (customField.baseCustomFieldGroupId) {
       const isProjectManager = await sails.helpers.users.isProjectManager(
         currentUser.id,
@@ -131,6 +143,8 @@ module.exports = {
       if (!isProjectManager) {
         throw Errors.CUSTOM_FIELD_NOT_FOUND; // Forbidden
       }
+
+      throwIfIsSecretChangeNotAllowed();
 
       customField = await sails.helpers.customFields.updateOneInBaseCustomFieldGroup.with({
         values,
@@ -153,6 +167,8 @@ module.exports = {
       if (boardMembership.role !== BoardMembership.Roles.EDITOR) {
         throw Errors.NOT_ENOUGH_RIGHTS;
       }
+
+      throwIfIsSecretChangeNotAllowed();
 
       customField = await sails.helpers.customFields.updateOneInCustomFieldGroup.with({
         values,

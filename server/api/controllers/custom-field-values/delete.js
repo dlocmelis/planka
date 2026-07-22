@@ -69,6 +69,9 @@ const Errors = {
   CUSTOM_FIELD_GROUP_NOT_FOUND: {
     customFieldGroupNotFound: 'Custom field group not found',
   },
+  CUSTOM_FIELD_NOT_FOUND: {
+    customFieldNotFound: 'Custom field not found',
+  },
   CUSTOM_FIELD_VALUE_NOT_FOUND: {
     customFieldValueNotFound: 'Custom field value not found',
   },
@@ -98,6 +101,9 @@ module.exports = {
       responseType: 'notFound',
     },
     customFieldGroupNotFound: {
+      responseType: 'notFound',
+    },
+    customFieldNotFound: {
       responseType: 'notFound',
     },
     customFieldValueNotFound: {
@@ -131,6 +137,12 @@ module.exports = {
       throw Errors.CUSTOM_FIELD_GROUP_NOT_FOUND;
     }
 
+    const customField = await CustomField.qm.getOneById(inputs.customFieldId);
+
+    if (!customField) {
+      throw Errors.CUSTOM_FIELD_NOT_FOUND;
+    }
+
     let customFieldValue =
       await CustomFieldValue.qm.getOneByCardIdAndCustomFieldGroupIdAndCustomFieldId(
         card.id,
@@ -141,8 +153,6 @@ module.exports = {
     if (!customFieldValue) {
       throw Errors.CUSTOM_FIELD_VALUE_NOT_FOUND;
     }
-
-    const customField = await CustomField.qm.getOneById(inputs.customFieldId);
 
     customFieldValue = await sails.helpers.customFieldValues.deleteOne.with({
       project,
