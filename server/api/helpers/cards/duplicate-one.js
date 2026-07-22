@@ -3,6 +3,8 @@
  * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
  */
 
+const { maskCustomFieldValues } = require('../../utils/secret-custom-fields');
+
 module.exports = {
   inputs: {
     record: {
@@ -305,7 +307,7 @@ module.exports = {
           attachments: sails.helpers.attachments.presentMany(nextAttachments),
           customFieldGroups: nextCustomFieldGroups,
           customFields: nextCustomFields,
-          customFieldValues: nextCustomFieldValues,
+          customFieldValues: maskCustomFieldValues(nextCustomFieldValues, nextCustomFields),
         },
       }),
       user: values.creatorUser,

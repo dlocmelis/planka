@@ -149,6 +149,7 @@ const moment = require('moment');
 
 const { isId } = require('../../../utils/validators');
 const { idInput, idsInput } = require('../../../utils/inputs');
+const { maskCustomFieldValues } = require('../../utils/secret-custom-fields');
 
 const Errors = {
   LIST_NOT_FOUND: {
@@ -273,7 +274,11 @@ module.exports = {
     const customFieldGroupIds = sails.helpers.utils.mapRecords(customFieldGroups);
 
     const customFields = await CustomField.qm.getByCustomFieldGroupIds(customFieldGroupIds);
-    const customFieldValues = await CustomFieldValue.qm.getByCardIds(cardIds);
+    let customFieldValues = await CustomFieldValue.qm.getByCardIds(cardIds);
+
+    if (currentUser.role !== User.Roles.ADMIN) {
+      customFieldValues = maskCustomFieldValues(customFieldValues, customFields);
+    }
 
     const isSubscribedByCardId = cardSubscriptions.reduce(
       (result, cardSubscription) => ({
