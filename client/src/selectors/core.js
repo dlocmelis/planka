@@ -7,6 +7,7 @@ import { createSelector } from 'redux-orm';
 import { createSelector as createReselectSelector } from 'reselect';
 
 import orm from '../orm';
+import { isListKanban } from '../utils/record-helpers';
 
 export const selectIsContentFetching = ({ core: { isContentFetching } }) => isContentFetching;
 
@@ -15,8 +16,6 @@ export const selectIsLogouting = ({ core: { isLogouting } }) => isLogouting;
 export const selectIsFavoritesEnabled = ({ core: { isFavoritesEnabled } }) => isFavoritesEnabled;
 
 export const selectIsEditModeEnabled = ({ core: { isEditModeEnabled } }) => isEditModeEnabled;
-
-export const selectSelectedCardIds = ({ core: { selectedCardIds } }) => selectedCardIds;
 
 export const selectClipboard = ({ core: { clipboard } }) => clipboard;
 
@@ -28,7 +27,13 @@ export const selectSelectedCardIds = createSelector(
     selectedCardIds.filter((id) => {
       const cardModel = Card.withId(id);
 
-      return cardModel && cardModel.boardId === boardId;
+      if (!cardModel || cardModel.boardId !== boardId) {
+        return false;
+      }
+
+      const listModel = cardModel.list;
+
+      return !!listModel && isListKanban(listModel.ref);
     }),
 );
 
@@ -59,7 +64,6 @@ export default {
   selectIsLogouting,
   selectIsFavoritesEnabled,
   selectIsEditModeEnabled,
-  selectSelectedCardIds,
   selectClipboard,
   selectSelectedCardIds,
   makeSelectIsCardSelected,

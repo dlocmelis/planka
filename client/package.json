@@ -12,7 +12,8 @@
   },
   "babel": {
     "presets": [
-      "@babel/preset-env"
+      "@babel/preset-env",
+      "@babel/preset-react"
     ]
   },
   "eslintConfig": {
@@ -76,6 +77,12 @@
   "jest": {
     "transform": {
       "^.+\\.(js|jsx)$": "babel-jest"
+    },
+    "setupFiles": [
+      "<rootDir>/tests/setup.js"
+    ],
+    "moduleNameMapper": {
+      "\\.(css|scss|png|jpg|jpeg|gif|webp|svg|woff|woff2|ttf|eot)(\\?.*)?$": "<rootDir>/tests/file-mock.js"
     }
   },
   "overrides": {
@@ -170,6 +177,7 @@
   "devDependencies": {
     "@babel/eslint-parser": "^7.28.6",
     "@babel/preset-env": "^7.29.0",
+    "@babel/preset-react": "^7.28.5",
     "@cucumber/cucumber": "^12.7.0",
     "@cucumber/pretty-formatter": "^3.2.0",
     "@playwright/test": "^1.58.2",

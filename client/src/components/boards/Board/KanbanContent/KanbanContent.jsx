@@ -142,6 +142,13 @@ const KanbanContent = React.memo(() => {
     };
   }, [handleWindowMouseMove, handleWindowMouseRelease]);
 
+  useEffect(
+    () => () => {
+      dispatch(entryActions.clearCardSelection());
+    },
+    [dispatch],
+  );
+
   useDidUpdate(() => {
     if (isAddListOpened) {
       window.scroll(document.body.scrollWidth, 0);

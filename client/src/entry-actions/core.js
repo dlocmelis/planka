@@ -19,13 +19,6 @@ const toggleEditMode = (isEnabled) => ({
   },
 });
 
-const setCardSelection = (cardIds) => ({
-  type: EntryActionTypes.CARD_SELECTION_SET,
-  payload: {
-    cardIds,
-  },
-});
-
 const updateHomeView = (value) => ({
   type: EntryActionTypes.HOME_VIEW_UPDATE,
   payload: {
@@ -43,7 +36,6 @@ const logout = (revokeAccessToken = true) => ({
 export default {
   toggleFavorites,
   toggleEditMode,
-  setCardSelection,
   updateHomeView,
   logout,
 };
