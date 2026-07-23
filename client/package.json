@@ -82,6 +82,8 @@
       "<rootDir>/tests/setup.js"
     ],
     "moduleNameMapper": {
+      "\\.module\\.scss$": "<rootDir>/tests/style-mock.js",
+      "\\.svg\\?react$": "<rootDir>/tests/svg-mock.js",
       "\\.(css|scss|png|jpg|jpeg|gif|webp|svg|woff|woff2|ttf|eot)(\\?.*)?$": "<rootDir>/tests/file-mock.js"
     }
   },
@@ -192,6 +194,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^4.6.2",
     "jest": "^30.3.0",
+    "jest-environment-jsdom": "^30.3.0",
     "playwright": "^1.58.2",
     "prettier": "3.8.1"
   }

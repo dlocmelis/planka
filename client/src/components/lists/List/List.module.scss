@@ -159,6 +159,26 @@
     }
   }
 
+  .headerCollapsed {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 198px);
+    outline: none;
+    overflow: hidden;
+    padding: 40px 2px 8px;
+    position: relative;
+  }
+
+  .headerCardsCountCollapsed {
+    color: #6b808c;
+    flex: 0 0 auto;
+    font-size: 12px;
+    margin-top: 8px;
+    white-space: nowrap;
+    writing-mode: vertical-rl;
+  }
+
   .headerIcon {
     color: #798d99;
     position: absolute;
@@ -183,6 +203,20 @@
     margin-right: 6px;
   }
 
+  .headerNameCollapsed {
+    color: #17394d;
+    flex: 0 1 auto;
+    font-weight: bold;
+    line-height: 20px;
+    max-height: 75%;
+    min-height: 0;
+    outline: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    writing-mode: vertical-rl;
+  }
+
   .headerSelectionCheckbox {
     margin-right: 6px;
   }
@@ -190,6 +224,11 @@
   .innerWrapper {
     margin-right: 8px;
     width: 272px;
+  }
+
+  .innerWrapperCollapsed {
+    margin-right: 8px;
+    width: 36px;
   }
 
   .outerWrapper {
@@ -207,5 +246,9 @@
 
   .outerWrapperWithFavorites {
     max-height: calc(100vh - 288px);
+
+    .headerCollapsed {
+      height: calc(100vh - 288px);
+    }
   }
 }
