@@ -144,6 +144,52 @@ const Item = React.memo(({ id, onClose }) => {
 
       break;
     }
+    case NotificationTypes.ADD_LABEL_TO_CARD: {
+      const { label } = notification.data;
+
+      contentNode = (
+        <Trans
+          i18nKey="common.userAddedLabelToCard"
+          values={{
+            user: creatorUserName,
+            label: label.name,
+            color: label.color,
+            card: cardName,
+          }}
+        >
+          <span className={styles.author}>{creatorUserName}</span>
+          {` added label «${label.name}» (${label.color}) to `}
+          <Link to={Paths.CARDS.replace(':id', notification.cardId)} onClick={onClose}>
+            {cardName}
+          </Link>
+        </Trans>
+      );
+
+      break;
+    }
+    case NotificationTypes.SET_CUSTOM_FIELD_VALUE: {
+      const { customField, value } = notification.data;
+
+      contentNode = (
+        <Trans
+          i18nKey="common.userSetCustomFieldValueOnCard"
+          values={{
+            user: creatorUserName,
+            field: customField.name,
+            value,
+            card: cardName,
+          }}
+        >
+          <span className={styles.author}>{creatorUserName}</span>
+          {` set ${customField.name} to «${value}» on `}
+          <Link to={Paths.CARDS.replace(':id', notification.cardId)} onClick={onClose}>
+            {cardName}
+          </Link>
+        </Trans>
+      );
+
+      break;
+    }
     default:
       contentNode = null;
   }

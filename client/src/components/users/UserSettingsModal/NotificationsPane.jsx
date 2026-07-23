@@ -5,11 +5,12 @@
 
 import React, { useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Tab } from 'semantic-ui-react';
+import { Divider, Tab } from 'semantic-ui-react';
 
 import selectors from '../../../selectors';
 import entryActions from '../../../entry-actions';
 import NotificationServices from '../../notification-services/NotificationServices';
+import NotificationEvents from './NotificationEvents';
 
 import styles from './NotificationsPane.module.scss';
 
@@ -27,6 +28,8 @@ const NotificationsPane = React.memo(() => {
 
   return (
     <Tab.Pane attached={false} className={styles.wrapper}>
+      <NotificationEvents />
+      <Divider />
       <NotificationServices ids={notificationServiceIds} onCreate={handleCreate} />
     </Tab.Pane>
   );
