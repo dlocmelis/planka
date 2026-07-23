@@ -53,6 +53,7 @@ export default class extends BaseModel {
     position: attr(),
     name: attr(),
     color: attr(),
+    isCollapsed: attr(),
     lastCard: attr({
       getDefault: () => null,
     }),
