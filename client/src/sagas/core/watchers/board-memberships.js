@@ -24,6 +24,10 @@ export default function* boardMembershipsWatchers() {
     takeEvery(EntryActionTypes.BOARD_MEMBERSHIP_UPDATE_HANDLE, ({ payload: { boardMembership } }) =>
       services.handleBoardMembershipUpdate(boardMembership),
     ),
+    takeEvery(
+      EntryActionTypes.HIDDEN_LIST_IDS_IN_CURRENT_BOARD_UPDATE,
+      ({ payload: { listIds } }) => services.updateHiddenListIdsInCurrentBoard(listIds),
+    ),
     takeEvery(EntryActionTypes.BOARD_MEMBERSHIP_DELETE, ({ payload: { id } }) =>
       services.deleteBoardMembership(id),
     ),

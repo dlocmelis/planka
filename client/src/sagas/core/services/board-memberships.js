@@ -179,6 +179,16 @@ export function* updateBoardMembership(id, data) {
   yield put(actions.updateBoardMembership.success(boardMembership));
 }
 
+export function* updateHiddenListIdsInCurrentBoard(listIds) {
+  const boardMembership = yield select(selectors.selectCurrentUserMembershipForCurrentBoard);
+
+  if (!boardMembership) {
+    return;
+  }
+
+  yield call(updateBoardMembership, boardMembership.id, { hiddenListIds: listIds });
+}
+
 export function* handleBoardMembershipUpdate(boardMembership) {
   yield put(actions.handleBoardMembershipUpdate(boardMembership));
 }
@@ -239,6 +249,7 @@ export default {
   createMembershipInCurrentBoard,
   handleBoardMembershipCreate,
   updateBoardMembership,
+  updateHiddenListIdsInCurrentBoard,
   handleBoardMembershipUpdate,
   deleteBoardMembership,
   handleBoardMembershipDelete,

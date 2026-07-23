@@ -28,6 +28,13 @@ const updateBoardMembership = (id, data) => ({
   },
 });
 
+const updateHiddenListIdsInCurrentBoard = (listIds) => ({
+  type: EntryActionTypes.HIDDEN_LIST_IDS_IN_CURRENT_BOARD_UPDATE,
+  payload: {
+    listIds,
+  },
+});
+
 const handleBoardMembershipUpdate = (boardMembership) => ({
   type: EntryActionTypes.BOARD_MEMBERSHIP_UPDATE_HANDLE,
   payload: {
@@ -53,6 +60,7 @@ export default {
   createMembershipInCurrentBoard,
   handleBoardMembershipCreate,
   updateBoardMembership,
+  updateHiddenListIdsInCurrentBoard,
   handleBoardMembershipUpdate,
   deleteBoardMembership,
   handleBoardMembershipDelete,
