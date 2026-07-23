@@ -12,7 +12,8 @@
   },
   "babel": {
     "presets": [
-      "@babel/preset-env"
+      "@babel/preset-env",
+      "@babel/preset-react"
     ]
   },
   "eslintConfig": {
@@ -76,6 +77,11 @@
   "jest": {
     "transform": {
       "^.+\\.(js|jsx)$": "babel-jest"
+    },
+    "testEnvironment": "jsdom",
+    "moduleNameMapper": {
+      "\\.module\\.scss$": "<rootDir>/tests/unit/mocks/style-mock.js",
+      "\\.svg\\?react$": "<rootDir>/tests/unit/mocks/svg-react-mock.js"
     }
   },
   "overrides": {
@@ -170,6 +176,7 @@
   "devDependencies": {
     "@babel/eslint-parser": "^7.28.6",
     "@babel/preset-env": "^7.29.0",
+    "@babel/preset-react": "^7.29.7",
     "@cucumber/cucumber": "^12.7.0",
     "@cucumber/pretty-formatter": "^3.2.0",
     "@playwright/test": "^1.58.2",
@@ -184,6 +191,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^4.6.2",
     "jest": "^30.3.0",
+    "jest-environment-jsdom": "^30.4.1",
     "playwright": "^1.58.2",
     "prettier": "3.8.1"
   }
