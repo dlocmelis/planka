@@ -182,24 +182,30 @@ export default (state = initialState, { type, payload }) => {
       }
 
       return state;
-    case ActionTypes.CARD_DELETE:
+    case ActionTypes.CARD_DELETE: {
+      const nextState = {
+        ...state,
+        selectedCardIds: state.selectedCardIds.filter((id) => id !== payload.id),
+      };
+
       if (payload.clipboard && payload.id === payload.clipboard.cardId) {
-        return {
-          ...state,
-          clipboard: null,
-        };
+        nextState.clipboard = null;
       }
 
-      return state;
-    case ActionTypes.CARD_DELETE_HANDLE:
+      return nextState;
+    }
+    case ActionTypes.CARD_DELETE_HANDLE: {
+      const nextState = {
+        ...state,
+        selectedCardIds: state.selectedCardIds.filter((id) => id !== payload.card.id),
+      };
+
       if (payload.clipboard && payload.card.id === payload.clipboard.cardId) {
-        return {
-          ...state,
-          clipboard: null,
-        };
+        nextState.clipboard = null;
       }
 
-      return state;
+      return nextState;
+    }
     case ActionTypes.CARD_COPY:
       return {
         ...state,

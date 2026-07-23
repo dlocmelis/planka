@@ -44,6 +44,9 @@ export const makeSelectIsCardSelected = () =>
     (selectedCardIds, id) => selectedCardIds.includes(id),
   );
 
+export const selectIsAnyCardSelected = ({ core: { selectedCardIds } }) =>
+  selectedCardIds.length > 0;
+
 export const selectConfig = ({ core: { config } }) => config;
 
 export const selectRecentCardId = ({ core: { recentCardId } }) => recentCardId;
@@ -65,7 +68,9 @@ export default {
   selectIsFavoritesEnabled,
   selectIsEditModeEnabled,
   selectClipboard,
+  selectSelectedCardIds,
   makeSelectIsCardSelected,
+  selectIsAnyCardSelected,
   selectConfig,
   selectRecentCardId,
   selectPrevCardId,

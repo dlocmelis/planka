@@ -7,11 +7,12 @@ import React, { useCallback, useContext, useMemo, useRef, useState } from 'react
 import PropTypes from 'prop-types';
 import classNames from 'classnames';
 import { useDispatch, useSelector } from 'react-redux';
-import { Button, Icon } from 'semantic-ui-react';
+import { Button, Checkbox, Icon } from 'semantic-ui-react';
 import { push } from '../../../lib/redux-router';
 import { closePopup, usePopup } from '../../../lib/popup';
 
 import selectors from '../../../selectors';
+import entryActions from '../../../entry-actions';
 import { BoardShortcutsContext } from '../../../contexts';
 import Paths from '../../../constants/Paths';
 import ClipboardTypes from '../../../constants/ClipboardTypes';
@@ -27,6 +28,7 @@ import styles from './Card.module.scss';
 const Card = React.memo(({ id, isInline }) => {
   const selectCardById = useMemo(() => selectors.makeSelectCardById(), []);
   const selectIsCardWithIdRecent = useMemo(() => selectors.makeSelectIsCardWithIdRecent(), []);
+  const selectIsCardSelected = useMemo(() => selectors.makeSelectIsCardSelected(), []);
 
   const card = useSelector((state) => selectCardById(state, id));
 
@@ -44,6 +46,10 @@ const Card = React.memo(({ id, isInline }) => {
     const clipboard = selectors.selectClipboard(state);
     return clipboard && clipboard.type === ClipboardTypes.CUT && card.id === clipboard.cardId;
   });
+
+  const isSelected = useSelector((state) => selectIsCardSelected(state, id));
+
+  const isAnyCardSelected = useSelector(selectors.selectIsAnyCardSelected);
 
   const canUseActions = useSelector((state) => {
     const isManager = selectors.selectIsCurrentUserManagerForCurrentProject(state);
@@ -105,6 +111,18 @@ const Card = React.memo(({ id, isInline }) => {
     setIsEditNameOpened(false);
   }, []);
 
+  const handleSelectionToggle = useCallback(() => {
+    dispatch(entryActions.toggleCardSelection(id));
+  }, [id, dispatch]);
+
+  const handleSelectionCheckboxClick = useCallback((event) => {
+    event.stopPropagation();
+  }, []);
+
+  const handleSelectionCheckboxMouseDown = useCallback((event) => {
+    event.stopPropagation();
+  }, []);
+
   const CardActionsPopup = usePopup(CardActionsStep);
 
   if (isEditNameOpened) {
@@ -141,6 +159,7 @@ const Card = React.memo(({ id, isInline }) => {
               styles.content,
               card.isClosed && styles.contentDisabled,
               isCut && styles.contentCut,
+              isSelected && styles.contentSelected,
             )}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleCardMouseLeave}
@@ -150,11 +169,23 @@ const Card = React.memo(({ id, isInline }) => {
             <Content cardId={id} />
           </div>
           {canUseActions && (
-            <CardActionsPopup ref={actionsPopupRef} cardId={id} onNameEdit={handleNameEdit}>
-              <Button className={styles.actionsButton}>
-                <Icon fitted name="pencil" size="small" />
-              </Button>
-            </CardActionsPopup>
+            <>
+              <Checkbox
+                checked={isSelected}
+                className={classNames(
+                  styles.checkbox,
+                  (isAnyCardSelected || isSelected) && styles.checkboxVisible,
+                )}
+                onChange={handleSelectionToggle}
+                onClick={handleSelectionCheckboxClick}
+                onMouseDown={handleSelectionCheckboxMouseDown}
+              />
+              <CardActionsPopup ref={actionsPopupRef} cardId={id} onNameEdit={handleNameEdit}>
+                <Button className={styles.actionsButton}>
+                  <Icon fitted name="pencil" size="small" />
+                </Button>
+              </CardActionsPopup>
+            </>
           )}
         </>
       ) : (
