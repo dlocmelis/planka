@@ -11,6 +11,8 @@ export const selectIsFavoritesEnabled = ({ core: { isFavoritesEnabled } }) => is
 
 export const selectIsEditModeEnabled = ({ core: { isEditModeEnabled } }) => isEditModeEnabled;
 
+export const selectSelectedCardIds = ({ core: { selectedCardIds } }) => selectedCardIds;
+
 export const selectClipboard = ({ core: { clipboard } }) => clipboard;
 
 export const selectConfig = ({ core: { config } }) => config;
@@ -33,6 +35,7 @@ export default {
   selectIsLogouting,
   selectIsFavoritesEnabled,
   selectIsEditModeEnabled,
+  selectSelectedCardIds,
   selectClipboard,
   selectConfig,
   selectRecentCardId,
