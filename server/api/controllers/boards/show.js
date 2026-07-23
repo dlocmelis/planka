@@ -89,7 +89,14 @@
  *                       type: array
  *                       description: Related lists
  *                       items:
- *                         $ref: '#/components/schemas/List'
+ *                         allOf:
+ *                           - $ref: '#/components/schemas/List'
+ *                           - type: object
+ *                             properties:
+ *                               isCollapsed:
+ *                                 type: boolean
+ *                                 description: Whether the list is collapsed by the current user
+ *                                 example: false
  *                     cards:
  *                       type: array
  *                       description: Related cards
@@ -206,6 +213,24 @@ module.exports = {
     const boardMemberships = await BoardMembership.qm.getByBoardId(board.id);
     const labels = await Label.qm.getByBoardId(board.id);
     const lists = await List.qm.getByBoardId(board.id);
+
+    const listCollapses = await ListCollapse.qm.getByListIdsAndUserId(
+      sails.helpers.utils.mapRecords(lists),
+      currentUser.id,
+    );
+
+    const isCollapsedByListId = listCollapses.reduce(
+      (result, listCollapse) => ({
+        ...result,
+        [listCollapse.listId]: true,
+      }),
+      {},
+    );
+
+    lists.forEach((list) => {
+      // eslint-disable-next-line no-param-reassign
+      list.isCollapsed = isCollapsedByListId[list.id] || false;
+    });
 
     const finiteLists = lists.filter((list) => sails.helpers.lists.isFinite(list));
     const finiteListIds = sails.helpers.utils.mapRecords(finiteLists);
