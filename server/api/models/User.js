@@ -142,6 +142,15 @@
  *           default: byDefault
  *           description: Default sort order for projects display (personal field)
  *           example: byDefault
+ *         notificationEvents:
+ *           type: object
+ *           description: Notification events the user receives, by group (personal field)
+ *           additionalProperties:
+ *             type: array
+ *             items:
+ *               type: string
+ *               enum: [moveCard, commentCard, addMemberToCard, mentionInComment]
+ *           example: { "card": ["moveCard", "addMemberToCard"], "comment": ["commentCard", "mentionInComment"] }
  *         isSsoUser:
  *           type: boolean
  *           default: false
@@ -151,6 +160,11 @@
  *           type: boolean
  *           default: false
  *           description: Whether the user account is deactivated and cannot log in
+ *           example: false
+ *         isBot:
+ *           type: boolean
+ *           default: false
+ *           description: Whether the user account belongs to a bot
  *           example: false
  *         isDefaultAdmin:
  *           type: boolean
@@ -175,6 +189,8 @@
  *           description: When the user was last updated
  *           example: 2024-01-01T00:00:00.000Z
  */
+
+const { DEFAULT_NOTIFICATION_EVENTS } = require('../../utils/notification-preferences');
 
 const Roles = {
   ADMIN: 'admin',
@@ -249,6 +265,7 @@ const PERSONAL_FIELD_NAMES = [
   'defaultEditorMode',
   'defaultHomeView',
   'defaultProjectsOrder',
+  'notificationEvents',
 ];
 
 const INTERNAL = {
@@ -372,6 +389,11 @@ module.exports = {
       defaultsTo: ProjectOrders.BY_DEFAULT,
       columnName: 'default_projects_order',
     },
+    notificationEvents: {
+      type: 'json',
+      defaultsTo: DEFAULT_NOTIFICATION_EVENTS,
+      columnName: 'notification_events',
+    },
     termsSignature: {
       type: 'string',
       isNotEmptyString: true,
@@ -387,6 +409,11 @@ module.exports = {
       type: 'boolean',
       defaultsTo: false,
       columnName: 'is_deactivated',
+    },
+    isBot: {
+      type: 'boolean',
+      defaultsTo: false,
+      columnName: 'is_bot',
     },
     passwordChangedAt: {
       type: 'ref',

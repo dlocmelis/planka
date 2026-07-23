@@ -7,6 +7,8 @@ const validator = require('validator');
 const zxcvbn = require('zxcvbn');
 const moment = require('moment');
 
+const { SCOPES_BY_GROUP } = require('./notification-preferences');
+
 const MAX_STRING_ID = '9223372036854775807';
 
 const ID_REGEX = /^[1-9][0-9]*$/;
@@ -40,6 +42,22 @@ const isEmailOrUsername = (value) =>
 
 const isDueDate = (value) => moment(value, moment.ISO_8601, true).isValid();
 
+// Plain-object/array checks are done without lodash so the module stays
+// loadable outside the sails context (e.g. in unit tests)
+const isNotificationEvents = (value) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.entries(value).every(([group, scopes]) => {
+    if (!Object.prototype.hasOwnProperty.call(SCOPES_BY_GROUP, group) || !Array.isArray(scopes)) {
+      return false;
+    }
+
+    return scopes.every((scope) => SCOPES_BY_GROUP[group].includes(scope));
+  });
+};
+
 const isStopwatch = (value) => {
   if (!_.isPlainObject(value) || _.size(value) !== 2) {
     return false;
@@ -72,5 +90,6 @@ module.exports = {
   isPassword,
   isEmailOrUsername,
   isDueDate,
+  isNotificationEvents,
   isStopwatch,
 };

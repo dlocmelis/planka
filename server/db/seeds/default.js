@@ -5,6 +5,8 @@
 
 const bcrypt = require('bcrypt');
 
+const { DEFAULT_NOTIFICATION_EVENTS } = require('../../utils/notification-preferences');
+
 const buildUserData = () => {
   const data = {
     role: 'admin',
@@ -61,6 +63,8 @@ exports.seed = async (knex) => {
           defaultEditorMode: 'wysiwyg',
           defaultHomeView: 'groupedProjects',
           defaultProjectsOrder: 'byDefault',
+          notificationEvents: JSON.stringify(DEFAULT_NOTIFICATION_EVENTS),
+          isBot: false,
           createdAt: new Date().toISOString(),
         },
         'id',
