@@ -23,6 +23,7 @@
  *         - userId
  *         - role
  *         - canComment
+ *         - hiddenListIds
  *         - createdAt
  *         - updatedAt
  *       properties:
@@ -52,6 +53,12 @@
  *           nullable: true
  *           description: Whether the user can comment on cards (applies only to viewers)
  *           example: true
+ *         hiddenListIds:
+ *           type: array
+ *           items:
+ *             type: string
+ *           description: IDs of the lists the user has hidden on the board (own preference)
+ *           example: ["1357158568008091268"]
  *         createdAt:
  *           type: string
  *           format: date-time
@@ -74,6 +81,7 @@ const Roles = {
 const SHARED_RULES = {
   role: {},
   canComment: { setTo: null },
+  hiddenListIds: {},
 };
 
 const RULES_BY_ROLE = {
@@ -85,10 +93,13 @@ const RULES_BY_ROLE = {
   },
 };
 
+const PREFERENCE_FIELD_NAMES = ['hiddenListIds'];
+
 module.exports = {
   Roles,
   SHARED_RULES,
   RULES_BY_ROLE,
+  PREFERENCE_FIELD_NAMES,
 
   attributes: {
     //  ╔═╗╦═╗╦╔╦╗╦╔╦╗╦╦  ╦╔═╗╔═╗
@@ -104,6 +115,11 @@ module.exports = {
       type: 'boolean',
       allowNull: true,
       columnName: 'can_comment',
+    },
+    hiddenListIds: {
+      type: 'json',
+      defaultsTo: [],
+      columnName: 'hidden_list_ids',
     },
 
     //  ╔═╗╔╦╗╔╗ ╔═╗╔╦╗╔═╗
