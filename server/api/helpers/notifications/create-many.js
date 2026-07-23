@@ -7,6 +7,11 @@ const escapeMarkdown = require('escape-markdown');
 const escapeHtml = require('escape-html');
 
 const { mentionMarkupToText } = require('../../../utils/mentions');
+const {
+  groupForNotificationType,
+  resolveOwnPredicate,
+  matchesPreferences,
+} = require('../../../utils/notification-preferences');
 
 const buildTitle = (notification, t) => {
   switch (notification.type) {
@@ -312,11 +317,64 @@ module.exports = {
   async fn(inputs) {
     const { arrayOfValues } = inputs;
 
-    const ids = await sails.helpers.utils.generateIds(arrayOfValues.length);
+    // Drop recipients whose notificationEvents preferences mute their notification type:
+    // no DB row, socket broadcast, webhook, push or email (all happen below)
+    const filterableUserIds = _.uniq(
+      arrayOfValues
+        .filter((values) => groupForNotificationType(values.type))
+        .map((values) => values.userId),
+    );
+
+    let recipientsById = {};
+
+    if (filterableUserIds.length > 0) {
+      const recipients = await User.qm.getByIds(filterableUserIds);
+      recipientsById = _.keyBy(recipients, 'id');
+    }
+
+    // Cache promises so concurrent entries for the same card share a single query
+    const cardMembershipsByCardId = {};
+
+    const getCardMemberships = (cardId) => {
+      if (!cardMembershipsByCardId[cardId]) {
+        cardMembershipsByCardId[cardId] = CardMembership.qm.getByCardId(cardId);
+      }
+
+      return cardMembershipsByCardId[cardId];
+    };
+
+    const keepFlags = await Promise.all(
+      arrayOfValues.map(async (values) => {
+        if (!groupForNotificationType(values.type)) {
+          return true;
+        }
+
+        const recipient = recipientsById[values.userId];
+
+        if (!recipient) {
+          return true; // Fail open when the recipient record is missing
+        }
+
+        const cardMemberships = await getCardMemberships(values.card.id);
+
+        const own = resolveOwnPredicate(cardMemberships, values.card.creatorUserId, values.userId);
+        const dev = !!values.creatorUser.isBot;
+
+        return matchesPreferences(recipient.notificationEvents, values.type, { own, dev });
+      }),
+    );
+
+    const filteredArrayOfValues = arrayOfValues.filter((values, index) => keepFlags[index]);
+
+    if (filteredArrayOfValues.length === 0) {
+      return [];
+    }
+
+    const ids = await sails.helpers.utils.generateIds(filteredArrayOfValues.length);
     const valuesById = {};
 
     const notifications = await Notification.qm.create(
-      arrayOfValues.map((values) => {
+      filteredArrayOfValues.map((values) => {
         const id = ids.shift();
 
         const nextValues = {

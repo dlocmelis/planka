@@ -44,17 +44,22 @@ const isDueDate = (value) => moment(value, moment.ISO_8601, true).isValid();
 
 // Plain-object/array checks are done without lodash so the module stays
 // loadable outside the sails context (e.g. in unit tests)
+const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
+
 const isNotificationEvents = (value) => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!isPlainObject(value)) {
     return false;
   }
 
   return Object.entries(value).every(([group, scopes]) => {
-    if (!Object.prototype.hasOwnProperty.call(SCOPES_BY_GROUP, group) || !Array.isArray(scopes)) {
+    if (!Object.prototype.hasOwnProperty.call(SCOPES_BY_GROUP, group) || !isPlainObject(scopes)) {
       return false;
     }
 
-    return scopes.every((scope) => SCOPES_BY_GROUP[group].includes(scope));
+    return Object.entries(scopes).every(
+      ([scope, isEnabled]) =>
+        SCOPES_BY_GROUP[group].includes(scope) && typeof isEnabled === 'boolean',
+    );
   });
 };
 

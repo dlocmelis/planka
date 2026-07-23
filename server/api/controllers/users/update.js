@@ -97,13 +97,12 @@
  *                 example: byDefault
  *               notificationEvents:
  *                 type: object
- *                 description: Notification events the user receives, by group; unknown groups or scope values are rejected
+ *                 description: Notification events the user receives, by group and scope; unknown groups or scopes are rejected
  *                 additionalProperties:
- *                   type: array
- *                   items:
- *                     type: string
- *                     enum: [moveCard, commentCard, addMemberToCard, mentionInComment]
- *                 example: { "card": ["moveCard", "addMemberToCard"], "comment": ["commentCard", "mentionInComment"] }
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: boolean
+ *                 example: { "comments": { "all": true, "mentions": true, "own": true, "user": true, "dev": true }, "cardMovement": { "all": true, "own": true, "user": true, "dev": true } }
  *               isSsoUser:
  *                 type: boolean
  *                 description: Whether the user is SSO user (only false value to unlink SSO, for admins)

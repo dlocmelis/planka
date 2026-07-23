@@ -7,6 +7,11 @@ const escapeMarkdown = require('escape-markdown');
 const escapeHtml = require('escape-html');
 
 const { mentionMarkupToText } = require('../../../utils/mentions');
+const {
+  groupForNotificationType,
+  resolveOwnPredicate,
+  matchesPreferences,
+} = require('../../../utils/notification-preferences');
 
 const buildTitle = (notification, t) => {
   switch (notification.type) {
@@ -309,6 +314,23 @@ module.exports = {
 
   async fn(inputs) {
     const { values } = inputs;
+
+    // Drop the recipient when their notificationEvents preferences mute this notification
+    // type: no DB row, socket broadcast, webhook, push or email (all happen below)
+    if (groupForNotificationType(values.type)) {
+      const recipient = await User.qm.getOneById(values.userId);
+
+      if (recipient) {
+        const cardMemberships = await CardMembership.qm.getByCardId(values.card.id);
+
+        const own = resolveOwnPredicate(cardMemberships, values.card.creatorUserId, values.userId);
+        const dev = !!values.creatorUser.isBot;
+
+        if (!matchesPreferences(recipient.notificationEvents, values.type, { own, dev })) {
+          return null;
+        }
+      }
+    }
 
     if (values.comment) {
       values.commentId = values.comment.id;
