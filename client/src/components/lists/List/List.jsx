@@ -108,6 +108,19 @@ const List = React.memo(({ id, index }) => {
     }
   }, [list.isPersisted, canEdit]);
 
+  const handleCollapseClick = useCallback(
+    (event) => {
+      event.stopPropagation();
+
+      dispatch(
+        entryActions.updateList(id, {
+          isCollapsed: !list.isCollapsed,
+        }),
+      );
+    },
+    [id, dispatch, list.isCollapsed],
+  );
+
   const handleAddCardClick = useCallback(() => {
     setAddCardPosition(AddCardPositions.BOTTOM);
   }, []);
@@ -212,6 +225,19 @@ const List = React.memo(({ id, index }) => {
               className={classNames(styles.header, canEdit && styles.headerEditable)}
               onClick={handleHeaderClick}
             >
+              {list.isPersisted && (
+                <Button
+                  title={list.isCollapsed ? t('action.expandList') : t('action.collapseList')}
+                  className={styles.headerCollapseButton}
+                  onClick={handleCollapseClick}
+                >
+                  <Icon
+                    fitted
+                    name={list.isCollapsed ? 'angle right' : 'angle down'}
+                    size="small"
+                  />
+                </Button>
+              )}
               {isEditNameOpened ? (
                 <EditName listId={id} onClose={handleEditNameClose} />
               ) : (

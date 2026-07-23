@@ -94,7 +94,7 @@
 
   .header {
     outline: none;
-    padding: 6px 36px 6px 8px;
+    padding: 6px 36px;
     position: relative;
 
     &:hover {
@@ -122,6 +122,24 @@
     padding: 0;
     position: absolute;
     right: 4px;
+    top: 4px;
+    width: 32px;
+
+    &:hover {
+      background: rgba(9, 30, 66, 0.13);
+      color: #516b7a;
+    }
+  }
+
+  .headerCollapseButton {
+    background: none;
+    box-shadow: none;
+    color: #798d99;
+    left: 4px;
+    line-height: 32px;
+    margin: 0;
+    padding: 0;
+    position: absolute;
     top: 4px;
     width: 32px;
 
