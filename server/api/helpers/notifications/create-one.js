@@ -18,6 +18,10 @@ const buildTitle = (notification, t) => {
       return t('You Were Added to Card');
     case Notification.Types.MENTION_IN_COMMENT:
       return t('You Were Mentioned in Comment');
+    case Notification.Types.ADD_LABEL_TO_CARD:
+      return t('Label Added to Card');
+    case Notification.Types.SET_CUSTOM_FIELD_VALUE:
+      return t('Custom Field Value Set');
     default:
       return null;
   }
@@ -123,6 +127,54 @@ const buildBodyByFormat = (board, card, notification, actorUser, t) => {
         )}:\n\n<i>${escapeHtml(commentText)}</i>`,
       };
     }
+    case Notification.Types.ADD_LABEL_TO_CARD: {
+      const labelName = notification.data.label.name || notification.data.label.color;
+
+      return {
+        text: t('%s added label %s to %s on %s', actorUser.name, labelName, card.name, board.name),
+        markdown: t(
+          '%s added label %s to %s on %s',
+          escapeMarkdown(actorUser.name),
+          `**${escapeMarkdown(labelName)}**`,
+          markdownCardLink,
+          escapeMarkdown(board.name),
+        ),
+        html: t(
+          '%s added label %s to %s on %s',
+          escapeHtml(actorUser.name),
+          `<b>${escapeHtml(labelName)}</b>`,
+          htmlCardLink,
+          escapeHtml(board.name),
+        ),
+      };
+    }
+    case Notification.Types.SET_CUSTOM_FIELD_VALUE:
+      return {
+        text: t(
+          '%s set %s to %s for %s on %s',
+          actorUser.name,
+          notification.data.customField.name,
+          notification.data.value,
+          card.name,
+          board.name,
+        ),
+        markdown: t(
+          '%s set %s to %s for %s on %s',
+          escapeMarkdown(actorUser.name),
+          `**${escapeMarkdown(notification.data.customField.name)}**`,
+          `**${escapeMarkdown(notification.data.value)}**`,
+          markdownCardLink,
+          escapeMarkdown(board.name),
+        ),
+        html: t(
+          '%s set %s to %s for %s on %s',
+          escapeHtml(actorUser.name),
+          `<b>${escapeHtml(notification.data.customField.name)}</b>`,
+          `<b>${escapeHtml(notification.data.value)}</b>`,
+          htmlCardLink,
+          escapeHtml(board.name),
+        ),
+      };
     default:
       return null;
   }
@@ -191,6 +243,30 @@ const buildAndSendEmail = async (
         cardLink,
         boardLink,
       )}</p><p>${escapeHtml(mentionMarkupToText(notification.data.text))}</p>`;
+
+      break;
+    case Notification.Types.ADD_LABEL_TO_CARD: {
+      const labelName = notification.data.label.name || notification.data.label.color;
+
+      html = `<p>${t(
+        '%s added label %s to %s on %s',
+        escapeHtml(actorUser.name),
+        escapeHtml(labelName),
+        cardLink,
+        boardLink,
+      )}</p>`;
+
+      break;
+    }
+    case Notification.Types.SET_CUSTOM_FIELD_VALUE:
+      html = `<p>${t(
+        '%s set %s to %s for %s on %s',
+        escapeHtml(actorUser.name),
+        escapeHtml(notification.data.customField.name),
+        escapeHtml(notification.data.value),
+        cardLink,
+        boardLink,
+      )}</p>`;
 
       break;
     default:

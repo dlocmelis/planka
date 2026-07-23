@@ -3,6 +3,8 @@
   "Card Created": "Card Created",
   "Card Moved": "Card Moved",
   "copy": "copy",
+  "Custom Field Value Set": "Custom Field Value Set",
+  "Label Added to Card": "Label Added to Card",
   "New Comment": "New Comment",
   "Test Title": "Test Title",
   "This is a test text message!": "This is a test text message!",
@@ -11,9 +13,11 @@
   "Trash": "Trash",
   "You Were Added to Card": "You Were Added to Card",
   "You Were Mentioned in Comment": "You Were Mentioned in Comment",
+  "%s added label %s to %s on %s": "%s added label %s to %s on %s",
   "%s added you to %s on %s": "%s added you to %s on %s",
   "%s created %s in %s on %s": "%s created %s in %s on %s",
   "%s left a new comment to %s on %s": "%s left a new comment to %s on %s",
   "%s mentioned you in %s on %s": "%s mentioned you in %s on %s",
-  "%s moved %s from %s to %s on %s": "%s moved %s from %s to %s on %s"
+  "%s moved %s from %s to %s on %s": "%s moved %s from %s to %s on %s",
+  "%s set %s to %s for %s on %s": "%s set %s to %s for %s on %s"
 }
