@@ -22,13 +22,16 @@ const LEGACY_DEFAULT = JSON.stringify({
   comment: ['commentCard', 'mentionInComment'],
 });
 
+// Query/schema builders go through knexfile's wrapIdentifier snake_case hook, so
+// camelCase identifiers map to the real notification_events column; the default is
+// set via the schema builder because Postgres rejects bind parameters in DDL.
 const convertNotificationEventsDefault = (knex, defaultValue) =>
-  knex
-    .raw('UPDATE user_account SET "notificationEvents" = ?::jsonb', [defaultValue])
+  knex('user_account')
+    .update({ notificationEvents: defaultValue })
     .then(() =>
-      knex.raw('ALTER TABLE user_account ALTER COLUMN "notificationEvents" SET DEFAULT ?::jsonb', [
-        defaultValue,
-      ]),
+      knex.schema.alterTable('user_account', (table) => {
+        table.jsonb('notificationEvents').defaultTo(defaultValue).alter();
+      }),
     );
 
 module.exports.up = (knex) => convertNotificationEventsDefault(knex, SCOPED_DEFAULT);
