@@ -106,6 +106,8 @@ export const NotificationTypes = {
   COMMENT_CARD: 'commentCard',
   ADD_MEMBER_TO_CARD: 'addMemberToCard',
   MENTION_IN_COMMENT: 'mentionInComment',
+  ADD_LABEL_TO_CARD: 'addLabelToCard',
+  SET_CUSTOM_FIELD_VALUE: 'setCustomFieldValue',
 };
 
 export const NotificationServiceFormats = {
