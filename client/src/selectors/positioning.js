@@ -7,6 +7,7 @@ import isUndefined from 'lodash/isUndefined';
 import { createSelector } from 'redux-orm';
 
 import orm from '../orm';
+import { selectCurrentUserId } from './users';
 import Config from '../constants/Config';
 
 const nextPosition = (items, index, excludedId) => {
@@ -68,14 +69,28 @@ export const selectNextListPosition = createSelector(
   (_, boardId) => boardId,
   (_, __, index) => index,
   (_, __, ___, excludedId) => excludedId,
-  ({ Board }, boardId, index, excludedId) => {
+  (state) => selectCurrentUserId(state),
+  ({ Board }, boardId, index, excludedId, currentUserId) => {
     const boardModel = Board.withId(boardId);
 
     if (!boardModel) {
       return boardModel;
     }
 
-    return nextPosition(boardModel.getKanbanListsQuerySet().toRefArray(), index, excludedId);
+    let listItems = boardModel.getKanbanListsQuerySet().toRefArray();
+
+    // A defined index always comes from drag-and-drop on the board, where only
+    // the current user's visible (not hidden) lists are rendered, so the
+    // position must be computed over the same visible subset. With no index
+    // (list creation) the position stays after the very last list, hidden ones
+    // included.
+    if (!isUndefined(index)) {
+      const boardMembershipModel = boardModel.getMembershipModelByUserId(currentUserId);
+      const hiddenListIds = (boardMembershipModel && boardMembershipModel.hiddenListIds) || [];
+      listItems = listItems.filter((listItem) => !hiddenListIds.includes(listItem.id));
+    }
+
+    return nextPosition(listItems, index, excludedId);
   },
 );
 

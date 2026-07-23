@@ -322,6 +322,24 @@ export const selectKanbanListIdsForCurrentBoard = createSelector(
   },
 );
 
+export const selectKanbanListsForCurrentBoard = createSelector(
+  orm,
+  (state) => selectPath(state).boardId,
+  ({ Board }, id) => {
+    if (!id) {
+      return id;
+    }
+
+    const boardModel = Board.withId(id);
+
+    if (!boardModel) {
+      return boardModel;
+    }
+
+    return boardModel.getKanbanListsQuerySet().toRefArray();
+  },
+);
+
 // TODO: rename?
 export const selectAvailableListsForCurrentBoard = createSelector(
   orm,
@@ -514,6 +532,7 @@ export default {
   selectArchiveListIdForCurrentBoard,
   selectTrashListIdForCurrentBoard,
   selectKanbanListIdsForCurrentBoard,
+  selectKanbanListsForCurrentBoard,
   selectAvailableListsForCurrentBoard,
   selectCardsExceptCurrentForCurrentBoard,
   selectFilteredCardIdsForCurrentBoard,
