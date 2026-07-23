@@ -95,6 +95,15 @@
  *                 enum: [byDefault, alphabetically, byCreationTime]
  *                 description: Default sort order for projects display
  *                 example: byDefault
+ *               notificationEvents:
+ *                 type: object
+ *                 description: Notification events the user receives, by group; unknown groups or scope values are rejected
+ *                 additionalProperties:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                     enum: [moveCard, commentCard, addMemberToCard, mentionInComment]
+ *                 example: { "card": ["moveCard", "addMemberToCard"], "comment": ["commentCard", "mentionInComment"] }
  *               isSsoUser:
  *                 type: boolean
  *                 description: Whether the user is SSO user (only false value to unlink SSO, for admins)
@@ -102,6 +111,10 @@
  *               isDeactivated:
  *                 type: boolean
  *                 description: Whether the user account is deactivated and cannot log in (for admins)
+ *                 example: false
+ *               isBot:
+ *                 type: boolean
+ *                 description: Whether the user account belongs to a bot (for admins)
  *                 example: false
  *     responses:
  *       200:
@@ -127,7 +140,7 @@
  *         $ref: '#/components/responses/Conflict'
  */
 
-const { is } = require('../../../utils/validators');
+const { is, isNotificationEvents } = require('../../../utils/validators');
 const { idInput } = require('../../../utils/inputs');
 
 const Errors = {
@@ -205,11 +218,18 @@ module.exports = {
       type: 'string',
       isIn: Object.values(User.ProjectOrders),
     },
+    notificationEvents: {
+      type: 'json',
+      custom: isNotificationEvents,
+    },
     isSsoUser: {
       type: 'boolean',
       custom: is(false),
     },
     isDeactivated: {
+      type: 'boolean',
+    },
+    isBot: {
       type: 'boolean',
     },
   },
@@ -233,7 +253,7 @@ module.exports = {
     if (inputs.id === currentUser.id) {
       availableInputKeys.push(...User.PERSONAL_FIELD_NAMES);
     } else if (currentUser.role === User.Roles.ADMIN) {
-      availableInputKeys.push('role', 'isSsoUser', 'isDeactivated');
+      availableInputKeys.push('role', 'isSsoUser', 'isDeactivated', 'isBot');
     } else {
       throw Errors.USER_NOT_FOUND; // Forbidden
     }
@@ -283,8 +303,10 @@ module.exports = {
         'defaultEditorMode',
         'defaultHomeView',
         'defaultProjectsOrder',
+        'notificationEvents',
         'isSsoUser',
         'isDeactivated',
+        'isBot',
       ]),
     };
 
