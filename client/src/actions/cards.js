@@ -289,6 +289,25 @@ const pasteCard = () => ({
   payload: {},
 });
 
+const toggleCardSelection = (id) => ({
+  type: ActionTypes.CARD_SELECTION_TOGGLE,
+  payload: {
+    id,
+  },
+});
+
+const setCardSelection = (ids) => ({
+  type: ActionTypes.CARD_SELECTION_SET,
+  payload: {
+    ids,
+  },
+});
+
+const clearCardSelection = () => ({
+  type: ActionTypes.CARD_SELECTION_CLEAR,
+  payload: {},
+});
+
 const deleteCard = (id) => ({
   type: ActionTypes.CARD_DELETE,
   payload: {
@@ -330,6 +349,9 @@ export default {
   copyCard,
   cutCard,
   pasteCard,
+  toggleCardSelection,
+  setCardSelection,
+  clearCardSelection,
   deleteCard,
   handleCardDelete,
 };
