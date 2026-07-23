@@ -16,8 +16,6 @@ export const selectIsFavoritesEnabled = ({ core: { isFavoritesEnabled } }) => is
 
 export const selectIsEditModeEnabled = ({ core: { isEditModeEnabled } }) => isEditModeEnabled;
 
-export const selectSelectedCardIds = ({ core: { selectedCardIds } }) => selectedCardIds;
-
 export const selectClipboard = ({ core: { clipboard } }) => clipboard;
 
 export const selectSelectedCardIds = createSelector(
@@ -61,7 +59,6 @@ export default {
   selectIsEditModeEnabled,
   selectSelectedCardIds,
   selectClipboard,
-  selectSelectedCardIds,
   makeSelectIsCardSelected,
   selectConfig,
   selectRecentCardId,

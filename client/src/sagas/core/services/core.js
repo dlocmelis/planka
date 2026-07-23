@@ -101,10 +101,6 @@ export function* toggleEditMode(isEnabled) {
   yield put(actions.toggleEditMode(isEnabled));
 }
 
-export function* setCardSelection(cardIds) {
-  yield put(actions.setCardSelection(cardIds));
-}
-
 export function* updateHomeView(value) {
   yield put(actions.updateHomeView(value));
 
@@ -140,7 +136,6 @@ export default {
   changeCoreLanguage,
   toggleFavorites,
   toggleEditMode,
-  setCardSelection,
   updateHomeView,
   logout,
 };

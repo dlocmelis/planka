@@ -120,6 +120,7 @@ export default {
       cardsOnThisListAreCompleteAndReadyToBeArchived:
         'Cards on this list are complete and ready to be archived.',
       cardsOnThisListAreReadyToBeWorkedOn: 'Cards on this list are ready to be worked on.',
+      cardsSelected: '{{count}} cards selected',
       clickHereOrRefreshPageToUpdate: '<0>Click here</0> or refresh the page to update.',
       clientHostnameInEhlo: 'Client hostname in EHLO',
       closed: 'Closed',
@@ -415,6 +416,7 @@ export default {
       archiveCards_title: 'Archive Cards',
       assignAsOwner: 'Assign as owner',
       cancel: 'Cancel',
+      clearSelection: 'Clear selection',
       collapseList: 'Collapse list',
       copy: 'Copy',
       copyCard_title: 'Copy Card',
