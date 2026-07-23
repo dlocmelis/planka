@@ -15,6 +15,7 @@ const initialState = {
   isLogouting: false,
   isFavoritesEnabled: false,
   isEditModeEnabled: false,
+  selectedCardIds: [],
   modal: null,
   clipboard: null,
   config: null,
@@ -44,6 +45,10 @@ export default (state = initialState, { type, payload }) => {
         boardId: payload.currentBoardId || null,
         cardId: payload.currentCardId || null,
       };
+
+      if (nextState.boardId !== state.boardId) {
+        nextState.selectedCardIds = [];
+      }
 
       if (payload.currentCardId) {
         nextState.recentCardId = payload.currentCardId;
@@ -106,6 +111,11 @@ export default (state = initialState, { type, payload }) => {
       return {
         ...state,
         isEditModeEnabled: payload.isEnabled,
+      };
+    case ActionTypes.CARD_SELECTION_SET:
+      return {
+        ...state,
+        selectedCardIds: payload.cardIds,
       };
     case ActionTypes.HOME_VIEW_UPDATE:
       return {

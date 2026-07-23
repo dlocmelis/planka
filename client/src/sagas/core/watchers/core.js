@@ -16,6 +16,9 @@ export default function* coreWatchers() {
     takeEvery(EntryActionTypes.EDIT_MODE_TOGGLE, ({ payload: { isEnabled } }) =>
       services.toggleEditMode(isEnabled),
     ),
+    takeEvery(EntryActionTypes.CARD_SELECTION_SET, ({ payload: { cardIds } }) =>
+      services.setCardSelection(cardIds),
+    ),
     takeEvery(EntryActionTypes.HOME_VIEW_UPDATE, ({ payload: { value } }) =>
       services.updateHomeView(value),
     ),
