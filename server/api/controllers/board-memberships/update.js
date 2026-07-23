@@ -8,7 +8,7 @@
  * /board-memberships/{id}:
  *   patch:
  *     summary: Update board membership
- *     description: Updates a board membership. Requires project manager permissions.
+ *     description: Updates a board membership. Requires project manager permissions, except when the membership's own user updates only preference fields (e.g. hiddenListIds).
  *     tags:
  *       - Board Memberships
  *     operationId: updateBoardMembership
@@ -37,6 +37,12 @@
  *                 nullable: true
  *                 description: Whether the user can comment on cards (applies only to viewers)
  *                 example: true
+ *               hiddenListIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: IDs of the lists the user has hidden on the board (own preference)
+ *                 example: ["1357158568008091268"]
  *     responses:
  *       200:
  *         description: Board membership updated successfully
@@ -57,6 +63,7 @@
  *         $ref: '#/components/responses/NotFound'
  */
 
+const { isIdArray } = require('../../../utils/validators');
 const { idInput } = require('../../../utils/inputs');
 
 const Errors = {
@@ -79,6 +86,10 @@ module.exports = {
       type: 'boolean',
       allowNull: true,
     },
+    hiddenListIds: {
+      type: 'json',
+      custom: isIdArray,
+    },
   },
 
   exits: {
@@ -100,10 +111,17 @@ module.exports = {
     const isProjectManager = await sails.helpers.users.isProjectManager(currentUser.id, project.id);
 
     if (!isProjectManager) {
-      throw Errors.BOARD_MEMBERSHIP_NOT_FOUND; // Forbidden
+      const isOwnPreferenceUpdate =
+        boardMembership.userId === currentUser.id &&
+        _.difference(Object.keys(_.omit(inputs, ['id'])), BoardMembership.PREFERENCE_FIELD_NAMES)
+          .length === 0;
+
+      if (!isOwnPreferenceUpdate) {
+        throw Errors.BOARD_MEMBERSHIP_NOT_FOUND; // Forbidden
+      }
     }
 
-    const values = _.pick(inputs, ['role', 'canComment']);
+    const values = _.pick(inputs, ['role', 'canComment', 'hiddenListIds']);
 
     boardMembership = await sails.helpers.boardMemberships.updateOne.with({
       values,
