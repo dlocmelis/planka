@@ -2,7 +2,11 @@ import orm from '../orm';
 import ActionTypes from '../constants/ActionTypes';
 import { ListTypes } from '../constants/Enums';
 import reducer from './core';
-import { selectSelectedCardIds, makeSelectIsCardSelected } from '../selectors/core';
+import {
+  selectSelectedCardIds,
+  makeSelectIsCardSelected,
+  selectIsAnyCardSelected,
+} from '../selectors/core';
 
 jest.mock('../lib/redux-router', () => ({
   LOCATION_CHANGE_HANDLE: 'LOCATION_CHANGE_HANDLE',
@@ -140,6 +144,44 @@ describe('core reducer card selection', () => {
       }),
     ).toBe(state);
   });
+
+  test('card delete removes the card from the selection', () => {
+    let state = reducer(undefined, {
+      type: ActionTypes.CARD_SELECTION_SET,
+      payload: {
+        ids: ['card-1', 'card-2'],
+      },
+    });
+
+    state = reducer(state, {
+      type: ActionTypes.CARD_DELETE,
+      payload: {
+        id: 'card-1',
+      },
+    });
+
+    expect(state.selectedCardIds).toEqual(['card-2']);
+  });
+
+  test('card delete handle removes the card from the selection', () => {
+    let state = reducer(undefined, {
+      type: ActionTypes.CARD_SELECTION_SET,
+      payload: {
+        ids: ['card-1', 'card-2'],
+      },
+    });
+
+    state = reducer(state, {
+      type: ActionTypes.CARD_DELETE_HANDLE,
+      payload: {
+        card: {
+          id: 'card-2',
+        },
+      },
+    });
+
+    expect(state.selectedCardIds).toEqual(['card-1']);
+  });
 });
 
 describe('selectSelectedCardIds', () => {
@@ -183,5 +225,15 @@ describe('makeSelectIsCardSelected', () => {
 
     expect(selectIsCardSelected(state, 'card-3')).toBeFalsy();
     expect(selectIsCardSelected(state, 'card-missing')).toBeFalsy();
+  });
+});
+
+describe('selectIsAnyCardSelected', () => {
+  test('returns true when the selection is not empty', () => {
+    expect(selectIsAnyCardSelected(buildState(['card-1']))).toBeTruthy();
+  });
+
+  test('returns false when the selection is empty', () => {
+    expect(selectIsAnyCardSelected(buildState([]))).toBeFalsy();
   });
 });
