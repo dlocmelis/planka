@@ -35,7 +35,7 @@ module.exports = {
   },
 
   async fn(inputs) {
-    const { values } = inputs;
+    const { isCollapsed, ...values } = inputs.values;
 
     if (values.project && values.project.id === inputs.project.id) {
       delete values.project;
@@ -150,9 +150,18 @@ module.exports = {
       await sails.helpers.cards.detachCustomFields(cardIds, inputs.board.id, !!values.project);
     }
 
-    const { list, tasks } = await List.qm.updateOne(inputs.record.id, values);
+    const hasSharedValues = _.some(values, (value) => !_.isUndefined(value));
 
-    if (list) {
+    let list = inputs.record;
+    let tasks;
+
+    if (hasSharedValues) {
+      ({ list, tasks } = await List.qm.updateOne(inputs.record.id, values));
+
+      if (!list) {
+        return list;
+      }
+
       if (values.board) {
         if (prevLabels.length > 0) {
           const labels = await Label.qm.getByBoardId(list.boardId);
@@ -257,6 +266,47 @@ module.exports = {
         }),
         user: inputs.actorUser,
       });
+    }
+
+    if (!_.isUndefined(isCollapsed)) {
+      const wasCollapsed = !!(await ListCollapse.qm.getOneByListIdAndUserId(
+        list.id,
+        inputs.actorUser.id,
+      ));
+
+      if (isCollapsed !== wasCollapsed) {
+        if (isCollapsed) {
+          try {
+            await ListCollapse.qm.createOne({
+              listId: list.id,
+              userId: inputs.actorUser.id,
+            });
+          } catch (error) {
+            if (error.code !== 'E_UNIQUE') {
+              throw error;
+            }
+          }
+        } else {
+          await ListCollapse.qm.deleteOne({
+            listId: list.id,
+            userId: inputs.actorUser.id,
+          });
+        }
+
+        sails.sockets.broadcast(
+          `user:${inputs.actorUser.id}`,
+          'listUpdate',
+          {
+            item: {
+              id: list.id,
+              isCollapsed,
+            },
+          },
+          inputs.request,
+        );
+
+        // TODO: send webhooks
+      }
     }
 
     return list;
