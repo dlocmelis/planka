@@ -70,6 +70,9 @@ const Errors = {
   BOARD_MEMBERSHIP_NOT_FOUND: {
     boardMembershipNotFound: 'Board membership not found',
   },
+  INVALID_HIDDEN_LIST_IDS: {
+    invalidHiddenListIds: 'Invalid hidden list ids',
+  },
 };
 
 module.exports = {
@@ -96,10 +99,19 @@ module.exports = {
     boardMembershipNotFound: {
       responseType: 'notFound',
     },
+    invalidHiddenListIds: {
+      responseType: 'badRequest',
+    },
   },
 
   async fn(inputs) {
     const { currentUser } = this.req;
+
+    // rttc's `json` type accepts `null` and machine skips `custom` validation
+    // for `null`, so it must be rejected here (the column is NOT NULL)
+    if (_.isNull(inputs.hiddenListIds)) {
+      throw Errors.INVALID_HIDDEN_LIST_IDS;
+    }
 
     const pathToProject = await sails.helpers.boardMemberships
       .getPathToProjectById(inputs.id)

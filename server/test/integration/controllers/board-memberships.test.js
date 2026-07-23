@@ -191,6 +191,7 @@ describe('board-memberships (controller)', () => {
 
     it('should reject malformed hiddenListIds payloads', async () => {
       const malformedPayloads = [
+        { hiddenListIds: null },
         { hiddenListIds: LIST_ID },
         { hiddenListIds: 'not-an-array' },
         { hiddenListIds: ['abc'] },
