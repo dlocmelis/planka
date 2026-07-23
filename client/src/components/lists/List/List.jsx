@@ -115,13 +115,21 @@ const List = React.memo(({ id, index }) => {
     (event) => {
       event.stopPropagation();
 
+      if (!list.isCollapsed) {
+        // The expanded content unmounts without firing its close callbacks,
+        // so reset the related local state and clear the shortcuts hover entry
+        setIsEditNameOpened(false);
+        setAddCardPosition(null);
+        handleListMouseLeave();
+      }
+
       dispatch(
         entryActions.updateList(id, {
           isCollapsed: !list.isCollapsed,
         }),
       );
     },
-    [id, dispatch, list.isCollapsed],
+    [id, dispatch, list.isCollapsed, handleListMouseLeave],
   );
 
   const handleAddCardClick = useCallback(() => {
@@ -151,7 +159,7 @@ const List = React.memo(({ id, index }) => {
   );
 
   useDidUpdate(() => {
-    if (!addCardPosition) {
+    if (!addCardPosition || !cardsWrapperRef.current) {
       return;
     }
 
@@ -160,6 +168,10 @@ const List = React.memo(({ id, index }) => {
   }, [cardIds, addCardPosition]);
 
   useDidUpdate(() => {
+    if (!cardsWrapperRef.current) {
+      return;
+    }
+
     cardsWrapperRef.current.scrollTop = cardsWrapperRef.current.scrollHeight;
   }, [scrollBottomState]);
 
