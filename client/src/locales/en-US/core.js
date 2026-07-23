@@ -110,9 +110,11 @@ export default {
       canManageSystemWideSettingsAndActAsProjectOwner:
         'Can manage the system wide settings and act as project owner.',
       canOnlyViewBoard: 'Can only view the board.',
+      card: 'Card',
       cardActions_title: 'Card Actions',
       cardMovement: 'Card movement',
       cardNotFound_title: 'Card Not Found',
+      cards: 'Cards',
       cardsOnThisListAreAvailableToAllBoardMembers:
         'Cards on this list are available to all board members.',
       cardsOnThisListAreCompleteAndReadyToBeArchived:
@@ -263,6 +265,7 @@ export default {
       noProjects: 'No projects',
       noUnreadNotifications: 'No unread notifications.',
       notifications: 'Notifications',
+      of: 'of',
       oldestFirst: 'Oldest first',
       onlyOneManagerShouldRemainToMakeThisProjectPrivate:
         'Only one manager should remain to make this project private',
