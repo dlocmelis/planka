@@ -17,6 +17,7 @@ const initialState = {
   isEditModeEnabled: false,
   modal: null,
   clipboard: null,
+  selectedCardIds: [],
   config: null,
   boardId: null,
   cardId: null,
@@ -215,6 +216,23 @@ export default (state = initialState, { type, payload }) => {
       return {
         ...state,
         clipboard: null,
+      };
+    case ActionTypes.CARD_SELECTION_TOGGLE:
+      return {
+        ...state,
+        selectedCardIds: state.selectedCardIds.includes(payload.id)
+          ? state.selectedCardIds.filter((id) => id !== payload.id)
+          : [...state.selectedCardIds, payload.id],
+      };
+    case ActionTypes.CARD_SELECTION_SET:
+      return {
+        ...state,
+        selectedCardIds: payload.ids,
+      };
+    case ActionTypes.CARD_SELECTION_CLEAR:
+      return {
+        ...state,
+        selectedCardIds: [],
       };
     default:
       return state;

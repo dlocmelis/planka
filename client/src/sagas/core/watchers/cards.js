@@ -74,6 +74,13 @@ export default function* cardsWatchers() {
       services.pasteCardInCurrentContext(),
     ),
     takeEvery(EntryActionTypes.CARD_IN_CURRENT_LIST_PASTE, () => services.pasteCardInCurrentList()),
+    takeEvery(EntryActionTypes.CARD_SELECTION_TOGGLE, ({ payload: { id } }) =>
+      services.toggleCardSelection(id),
+    ),
+    takeEvery(EntryActionTypes.CARD_SELECTION_SET, ({ payload: { ids } }) =>
+      services.setCardSelection(ids),
+    ),
+    takeEvery(EntryActionTypes.CARD_SELECTION_CLEAR, () => services.clearCardSelection()),
     takeEvery(EntryActionTypes.TO_ADJACENT_CARD_GO, ({ payload: { direction } }) =>
       services.goToAdjacentCard(direction),
     ),
