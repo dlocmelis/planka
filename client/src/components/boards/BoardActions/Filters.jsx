@@ -20,6 +20,7 @@ import UserAvatar from '../../users/UserAvatar';
 import BoardMembershipsStep from '../../board-memberships/BoardMembershipsStep';
 import LabelChip from '../../labels/LabelChip';
 import LabelsStep from '../../labels/LabelsStep';
+import ListsFilterStep from '../../lists/ListsFilterStep';
 
 import styles from './Filters.module.scss';
 
@@ -27,6 +28,8 @@ const Filters = React.memo(() => {
   const board = useSelector(selectors.selectCurrentBoard);
   const userIds = useSelector(selectors.selectFilterUserIdsForCurrentBoard);
   const labelIds = useSelector(selectors.selectFilterLabelIdsForCurrentBoard);
+  const hiddenListIds = useSelector(selectors.selectHiddenListIdsForCurrentBoard);
+  const kanbanLists = useSelector(selectors.selectKanbanListsForCurrentBoard);
   const currentUserId = useSelector(selectors.selectCurrentUserId);
 
   const withCurrentUserSelector = useSelector(
@@ -109,6 +112,32 @@ const Filters = React.memo(() => {
     [dispatch],
   );
 
+  const handleListHide = useCallback(
+    (listId) => {
+      dispatch(entryActions.updateHiddenListIdsInCurrentBoard([...hiddenListIds, listId]));
+    },
+    [dispatch, hiddenListIds],
+  );
+
+  const handleListShow = useCallback(
+    (listId) => {
+      dispatch(
+        entryActions.updateHiddenListIdsInCurrentBoard(
+          hiddenListIds.filter((hiddenListId) => hiddenListId !== listId),
+        ),
+      );
+    },
+    [dispatch, hiddenListIds],
+  );
+
+  const handleListsShowAll = useCallback(() => {
+    dispatch(entryActions.updateHiddenListIdsInCurrentBoard([]));
+  }, [dispatch]);
+
+  const handleListsHideAll = useCallback(() => {
+    dispatch(entryActions.updateHiddenListIdsInCurrentBoard(kanbanLists.map((list) => list.id)));
+  }, [dispatch, kanbanLists]);
+
   const handleSearchChange = useCallback(
     (_, { value }) => {
       setSearch(value);
@@ -144,6 +173,7 @@ const Filters = React.memo(() => {
 
   const BoardMembershipsPopup = usePopup(BoardMembershipsStep);
   const LabelsPopup = usePopup(LabelsStep);
+  const ListsFilterPopup = usePopup(ListsFilterStep);
 
   const isSearchActive = search || isSearchFocused;
 
@@ -191,6 +221,27 @@ const Filters = React.memo(() => {
             <LabelChip id={labelId} size="small" onClick={handleLabelClick} />
           </span>
         ))}
+      </span>
+      <span className={styles.filter}>
+        <ListsFilterPopup
+          currentIds={hiddenListIds}
+          onSelect={handleListHide}
+          onDeselect={handleListShow}
+          onShowAll={handleListsShowAll}
+          onHideAll={handleListsHideAll}
+        >
+          <button type="button" className={styles.filterButton}>
+            <span className={styles.filterTitle}>{`${t('common.lists')}:`}</span>
+            {hiddenListIds.length === 0 && (
+              <span className={styles.filterLabel}>{t('common.all')}</span>
+            )}
+            {hiddenListIds.length > 0 && (
+              <span className={styles.filterLabel}>
+                {t('common.listsHidden', { count: hiddenListIds.length })}
+              </span>
+            )}
+          </button>
+        </ListsFilterPopup>
       </span>
       <span className={styles.filter}>
         <Input
