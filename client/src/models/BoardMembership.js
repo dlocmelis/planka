@@ -15,6 +15,9 @@ export default class extends BaseModel {
     id: attr(),
     role: attr(),
     canComment: attr(),
+    hiddenListIds: attr({
+      getDefault: () => [],
+    }),
     boardId: fk({
       to: 'Board',
       as: 'board',

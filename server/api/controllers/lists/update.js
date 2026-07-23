@@ -8,7 +8,7 @@
  * /lists/{id}:
  *   patch:
  *     summary: Update list
- *     description: Updates a list. Can move lists between boards. Requires board editor permissions.
+ *     description: Updates a list. Can move lists between boards. Shared fields require board editor permissions; `isCollapsed` is per-user and accessible to any board member.
  *     tags:
  *       - Lists
  *     operationId: updateList
@@ -52,6 +52,10 @@
  *                 nullable: true
  *                 description: Color for the list
  *                 example: lagoon-blue
+ *               isCollapsed:
+ *                 type: boolean
+ *                 description: Whether the list is collapsed by the current user
+ *                 example: true
  *     responses:
  *       200:
  *         description: List updated successfully
@@ -113,6 +117,9 @@ module.exports = {
       isIn: List.COLORS,
       allowNull: true,
     },
+    isCollapsed: {
+      type: 'boolean',
+    },
   },
 
   exits: {
@@ -150,7 +157,12 @@ module.exports = {
       throw Errors.NOT_ENOUGH_RIGHTS;
     }
 
-    if (boardMembership.role !== BoardMembership.Roles.EDITOR) {
+    const availableInputKeys = ['id', 'isCollapsed'];
+    if (boardMembership.role === BoardMembership.Roles.EDITOR) {
+      availableInputKeys.push('boardId', 'type', 'position', 'name', 'color');
+    }
+
+    if (_.difference(Object.keys(inputs), availableInputKeys).length > 0) {
       throw Errors.NOT_ENOUGH_RIGHTS;
     }
 
@@ -176,7 +188,7 @@ module.exports = {
       }
     }
 
-    const values = _.pick(inputs, ['type', 'position', 'name', 'color']);
+    const values = _.pick(inputs, ['type', 'position', 'name', 'color', 'isCollapsed']);
 
     list = await sails.helpers.lists.updateOne.with({
       project,

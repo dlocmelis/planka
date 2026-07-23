@@ -11,7 +11,7 @@ import classNames from 'classnames';
 import { shallowEqual, useDispatch, useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { Draggable, Droppable } from 'react-beautiful-dnd';
-import { Button, Icon } from 'semantic-ui-react';
+import { Button, Checkbox, Icon } from 'semantic-ui-react';
 import { useDidUpdate, useToggle, useTransitioning } from '../../../lib/hooks';
 import { usePopup } from '../../../lib/popup';
 
@@ -52,6 +52,7 @@ const List = React.memo(({ id, index }) => {
 
   const clipboard = useSelector(selectors.selectClipboard);
   const isFavoritesActive = useSelector(selectors.selectIsFavoritesActiveForCurrentUser);
+  const selectedCardIds = useSelector(selectors.selectSelectedCardIds);
 
   const list = useSelector((state) => selectListById(state, id));
   const cardIds = useSelector((state) => selectFilteredCardIdsByListId(state, id));
@@ -151,6 +152,35 @@ const List = React.memo(({ id, index }) => {
   const handleEditNameClose = useCallback(() => {
     setIsEditNameOpened(false);
   }, []);
+
+  const selectedCardIdSet = useMemo(() => new Set(selectedCardIds), [selectedCardIds]);
+
+  const selectedVisibleCardsCount = cardIds.filter((cardId) =>
+    selectedCardIdSet.has(cardId),
+  ).length;
+
+  const isAllVisibleSelected = cardIds.length > 0 && selectedVisibleCardsCount === cardIds.length;
+
+  const isSelectionIndeterminate =
+    selectedVisibleCardsCount > 0 && selectedVisibleCardsCount < cardIds.length;
+
+  const handleSelectAllClick = useCallback((event) => {
+    event.stopPropagation();
+  }, []);
+
+  const handleSelectAllChange = useCallback(() => {
+    if (isAllVisibleSelected) {
+      const visibleCardIdSet = new Set(cardIds);
+
+      dispatch(
+        entryActions.setCardSelection(
+          selectedCardIds.filter((cardId) => !visibleCardIdSet.has(cardId)),
+        ),
+      );
+    } else {
+      dispatch(entryActions.setCardSelection([...new Set([...selectedCardIds, ...cardIds])]));
+    }
+  }, [cardIds, selectedCardIds, isAllVisibleSelected, dispatch]);
 
   const handleWrapperTransitionEnd = useTransitioning(
     wrapperRef,
@@ -279,7 +309,7 @@ const List = React.memo(({ id, index }) => {
               onTransitionEnd={handleWrapperTransitionEnd}
             >
               {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events,
-                                         jsx-a11y/no-static-element-interactions */}
+                                           jsx-a11y/no-static-element-interactions */}
               <div
                 {...dragHandleProps} // eslint-disable-line react/jsx-props-no-spreading
                 className={classNames(styles.header, canEdit && styles.headerEditable)}
@@ -302,6 +332,16 @@ const List = React.memo(({ id, index }) => {
                   <EditName listId={id} onClose={handleEditNameClose} />
                 ) : (
                   <div className={styles.headerName}>
+                    {list.isPersisted && (
+                      <Checkbox
+                        checked={isAllVisibleSelected}
+                        indeterminate={isSelectionIndeterminate}
+                        disabled={cardIds.length === 0}
+                        className={styles.headerSelectionCheckbox}
+                        onClick={handleSelectAllClick}
+                        onChange={handleSelectAllChange}
+                      />
+                    )}
                     {list.color && (
                       <Icon
                         name="circle"

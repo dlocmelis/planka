@@ -633,6 +633,18 @@ export function* cutCard(id) {
   yield put(actions.cutCard(id));
 }
 
+export function* toggleCardSelection(id) {
+  yield put(actions.toggleCardSelection(id));
+}
+
+export function* setCardSelection(ids) {
+  yield put(actions.setCardSelection(ids));
+}
+
+export function* clearCardSelection() {
+  yield put(actions.clearCardSelection());
+}
+
 export function* pasteCard(listId) {
   const list = yield select(selectors.selectListById, listId);
   const clipboard = yield select(selectors.selectClipboard);
@@ -776,6 +788,9 @@ export default {
   duplicateCurrentCard,
   copyCard,
   cutCard,
+  toggleCardSelection,
+  setCardSelection,
+  clearCardSelection,
   pasteCard,
   pasteCardInCurrentContext,
   pasteCardInCurrentList,

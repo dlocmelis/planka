@@ -205,6 +205,31 @@ export const selectCurrentUserMembershipForCurrentBoard = createSelector(
   },
 );
 
+export const selectHiddenListIdsForCurrentBoard = createSelector(
+  orm,
+  (state) => selectPath(state).boardId,
+  (state) => selectCurrentUserId(state),
+  ({ Board }, id, currentUserId) => {
+    if (!id) {
+      return [];
+    }
+
+    const boardModel = Board.withId(id);
+
+    if (!boardModel) {
+      return [];
+    }
+
+    const boardMembershipModel = boardModel.getMembershipModelByUserId(currentUserId);
+
+    if (!boardMembershipModel) {
+      return [];
+    }
+
+    return boardMembershipModel.hiddenListIds;
+  },
+);
+
 export const selectLabelsForCurrentBoard = createSelector(
   orm,
   (state) => selectPath(state).boardId,
@@ -274,7 +299,8 @@ export const selectTrashListIdForCurrentBoard = createSelector(
 export const selectKanbanListIdsForCurrentBoard = createSelector(
   orm,
   (state) => selectPath(state).boardId,
-  ({ Board }, id) => {
+  (state) => selectCurrentUserId(state),
+  ({ Board }, id, currentUserId) => {
     if (!id) {
       return id;
     }
@@ -285,10 +311,14 @@ export const selectKanbanListIdsForCurrentBoard = createSelector(
       return boardModel;
     }
 
+    const boardMembershipModel = boardModel.getMembershipModelByUserId(currentUserId);
+    const hiddenListIds = (boardMembershipModel && boardMembershipModel.hiddenListIds) || [];
+
     return boardModel
       .getKanbanListsQuerySet()
       .toRefArray()
-      .map((list) => list.id);
+      .map((list) => list.id)
+      .filter((listId) => !hiddenListIds.includes(listId));
   },
 );
 
@@ -479,6 +509,7 @@ export default {
   selectMembershipsForCurrentBoard,
   selectMemberUserIdsForCurrentBoard,
   selectCurrentUserMembershipForCurrentBoard,
+  selectHiddenListIdsForCurrentBoard,
   selectLabelsForCurrentBoard,
   selectArchiveListIdForCurrentBoard,
   selectTrashListIdForCurrentBoard,

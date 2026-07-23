@@ -10,6 +10,7 @@ const moment = require('moment');
 const { SCOPES_BY_GROUP } = require('./notification-preferences');
 
 const MAX_STRING_ID = '9223372036854775807';
+const MAX_ID_ARRAY_LENGTH = 1024;
 
 const ID_REGEX = /^[1-9][0-9]*$/;
 const IDS_WITH_COMMA_REGEX = /^[1-9][0-9]*(,[1-9][0-9]*)*$/;
@@ -32,6 +33,13 @@ const isId = (value) =>
   value.length <= MAX_STRING_ID.length && ID_REGEX.test(value) && isIdInRange(value);
 
 const isIds = (values) => _.every(values, isId);
+
+// Array checks are done without lodash so the module stays loadable outside
+// the sails context (e.g. in unit tests)
+const isIdArray = (value) =>
+  Array.isArray(value) &&
+  value.length <= MAX_ID_ARRAY_LENGTH &&
+  value.every((item) => typeof item === 'string' && isId(item));
 
 const isPassword = (value) => zxcvbn(value).score >= 2; // TODO: move to config
 
@@ -81,6 +89,7 @@ const isStopwatch = (value) => {
 
 module.exports = {
   MAX_STRING_ID,
+  MAX_ID_ARRAY_LENGTH,
 
   ID_REGEX,
   IDS_WITH_COMMA_REGEX,
@@ -92,6 +101,7 @@ module.exports = {
   isIdsWithCommaInRange,
   isId,
   isIds,
+  isIdArray,
   isPassword,
   isEmailOrUsername,
   isDueDate,

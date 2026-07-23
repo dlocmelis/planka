@@ -15,6 +15,7 @@ const initialState = {
   isLogouting: false,
   isFavoritesEnabled: false,
   isEditModeEnabled: false,
+  selectedCardIds: [],
   modal: null,
   clipboard: null,
   config: null,
@@ -44,6 +45,10 @@ export default (state = initialState, { type, payload }) => {
         boardId: payload.currentBoardId || null,
         cardId: payload.currentCardId || null,
       };
+
+      if (nextState.boardId !== state.boardId) {
+        nextState.selectedCardIds = [];
+      }
 
       if (payload.currentCardId) {
         nextState.recentCardId = payload.currentCardId;
@@ -215,6 +220,27 @@ export default (state = initialState, { type, payload }) => {
       return {
         ...state,
         clipboard: null,
+      };
+    case ActionTypes.CARD_SELECTION_TOGGLE:
+      return {
+        ...state,
+        selectedCardIds: state.selectedCardIds.includes(payload.id)
+          ? state.selectedCardIds.filter((id) => id !== payload.id)
+          : [...state.selectedCardIds, payload.id],
+      };
+    case ActionTypes.CARD_SELECTION_SET:
+      return {
+        ...state,
+        selectedCardIds: payload.ids,
+      };
+    case ActionTypes.CARD_SELECTION_CLEAR:
+      if (state.selectedCardIds.length === 0) {
+        return state;
+      }
+
+      return {
+        ...state,
+        selectedCardIds: [],
       };
     default:
       return state;

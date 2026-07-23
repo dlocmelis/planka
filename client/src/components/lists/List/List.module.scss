@@ -131,6 +131,16 @@
     }
   }
 
+  .headerCardsCount {
+    color: #6b808c;
+    display: inline-block;
+    font-size: 12px;
+    font-weight: normal;
+    line-height: 20px;
+    margin-left: 8px;
+    white-space: nowrap;
+  }
+
   .headerCollapseButton {
     background: none;
     box-shadow: none;
@@ -158,16 +168,6 @@
     overflow: hidden;
     padding: 40px 2px 8px;
     position: relative;
-  }
-
-  .headerCardsCount {
-    color: #6b808c;
-    display: inline-block;
-    font-size: 12px;
-    font-weight: normal;
-    line-height: 20px;
-    margin-left: 8px;
-    white-space: nowrap;
   }
 
   .headerCardsCountCollapsed {
@@ -215,6 +215,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     writing-mode: vertical-rl;
+  }
+
+  .headerSelectionCheckbox {
+    margin-right: 6px;
   }
 
   .innerWrapper {

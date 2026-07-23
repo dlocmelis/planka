@@ -16,6 +16,7 @@ import parseDndId from '../../../../utils/parse-dnd-id';
 import DroppableTypes from '../../../../constants/DroppableTypes';
 import { BoardMembershipRoles } from '../../../../constants/Enums';
 import AddList from './AddList';
+import BulkActionsBar from '../../../cards/BulkActionsBar';
 import List from '../../../lists/List';
 import PlusMathIcon from '../../../../assets/images/plus-math-icon.svg?react';
 
@@ -142,6 +143,13 @@ const KanbanContent = React.memo(() => {
     };
   }, [handleWindowMouseMove, handleWindowMouseRelease]);
 
+  useEffect(
+    () => () => {
+      dispatch(entryActions.clearCardSelection());
+    },
+    [dispatch],
+  );
+
   useDidUpdate(() => {
     if (isAddListOpened) {
       window.scroll(document.body.scrollWidth, 0);
@@ -188,6 +196,7 @@ const KanbanContent = React.memo(() => {
           </Droppable>
         </DragDropContext>
       </div>
+      <BulkActionsBar />
     </div>
   );
 });

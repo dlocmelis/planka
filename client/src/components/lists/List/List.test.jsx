@@ -1,3 +1,7 @@
+/**
+ * @jest-environment jsdom
+ */
+
 /*!
  * Copyright (c) 2024 PLANKA Software GmbH
  * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
@@ -13,6 +17,7 @@ import { BoardShortcutsContext } from '../../../contexts';
 import List from './List';
 
 const mockDraggableRenderProps = [];
+const mockEmptySelectedCardIds = [];
 
 let mockList;
 let mockAllCardIds;
@@ -52,6 +57,7 @@ jest.mock('../../../selectors', () => ({
     makeSelectFilteredCardIdsByListId: () => () => mockCardIds,
     selectClipboard: () => null,
     selectIsFavoritesActiveForCurrentUser: () => false,
+    selectSelectedCardIds: () => mockEmptySelectedCardIds,
     selectIsEditModeEnabled: () => true,
     selectCurrentUserMembershipForCurrentBoard: () => ({ role: 'editor' }),
   },
@@ -63,6 +69,7 @@ jest.mock('../../../entry-actions', () => ({
     updateList: (id, data) => ({ type: 'list-update', payload: { id, data } }),
     pasteCard: (id) => ({ type: 'card-paste', payload: { id } }),
     createCard: () => ({ type: 'card-create' }),
+    setCardSelection: (cardIds) => ({ type: 'card-selection-set', payload: { cardIds } }),
   },
 }));
 

@@ -181,6 +181,25 @@ const pasteCardInCurrentList = () => ({
   payload: {},
 });
 
+const toggleCardSelection = (id) => ({
+  type: EntryActionTypes.CARD_SELECTION_TOGGLE,
+  payload: {
+    id,
+  },
+});
+
+const setCardSelection = (ids) => ({
+  type: EntryActionTypes.CARD_SELECTION_SET,
+  payload: {
+    ids,
+  },
+});
+
+const clearCardSelection = () => ({
+  type: EntryActionTypes.CARD_SELECTION_CLEAR,
+  payload: {},
+});
+
 const goToAdjacentCard = (direction) => ({
   type: EntryActionTypes.TO_ADJACENT_CARD_GO,
   payload: {
@@ -232,6 +251,9 @@ export default {
   pasteCard,
   pasteCardInCurrentContext,
   pasteCardInCurrentList,
+  toggleCardSelection,
+  setCardSelection,
+  clearCardSelection,
   goToAdjacentCard,
   deleteCard,
   deleteCurrentCard,
