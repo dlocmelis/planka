@@ -18,7 +18,6 @@ const initialState = {
   selectedCardIds: [],
   modal: null,
   clipboard: null,
-  selectedCardIds: [],
   config: null,
   boardId: null,
   cardId: null,
@@ -112,11 +111,6 @@ export default (state = initialState, { type, payload }) => {
       return {
         ...state,
         isEditModeEnabled: payload.isEnabled,
-      };
-    case ActionTypes.CARD_SELECTION_SET:
-      return {
-        ...state,
-        selectedCardIds: payload.cardIds,
       };
     case ActionTypes.HOME_VIEW_UPDATE:
       return {
