@@ -63,7 +63,7 @@
  *           example: "1357158568008091270"
  *         type:
  *           type: string
- *           enum: [moveCard, commentCard, addMemberToCard, mentionInComment]
+ *           enum: [moveCard, commentCard, addMemberToCard, mentionInComment, addLabelToCard, setCustomFieldValue]
  *           description: Type of the notification
  *           example: commentCard
  *         data:
@@ -94,6 +94,8 @@ const Types = {
   COMMENT_CARD: 'commentCard',
   ADD_MEMBER_TO_CARD: 'addMemberToCard',
   MENTION_IN_COMMENT: 'mentionInComment',
+  ADD_LABEL_TO_CARD: 'addLabelToCard',
+  SET_CUSTOM_FIELD_VALUE: 'setCustomFieldValue',
 };
 
 module.exports = {

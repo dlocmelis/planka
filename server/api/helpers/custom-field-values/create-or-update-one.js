@@ -73,6 +73,36 @@ module.exports = {
       user: inputs.actorUser,
     });
 
+    const cardSubscriptionUserIds = await sails.helpers.cards.getSubscriptionUserIds(
+      customFieldValue.cardId,
+      inputs.actorUser.id,
+    );
+
+    const boardSubscriptionUserIds = await sails.helpers.boards.getSubscriptionUserIds(
+      inputs.board.id,
+      inputs.actorUser.id,
+    );
+
+    const notifiableUserIds = _.union(cardSubscriptionUserIds, boardSubscriptionUserIds);
+
+    await sails.helpers.notifications.createMany.with({
+      webhooks,
+      arrayOfValues: notifiableUserIds.map((userId) => ({
+        userId,
+        type: Notification.Types.SET_CUSTOM_FIELD_VALUE,
+        data: {
+          card: _.pick(values.card, ['name']),
+          customField: _.pick(values.customField, ['id', 'name']),
+          value: maskedCustomFieldValue.content,
+        },
+        creatorUser: inputs.actorUser,
+        card: values.card,
+      })),
+      project: inputs.project,
+      board: inputs.board,
+      list: inputs.list,
+    });
+
     return customFieldValue;
   },
 };

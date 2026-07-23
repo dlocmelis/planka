@@ -79,6 +79,35 @@ module.exports = {
       user: inputs.actorUser,
     });
 
+    const cardSubscriptionUserIds = await sails.helpers.cards.getSubscriptionUserIds(
+      values.card.id,
+      inputs.actorUser.id,
+    );
+
+    const boardSubscriptionUserIds = await sails.helpers.boards.getSubscriptionUserIds(
+      inputs.board.id,
+      inputs.actorUser.id,
+    );
+
+    const notifiableUserIds = _.union(cardSubscriptionUserIds, boardSubscriptionUserIds);
+
+    await sails.helpers.notifications.createMany.with({
+      webhooks,
+      arrayOfValues: notifiableUserIds.map((userId) => ({
+        userId,
+        type: Notification.Types.ADD_LABEL_TO_CARD,
+        data: {
+          card: _.pick(values.card, ['name']),
+          label: _.pick(values.label, ['id', 'name', 'color']),
+        },
+        creatorUser: inputs.actorUser,
+        card: values.card,
+      })),
+      project: inputs.project,
+      board: inputs.board,
+      list: inputs.list,
+    });
+
     return cardLabel;
   },
 };
