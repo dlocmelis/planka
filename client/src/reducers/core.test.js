@@ -1,5 +1,6 @@
 import orm from '../orm';
 import ActionTypes from '../constants/ActionTypes';
+import { ListTypes } from '../constants/Enums';
 import reducer from './core';
 import { selectSelectedCardIds, makeSelectIsCardSelected } from '../selectors/core';
 
@@ -34,8 +35,8 @@ const buildOrmState = () => {
 
   session.Board.create({ id: BOARD_ID });
   session.Board.create({ id: OTHER_BOARD_ID });
-  session.List.create({ id: 'list-1', boardId: BOARD_ID });
-  session.List.create({ id: 'list-2', boardId: OTHER_BOARD_ID });
+  session.List.create({ id: 'list-1', boardId: BOARD_ID, type: ListTypes.ACTIVE });
+  session.List.create({ id: 'list-2', boardId: OTHER_BOARD_ID, type: ListTypes.ACTIVE });
   session.Card.create({ id: 'card-1', boardId: BOARD_ID, listId: 'list-1' });
   session.Card.create({ id: 'card-2', boardId: BOARD_ID, listId: 'list-1' });
   session.Card.create({ id: 'card-3', boardId: OTHER_BOARD_ID, listId: 'list-2' });
@@ -127,6 +128,17 @@ describe('core reducer card selection', () => {
     });
 
     expect(state.selectedCardIds).toEqual([]);
+  });
+
+  test('clear keeps state when the selection is already empty', () => {
+    const state = reducer(undefined, {});
+
+    expect(
+      reducer(state, {
+        type: ActionTypes.CARD_SELECTION_CLEAR,
+        payload: {},
+      }),
+    ).toBe(state);
   });
 });
 

@@ -234,6 +234,10 @@ export default (state = initialState, { type, payload }) => {
         selectedCardIds: payload.ids,
       };
     case ActionTypes.CARD_SELECTION_CLEAR:
+      if (state.selectedCardIds.length === 0) {
+        return state;
+      }
+
       return {
         ...state,
         selectedCardIds: [],
