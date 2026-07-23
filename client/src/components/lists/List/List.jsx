@@ -43,6 +43,8 @@ const INDEX_BY_ADD_CARD_POSITION = {
 const List = React.memo(({ id, index }) => {
   const selectListById = useMemo(() => selectors.makeSelectListById(), []);
 
+  const selectCardIdsByListId = useMemo(() => selectors.makeSelectCardIdsByListId(), []);
+
   const selectFilteredCardIdsByListId = useMemo(
     () => selectors.makeSelectFilteredCardIdsByListId(),
     [],
@@ -53,6 +55,7 @@ const List = React.memo(({ id, index }) => {
 
   const list = useSelector((state) => selectListById(state, id));
   const cardIds = useSelector((state) => selectFilteredCardIdsByListId(state, id));
+  const allCardIds = useSelector((state) => selectCardIdsByListId(state, id));
 
   const { canEdit, canArchiveCards, canAddCard, canPasteCard, canDropCard } = useSelector(
     (state) => {
@@ -150,6 +153,16 @@ const List = React.memo(({ id, index }) => {
   const ActionsPopup = usePopup(ActionsStep);
   const ArchiveCardsPopup = usePopup(ArchiveCardsStep);
 
+  const totalCardsCount = allCardIds.length;
+  const filteredCardsCount = cardIds.length;
+
+  const cardsCountText =
+    filteredCardsCount === totalCardsCount
+      ? `${totalCardsCount} ${t(totalCardsCount === 1 ? 'common.card' : 'common.cards')}`
+      : `${filteredCardsCount} ${t('common.of')} ${totalCardsCount} ${t(
+          totalCardsCount === 1 ? 'common.card' : 'common.cards',
+        )}`;
+
   const addCardNode = canAddCard && (
     <AddCard
       isOpened={!!addCardPosition}
@@ -226,6 +239,7 @@ const List = React.memo(({ id, index }) => {
                     />
                   )}
                   {list.name}
+                  <span className={styles.headerCardsCount}>{cardsCountText}</span>
                 </div>
               )}
               {list.type !== ListTypes.ACTIVE && (
