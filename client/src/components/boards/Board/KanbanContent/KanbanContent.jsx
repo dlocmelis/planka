@@ -51,7 +51,8 @@ const KanbanContent = React.memo(() => {
       return;
     }
 
-    // Must be applied synchronously, before react-beautiful-dnd captures Droppable dimensions
+    // Must be applied synchronously so every list freezes (latches) its collapsed/expanded
+    // state before react-beautiful-dnd captures Droppable dimensions
     ReactDOM.flushSync(() => {
       setIsCardDragActive(true);
     });

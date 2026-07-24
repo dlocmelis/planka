@@ -5,7 +5,6 @@ describe('shouldRenderListCollapsed', () => {
     isCollapsed: false,
     totalCardsCount: 0,
     isCardsFetching: false,
-    isDragActive: false,
     isPeek: false,
   };
 
@@ -23,7 +22,6 @@ describe('shouldRenderListCollapsed', () => {
         isCollapsed: true,
         totalCardsCount: 5,
         isCardsFetching: true,
-        isDragActive: true,
         isPeek: true,
       }),
     ).toBe(true);
@@ -31,6 +29,14 @@ describe('shouldRenderListCollapsed', () => {
 
   test('expanded list with no cards is auto-collapsed', () => {
     expect(shouldRenderListCollapsed(expanded)).toBe(true);
+
+    // An active card drag no longer expands empty lists.
+    expect(
+      shouldRenderListCollapsed({
+        ...expanded,
+        isDragActive: true,
+      }),
+    ).toBe(true);
   });
 
   test('expanded list with cards stays expanded', () => {
@@ -47,15 +53,6 @@ describe('shouldRenderListCollapsed', () => {
       shouldRenderListCollapsed({
         ...expanded,
         isCardsFetching: true,
-      }),
-    ).toBe(false);
-  });
-
-  test('active drag keeps an empty expanded list expanded', () => {
-    expect(
-      shouldRenderListCollapsed({
-        ...expanded,
-        isDragActive: true,
       }),
     ).toBe(false);
   });
