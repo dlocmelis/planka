@@ -21,8 +21,10 @@ import { BoardShortcutsContext } from '../../../contexts';
 import DroppableTypes from '../../../constants/DroppableTypes';
 import { BoardMembershipRoles, ListTypes } from '../../../constants/Enums';
 import { ListTypeIcons } from '../../../constants/Icons';
+import { isListKanban } from '../../../utils/record-helpers';
 import EditName from './EditName';
 import ActionsStep from './ActionsStep';
+import ListFilterStep from '../ListFilterStep';
 import DraggableCard from '../../cards/DraggableCard';
 import AddCard from '../../cards/AddCard';
 import ArchiveCardsStep from '../../cards/ArchiveCardsStep';
@@ -50,6 +52,11 @@ const List = React.memo(({ id, index }) => {
     [],
   );
 
+  const selectIsFilterActiveByListId = useMemo(
+    () => selectors.makeSelectIsFilterActiveByListId(),
+    [],
+  );
+
   const clipboard = useSelector(selectors.selectClipboard);
   const isFavoritesActive = useSelector(selectors.selectIsFavoritesActiveForCurrentUser);
   const selectedCardIds = useSelector(selectors.selectSelectedCardIds);
@@ -57,6 +64,7 @@ const List = React.memo(({ id, index }) => {
   const list = useSelector((state) => selectListById(state, id));
   const cardIds = useSelector((state) => selectFilteredCardIdsByListId(state, id));
   const allCardIds = useSelector((state) => selectCardIdsByListId(state, id));
+  const isFilterActive = useSelector((state) => selectIsFilterActiveByListId(state, id));
 
   const { canEdit, canArchiveCards, canAddCard, canPasteCard, canDropCard } = useSelector(
     (state) => {
@@ -149,6 +157,14 @@ const List = React.memo(({ id, index }) => {
     setIsEditNameOpened(true);
   }, []);
 
+  const handleClearFilterClick = useCallback(
+    (event) => {
+      event.stopPropagation();
+      dispatch(entryActions.clearListFilter(id));
+    },
+    [id, dispatch],
+  );
+
   const handleEditNameClose = useCallback(() => {
     setIsEditNameOpened(false);
   }, []);
@@ -207,6 +223,9 @@ const List = React.memo(({ id, index }) => {
 
   const ActionsPopup = usePopup(ActionsStep);
   const ArchiveCardsPopup = usePopup(ArchiveCardsStep);
+  const ListFilterPopup = usePopup(ListFilterStep);
+
+  const canFilter = list.isPersisted && isListKanban(list);
 
   const totalCardsCount = allCardIds.length;
   const filteredCardsCount = cardIds.length;
@@ -285,6 +304,25 @@ const List = React.memo(({ id, index }) => {
                     <Icon fitted name="angle right" size="small" />
                   </Button>
                 )}
+                {canFilter && isFilterActive && (
+                  <div className={styles.headerFilterSlotCollapsed}>
+                    <Icon
+                      name="filter"
+                      size="small"
+                      className={classNames(
+                        styles.headerFilterIconCollapsed,
+                        styles.headerIconHidable,
+                      )}
+                    />
+                    <Button
+                      title={t('action.clearFilter')}
+                      className={styles.headerClearFilterButtonCollapsed}
+                      onClick={handleClearFilterClick}
+                    >
+                      <Icon fitted name="cancel" size="small" />
+                    </Button>
+                  </div>
+                )}
                 <div className={styles.headerNameCollapsed}>{list.name}</div>
                 <div className={styles.headerCardsCountCollapsed}>({totalCardsCount})</div>
               </div>
@@ -312,7 +350,12 @@ const List = React.memo(({ id, index }) => {
                                            jsx-a11y/no-static-element-interactions */}
               <div
                 {...dragHandleProps} // eslint-disable-line react/jsx-props-no-spreading
-                className={classNames(styles.header, canEdit && styles.headerEditable)}
+                className={classNames(
+                  styles.header,
+                  canEdit && styles.headerEditable,
+                  canFilter && styles.headerWithFilter,
+                  canFilter && isFilterActive && styles.headerFiltered,
+                )}
                 onClick={handleHeaderClick}
               >
                 {list.isPersisted && (
@@ -363,6 +406,29 @@ const List = React.memo(({ id, index }) => {
                       list.isPersisted && (canEdit || canArchiveCards) && styles.headerIconHidable,
                     )}
                   />
+                )}
+                {canFilter && isFilterActive && (
+                  <Icon
+                    name="filter"
+                    size="small"
+                    className={classNames(styles.headerFilterIcon, styles.headerIconHidable)}
+                  />
+                )}
+                {canFilter && (
+                  <ListFilterPopup listId={id}>
+                    <Button title={t('action.filterList')} className={styles.headerFilterButton}>
+                      <Icon fitted name="filter" size="small" />
+                    </Button>
+                  </ListFilterPopup>
+                )}
+                {canFilter && isFilterActive && (
+                  <Button
+                    title={t('action.clearFilter')}
+                    className={styles.headerClearFilterButton}
+                    onClick={handleClearFilterClick}
+                  >
+                    <Icon fitted name="cancel" size="small" />
+                  </Button>
                 )}
                 {list.isPersisted &&
                   (canEdit ? (

@@ -22,6 +22,7 @@ const mockEmptySelectedCardIds = [];
 let mockList;
 let mockAllCardIds;
 let mockCardIds;
+let mockIsFilterActive;
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => [(key) => key],
@@ -55,6 +56,7 @@ jest.mock('../../../selectors', () => ({
     makeSelectListById: () => () => mockList,
     makeSelectCardIdsByListId: () => () => mockAllCardIds,
     makeSelectFilteredCardIdsByListId: () => () => mockCardIds,
+    makeSelectIsFilterActiveByListId: () => () => mockIsFilterActive,
     selectClipboard: () => null,
     selectIsFavoritesActiveForCurrentUser: () => false,
     selectSelectedCardIds: () => mockEmptySelectedCardIds,
@@ -70,11 +72,13 @@ jest.mock('../../../entry-actions', () => ({
     pasteCard: (id) => ({ type: 'card-paste', payload: { id } }),
     createCard: () => ({ type: 'card-create' }),
     setCardSelection: (cardIds) => ({ type: 'card-selection-set', payload: { cardIds } }),
+    clearListFilter: (id) => ({ type: 'list-filter-clear', payload: { id } }),
   },
 }));
 
 jest.mock('./EditName', () => () => null);
 jest.mock('./ActionsStep', () => () => null);
+jest.mock('../ListFilterStep', () => () => null);
 jest.mock('../../cards/DraggableCard', () => () => null);
 jest.mock('../../cards/AddCard', () => () => null);
 jest.mock('../../cards/ArchiveCardsStep', () => () => null);
@@ -138,6 +142,7 @@ beforeEach(() => {
   };
   mockAllCardIds = ['card-1', 'card-2', 'card-3'];
   mockCardIds = ['card-1', 'card-2', 'card-3'];
+  mockIsFilterActive = false;
   mockDraggableRenderProps.length = 0;
 
   dispatchedActions = [];
@@ -195,6 +200,78 @@ describe('collapsed strip', () => {
     });
     expect(container.querySelector('.cardsInnerWrapper')).not.toBeNull();
     expect(container.querySelector('.headerName').textContent).toContain('Todo');
+  });
+});
+
+describe('list filter header controls', () => {
+  test('shows no filter indicator or clear button when the filter is inactive', () => {
+    renderList();
+
+    expect(container.querySelector('.headerFilterIcon')).toBeNull();
+    expect(container.querySelector('button[title="action.clearFilter"]')).toBeNull();
+  });
+
+  test('shows the always-visible indicator and quick clear button when the filter is active', () => {
+    mockIsFilterActive = true;
+    mockCardIds = ['card-1', 'card-2'];
+
+    renderList();
+
+    expect(container.querySelector('.headerFilterIcon')).not.toBeNull();
+    expect(container.querySelector('button[title="action.clearFilter"]')).not.toBeNull();
+    expect(container.querySelector('.headerFiltered')).not.toBeNull();
+  });
+
+  test('quick clear button dispatches the clear-list-filter entry action', () => {
+    mockIsFilterActive = true;
+
+    renderList();
+
+    click(container.querySelector('button[title="action.clearFilter"]'));
+
+    expect(dispatchedActions).toContainEqual({
+      type: 'list-filter-clear',
+      payload: { id: 'list-1' },
+    });
+    // The click must not bubble into the header and open the name editor
+    expect(container.querySelector('.headerName')).not.toBeNull();
+  });
+
+  test('cards count shows "N of M" while filtered', () => {
+    mockIsFilterActive = true;
+    mockCardIds = ['card-1', 'card-2'];
+
+    renderList();
+
+    expect(container.querySelector('.headerCardsCount').textContent).toBe(
+      '2 common.of 3 common.cards',
+    );
+  });
+
+  test('collapsed strip shows the indicator and its clear button dispatches too', () => {
+    mockIsFilterActive = true;
+    mockList = { ...mockList, isCollapsed: true };
+
+    renderList();
+
+    expect(container.querySelector('.headerFilterIconCollapsed')).not.toBeNull();
+
+    click(container.querySelector('button[title="action.clearFilter"]'));
+
+    expect(dispatchedActions).toContainEqual({
+      type: 'list-filter-clear',
+      payload: { id: 'list-1' },
+    });
+  });
+
+  test('renders no filter controls for a non-persisted list', () => {
+    mockIsFilterActive = true;
+    mockList = { ...mockList, isPersisted: false };
+
+    renderList();
+
+    expect(container.querySelector('.headerFilterIcon')).toBeNull();
+    expect(container.querySelector('button[title="action.clearFilter"]')).toBeNull();
   });
 });
 
