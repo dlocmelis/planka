@@ -86,7 +86,16 @@ afterEach(() => {
   container.remove();
 });
 
-test('toggling an individual scope only changes that scope', () => {
+test('checking an individual scope only changes that scope', () => {
+  mockCurrentUser = {
+    notificationEvents: {
+      comments: { mentions: true, own: false, user: false, dev: false, all: false },
+      cardMovement: { own: true, user: true, dev: true, all: true },
+      labels: { own: true, user: true, dev: true, all: true },
+      fields: { own: true, user: true, dev: true, all: true },
+    },
+  };
+
   renderComponent();
   click(findCheckbox('comments.own'));
 
@@ -97,7 +106,54 @@ test('toggling an individual scope only changes that scope', () => {
         data: {
           notificationEvents: {
             ...mockCurrentUser.notificationEvents,
-            comments: { mentions: true, own: false, user: true, dev: true, all: true },
+            comments: { mentions: true, own: true, user: false, dev: false, all: false },
+          },
+        },
+      },
+    },
+  ]);
+});
+
+test('unchecking a sibling scope while "all" is checked also unchecks "all"', () => {
+  renderComponent();
+  click(findCheckbox('comments.own'));
+
+  expect(currentUserUpdates()).toEqual([
+    {
+      type: EntryActionTypes.CURRENT_USER_UPDATE,
+      payload: {
+        data: {
+          notificationEvents: {
+            ...mockCurrentUser.notificationEvents,
+            comments: { mentions: true, own: false, user: true, dev: true, all: false },
+          },
+        },
+      },
+    },
+  ]);
+});
+
+test('unchecking a sibling scope while "all" is unchecked keeps the single-key update', () => {
+  mockCurrentUser = {
+    notificationEvents: {
+      comments: { mentions: true, own: true, user: true, dev: true, all: true },
+      cardMovement: { own: true, user: true, dev: false, all: false },
+      labels: { own: true, user: true, dev: true, all: true },
+      fields: { own: true, user: true, dev: true, all: true },
+    },
+  };
+
+  renderComponent();
+  click(findCheckbox('cardMovement.own'));
+
+  expect(currentUserUpdates()).toEqual([
+    {
+      type: EntryActionTypes.CURRENT_USER_UPDATE,
+      payload: {
+        data: {
+          notificationEvents: {
+            ...mockCurrentUser.notificationEvents,
+            cardMovement: { own: false, user: true, dev: false, all: false },
           },
         },
       },
