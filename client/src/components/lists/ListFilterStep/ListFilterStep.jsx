@@ -3,7 +3,6 @@
  * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
  */
 
-import isEmpty from 'lodash/isEmpty';
 import React, { useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { useDispatch, useSelector } from 'react-redux';
@@ -29,31 +28,49 @@ const StepTypes = {
 };
 
 const ListFilterStep = React.memo(({ listId }) => {
-  const selectListById = useMemo(() => selectors.makeSelectListById(), []);
+  const selectFilterUserIdsByListId = useMemo(
+    () => selectors.makeSelectFilterUserIdsByListId(),
+    [],
+  );
+  const selectFilterLabelIdsByListId = useMemo(
+    () => selectors.makeSelectFilterLabelIdsByListId(),
+    [],
+  );
+  const selectFilterCustomFieldsByListId = useMemo(
+    () => selectors.makeSelectFilterCustomFieldsByListId(),
+    [],
+  );
+  const selectIsFilterActiveByListId = useMemo(
+    () => selectors.makeSelectIsFilterActiveByListId(),
+    [],
+  );
 
-  const list = useSelector((state) => selectListById(state, listId));
+  const filterUserIds = useSelector((state) => selectFilterUserIdsByListId(state, listId)) || [];
+  const filterLabelIds = useSelector((state) => selectFilterLabelIdsByListId(state, listId)) || [];
+  const storedFilterCustomFields = useSelector((state) =>
+    selectFilterCustomFieldsByListId(state, listId),
+  );
+  const isFilterActive = useSelector((state) => selectIsFilterActiveByListId(state, listId));
+
+  const filterCustomFields = useMemo(
+    () => storedFilterCustomFields || [],
+    [storedFilterCustomFields],
+  );
 
   const dispatch = useDispatch();
   const [t] = useTranslation();
   const [step, openStep, handleBack] = useSteps();
 
-  const filterUserIds = useMemo(() => list.filterUserIds || [], [list.filterUserIds]);
-  const filterLabelIds = useMemo(() => list.filterLabelIds || [], [list.filterLabelIds]);
-  const customFieldFilter = useMemo(() => list.customFieldFilter || {}, [list.customFieldFilter]);
-
-  const isFilterActive =
-    filterUserIds.length > 0 || filterLabelIds.length > 0 || !isEmpty(customFieldFilter);
-
   const handleUserSelect = useCallback(
     (userId) => {
-      dispatch(entryActions.addUserToFilterInList(userId, listId));
+      dispatch(entryActions.addUserToListFilter(userId, listId));
     },
     [listId, dispatch],
   );
 
   const handleUserDeselect = useCallback(
     (userId) => {
-      dispatch(entryActions.removeUserFromFilterInList(userId, listId));
+      dispatch(entryActions.removeUserFromListFilter(userId, listId));
     },
     [listId, dispatch],
   );
@@ -64,21 +81,21 @@ const ListFilterStep = React.memo(({ listId }) => {
         dataset: { id: userId },
       },
     }) => {
-      dispatch(entryActions.removeUserFromFilterInList(userId, listId));
+      dispatch(entryActions.removeUserFromListFilter(userId, listId));
     },
     [listId, dispatch],
   );
 
   const handleLabelSelect = useCallback(
     (labelId) => {
-      dispatch(entryActions.addLabelToFilterInList(labelId, listId));
+      dispatch(entryActions.addLabelToListFilter(labelId, listId));
     },
     [listId, dispatch],
   );
 
   const handleLabelDeselect = useCallback(
     (labelId) => {
-      dispatch(entryActions.removeLabelFromFilterInList(labelId, listId));
+      dispatch(entryActions.removeLabelFromListFilter(labelId, listId));
     },
     [listId, dispatch],
   );
@@ -89,7 +106,7 @@ const ListFilterStep = React.memo(({ listId }) => {
         dataset: { id: labelId },
       },
     }) => {
-      dispatch(entryActions.removeLabelFromFilterInList(labelId, listId));
+      dispatch(entryActions.removeLabelFromListFilter(labelId, listId));
     },
     [listId, dispatch],
   );
@@ -100,12 +117,11 @@ const ListFilterStep = React.memo(({ listId }) => {
         dataset: { name: fieldName },
       },
     }) => {
-      const nextCustomFieldFilter = { ...customFieldFilter };
-      delete nextCustomFieldFilter[fieldName];
+      const nextFilterCustomFields = filterCustomFields.filter(({ name }) => name !== fieldName);
 
-      dispatch(entryActions.updateCustomFieldFilterInList(listId, nextCustomFieldFilter));
+      dispatch(entryActions.updateCustomFieldFilterInList(listId, nextFilterCustomFields));
     },
-    [listId, customFieldFilter, dispatch],
+    [listId, filterCustomFields, dispatch],
   );
 
   const handleMembersClick = useCallback(() => {
@@ -121,18 +137,8 @@ const ListFilterStep = React.memo(({ listId }) => {
   }, [openStep]);
 
   const handleClearFilterClick = useCallback(() => {
-    filterUserIds.forEach((userId) => {
-      dispatch(entryActions.removeUserFromFilterInList(userId, listId));
-    });
-
-    filterLabelIds.forEach((labelId) => {
-      dispatch(entryActions.removeLabelFromFilterInList(labelId, listId));
-    });
-
-    if (!isEmpty(customFieldFilter)) {
-      dispatch(entryActions.updateCustomFieldFilterInList(listId, {}));
-    }
-  }, [listId, filterUserIds, filterLabelIds, customFieldFilter, dispatch]);
+    dispatch(entryActions.clearListFilter(listId));
+  }, [listId, dispatch]);
 
   if (step) {
     switch (step.type) {
@@ -182,17 +188,15 @@ const ListFilterStep = React.memo(({ listId }) => {
                 <LabelChip id={labelId} size="small" onClick={handleLabelClick} />
               </span>
             ))}
-            {Object.keys(customFieldFilter).map((fieldName) => (
-              <span key={fieldName} className={styles.chip}>
+            {filterCustomFields.map(({ name, content }) => (
+              <span key={name} className={styles.chip}>
                 <button
                   type="button"
-                  data-name={fieldName}
+                  data-name={name}
                   className={styles.fieldChip}
                   onClick={handleFieldClick}
                 >
-                  {customFieldFilter[fieldName]
-                    ? `${fieldName}: ${customFieldFilter[fieldName]}`
-                    : fieldName}
+                  {content ? `${name}: ${content}` : name}
                 </button>
               </span>
             ))}

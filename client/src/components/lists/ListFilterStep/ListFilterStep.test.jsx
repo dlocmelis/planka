@@ -16,7 +16,9 @@ import { createStore } from 'redux';
 import EntryActionTypes from '../../../constants/EntryActionTypes';
 import ListFilterStep from './ListFilterStep';
 
-let mockList;
+let mockFilterUserIds;
+let mockFilterLabelIds;
+let mockFilterCustomFields;
 const mockUserAvatarPropsList = [];
 const mockLabelChipPropsList = [];
 const mockBoardMembershipsStepPropsList = [];
@@ -30,7 +32,13 @@ jest.mock('react-i18next', () => ({
 jest.mock('../../../selectors', () => ({
   __esModule: true,
   default: {
-    makeSelectListById: () => () => mockList,
+    makeSelectFilterUserIdsByListId: () => () => mockFilterUserIds,
+    makeSelectFilterLabelIdsByListId: () => () => mockFilterLabelIds,
+    makeSelectFilterCustomFieldsByListId: () => () => mockFilterCustomFields,
+    makeSelectIsFilterActiveByListId: () => () =>
+      mockFilterUserIds.length > 0 ||
+      mockFilterLabelIds.length > 0 ||
+      mockFilterCustomFields.length > 0,
   },
 }));
 
@@ -93,15 +101,9 @@ const lastBoardMembershipsStepProps = () =>
 const lastLabelsStepProps = () => mockLabelsStepPropsList[mockLabelsStepPropsList.length - 1];
 
 beforeEach(() => {
-  mockList = {
-    id: 'list-1',
-    name: 'Todo',
-    type: 'active',
-    isPersisted: true,
-    filterUserIds: [],
-    filterLabelIds: [],
-    customFieldFilter: {},
-  };
+  mockFilterUserIds = [];
+  mockFilterLabelIds = [];
+  mockFilterCustomFields = [];
 
   mockUserAvatarPropsList.length = 0;
   mockLabelChipPropsList.length = 0;
@@ -139,14 +141,14 @@ test('renders root menu without clear filter when no filter is active', () => {
 });
 
 test('renders current selections as chips and shows clear filter', () => {
-  mockList = {
-    ...mockList,
-    filterUserIds: ['user-1'],
-    filterLabelIds: ['label-1'],
-    customFieldFilter: {
-      Points: '3',
+  mockFilterUserIds = ['user-1'];
+  mockFilterLabelIds = ['label-1'];
+  mockFilterCustomFields = [
+    {
+      name: 'Points',
+      content: '3',
     },
-  };
+  ];
 
   renderStep();
 
@@ -157,10 +159,7 @@ test('renders current selections as chips and shows clear filter', () => {
 });
 
 test('members sub-step dispatches per-list filter actions with the list id', () => {
-  mockList = {
-    ...mockList,
-    filterUserIds: ['user-1'],
-  };
+  mockFilterUserIds = ['user-1'];
 
   renderStep();
   click(findMenuItem('common.members'));
@@ -174,9 +173,9 @@ test('members sub-step dispatches per-list filter actions with the list id', () 
     props.onUserDeselect('user-1');
   });
 
-  expect(entryActionsOfType(EntryActionTypes.USER_TO_FILTER_IN_LIST_ADD)).toEqual([
+  expect(entryActionsOfType(EntryActionTypes.USER_TO_LIST_FILTER_ADD)).toEqual([
     {
-      type: EntryActionTypes.USER_TO_FILTER_IN_LIST_ADD,
+      type: EntryActionTypes.USER_TO_LIST_FILTER_ADD,
       payload: {
         id: 'user-2',
         listId: 'list-1',
@@ -184,9 +183,9 @@ test('members sub-step dispatches per-list filter actions with the list id', () 
     },
   ]);
 
-  expect(entryActionsOfType(EntryActionTypes.USER_FROM_FILTER_IN_LIST_REMOVE)).toEqual([
+  expect(entryActionsOfType(EntryActionTypes.USER_FROM_LIST_FILTER_REMOVE)).toEqual([
     {
-      type: EntryActionTypes.USER_FROM_FILTER_IN_LIST_REMOVE,
+      type: EntryActionTypes.USER_FROM_LIST_FILTER_REMOVE,
       payload: {
         id: 'user-1',
         listId: 'list-1',
@@ -196,10 +195,7 @@ test('members sub-step dispatches per-list filter actions with the list id', () 
 });
 
 test('labels sub-step dispatches per-list filter actions with the list id', () => {
-  mockList = {
-    ...mockList,
-    filterLabelIds: ['label-1'],
-  };
+  mockFilterLabelIds = ['label-1'];
 
   renderStep();
   click(findMenuItem('common.labels'));
@@ -213,9 +209,9 @@ test('labels sub-step dispatches per-list filter actions with the list id', () =
     props.onDeselect('label-1');
   });
 
-  expect(entryActionsOfType(EntryActionTypes.LABEL_TO_FILTER_IN_LIST_ADD)).toEqual([
+  expect(entryActionsOfType(EntryActionTypes.LABEL_TO_LIST_FILTER_ADD)).toEqual([
     {
-      type: EntryActionTypes.LABEL_TO_FILTER_IN_LIST_ADD,
+      type: EntryActionTypes.LABEL_TO_LIST_FILTER_ADD,
       payload: {
         id: 'label-2',
         listId: 'list-1',
@@ -223,9 +219,9 @@ test('labels sub-step dispatches per-list filter actions with the list id', () =
     },
   ]);
 
-  expect(entryActionsOfType(EntryActionTypes.LABEL_FROM_FILTER_IN_LIST_REMOVE)).toEqual([
+  expect(entryActionsOfType(EntryActionTypes.LABEL_FROM_LIST_FILTER_REMOVE)).toEqual([
     {
-      type: EntryActionTypes.LABEL_FROM_FILTER_IN_LIST_REMOVE,
+      type: EntryActionTypes.LABEL_FROM_LIST_FILTER_REMOVE,
       payload: {
         id: 'label-1',
         listId: 'list-1',
@@ -242,45 +238,55 @@ test('fields sub-step receives the list id', () => {
   expect(mockFieldsStepPropsList[mockFieldsStepPropsList.length - 1].listId).toBe('list-1');
 });
 
-test('clear filter dispatches removals for every active selection', () => {
-  mockList = {
-    ...mockList,
-    filterUserIds: ['user-1'],
-    filterLabelIds: ['label-1'],
-    customFieldFilter: {
-      Points: '3',
+test('removing a field chip dispatches an update without that field', () => {
+  mockFilterCustomFields = [
+    {
+      name: 'Points',
+      content: '3',
     },
-  };
+    {
+      name: 'Priority',
+      content: '',
+    },
+  ];
 
   renderStep();
-  click(findMenuItem('action.clearFilter'));
-
-  expect(entryActionsOfType(EntryActionTypes.USER_FROM_FILTER_IN_LIST_REMOVE)).toEqual([
-    {
-      type: EntryActionTypes.USER_FROM_FILTER_IN_LIST_REMOVE,
-      payload: {
-        id: 'user-1',
-        listId: 'list-1',
-      },
-    },
-  ]);
-
-  expect(entryActionsOfType(EntryActionTypes.LABEL_FROM_FILTER_IN_LIST_REMOVE)).toEqual([
-    {
-      type: EntryActionTypes.LABEL_FROM_FILTER_IN_LIST_REMOVE,
-      payload: {
-        id: 'label-1',
-        listId: 'list-1',
-      },
-    },
-  ]);
+  click(container.querySelector('button[data-name="Points"]'));
 
   expect(entryActionsOfType(EntryActionTypes.CUSTOM_FIELD_FILTER_IN_LIST_UPDATE)).toEqual([
     {
       type: EntryActionTypes.CUSTOM_FIELD_FILTER_IN_LIST_UPDATE,
       payload: {
-        listId: 'list-1',
-        data: {},
+        id: 'list-1',
+        filterCustomFields: [
+          {
+            name: 'Priority',
+            content: '',
+          },
+        ],
+      },
+    },
+  ]);
+});
+
+test('clear filter dispatches a single list filter clear action', () => {
+  mockFilterUserIds = ['user-1'];
+  mockFilterLabelIds = ['label-1'];
+  mockFilterCustomFields = [
+    {
+      name: 'Points',
+      content: '3',
+    },
+  ];
+
+  renderStep();
+  click(findMenuItem('action.clearFilter'));
+
+  expect(entryActionsOfType(EntryActionTypes.LIST_FILTER_CLEAR)).toEqual([
+    {
+      type: EntryActionTypes.LIST_FILTER_CLEAR,
+      payload: {
+        id: 'list-1',
       },
     },
   ]);

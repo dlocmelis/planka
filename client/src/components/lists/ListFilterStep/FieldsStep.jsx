@@ -49,66 +49,68 @@ const makeSelectCustomFieldNamesByListId = () =>
   );
 
 const FieldsStep = React.memo(({ listId, onBack }) => {
-  const selectListById = useMemo(() => selectors.makeSelectListById(), []);
+  const selectFilterCustomFieldsByListId = useMemo(
+    () => selectors.makeSelectFilterCustomFieldsByListId(),
+    [],
+  );
   const selectCustomFieldNamesByListId = useMemo(() => makeSelectCustomFieldNamesByListId(), []);
 
-  const list = useSelector((state) => selectListById(state, listId));
+  const storedFilterCustomFields =
+    useSelector((state) => selectFilterCustomFieldsByListId(state, listId)) || [];
   const fieldNames = useSelector((state) => selectCustomFieldNamesByListId(state, listId));
 
   const dispatch = useDispatch();
   const [t] = useTranslation();
 
-  const storedCustomFieldFilter = useMemo(
-    () => list.customFieldFilter || {},
-    [list.customFieldFilter],
-  );
-
-  const [customFieldFilter, setCustomFieldFilter] = useState(storedCustomFieldFilter);
+  const [filterCustomFields, setFilterCustomFields] = useState(storedFilterCustomFields);
 
   const debouncedUpdateCustomFieldFilter = useMemo(
     () =>
-      debounce((nextCustomFieldFilter) => {
-        dispatch(entryActions.updateCustomFieldFilterInList(listId, nextCustomFieldFilter));
+      debounce((nextFilterCustomFields) => {
+        dispatch(entryActions.updateCustomFieldFilterInList(listId, nextFilterCustomFields));
       }, 400),
     [listId, dispatch],
   );
 
   useDidUpdate(() => {
-    setCustomFieldFilter(storedCustomFieldFilter);
-  }, [storedCustomFieldFilter]);
+    setFilterCustomFields(storedFilterCustomFields);
+  }, [storedFilterCustomFields]);
 
   const handleToggleClick = useCallback(
     (_, { value: fieldName }) => {
       debouncedUpdateCustomFieldFilter.cancel();
 
-      let nextCustomFieldFilter;
-      if (Object.prototype.hasOwnProperty.call(customFieldFilter, fieldName)) {
-        nextCustomFieldFilter = { ...customFieldFilter };
-        delete nextCustomFieldFilter[fieldName];
+      let nextFilterCustomFields;
+      if (filterCustomFields.some(({ name }) => name === fieldName)) {
+        nextFilterCustomFields = filterCustomFields.filter(({ name }) => name !== fieldName);
       } else {
-        nextCustomFieldFilter = {
-          ...customFieldFilter,
-          [fieldName]: '',
-        };
+        nextFilterCustomFields = [
+          ...filterCustomFields,
+          {
+            name: fieldName,
+            content: '',
+          },
+        ];
       }
 
-      setCustomFieldFilter(nextCustomFieldFilter);
-      dispatch(entryActions.updateCustomFieldFilterInList(listId, nextCustomFieldFilter));
+      setFilterCustomFields(nextFilterCustomFields);
+      dispatch(entryActions.updateCustomFieldFilterInList(listId, nextFilterCustomFields));
     },
-    [listId, customFieldFilter, debouncedUpdateCustomFieldFilter, dispatch],
+    [listId, filterCustomFields, debouncedUpdateCustomFieldFilter, dispatch],
   );
 
   const handleValueChange = useCallback(
     (_, { name: fieldName, value }) => {
-      const nextCustomFieldFilter = {
-        ...customFieldFilter,
-        [fieldName]: value,
-      };
+      const nextFilterCustomFields = filterCustomFields.map((filterCustomField) =>
+        filterCustomField.name === fieldName
+          ? { ...filterCustomField, content: value }
+          : filterCustomField,
+      );
 
-      setCustomFieldFilter(nextCustomFieldFilter);
-      debouncedUpdateCustomFieldFilter(nextCustomFieldFilter);
+      setFilterCustomFields(nextFilterCustomFields);
+      debouncedUpdateCustomFieldFilter(nextFilterCustomFields);
     },
-    [customFieldFilter, debouncedUpdateCustomFieldFilter],
+    [filterCustomFields, debouncedUpdateCustomFieldFilter],
   );
 
   return (
@@ -122,7 +124,7 @@ const FieldsStep = React.memo(({ listId, onBack }) => {
         {fieldNames.length > 0 ? (
           <Menu secondary vertical className={styles.menu}>
             {fieldNames.map((fieldName) => {
-              const isSelected = Object.prototype.hasOwnProperty.call(customFieldFilter, fieldName);
+              const filterCustomField = filterCustomFields.find(({ name }) => name === fieldName);
 
               return (
                 <div key={fieldName}>
@@ -132,14 +134,14 @@ const FieldsStep = React.memo(({ listId, onBack }) => {
                     onClick={handleToggleClick}
                   >
                     {fieldName}
-                    {isSelected && <Icon name="check" className={styles.checkIcon} />}
+                    {filterCustomField && <Icon name="check" className={styles.checkIcon} />}
                   </Menu.Item>
-                  {isSelected && (
+                  {filterCustomField && (
                     <div className={styles.valueWrapper}>
                       <Input
                         fluid
                         name={fieldName}
-                        value={customFieldFilter[fieldName] || ''}
+                        value={filterCustomField.content || ''}
                         placeholder={t('common.enterFieldValue')}
                         maxLength={128}
                         onChange={handleValueChange}
