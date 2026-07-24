@@ -98,7 +98,9 @@
     position: relative;
 
     &:hover {
-      .headerButton {
+      .headerButton,
+      .headerClearFilterButton,
+      .headerFilterButton {
         opacity: 1;
       }
 
@@ -106,6 +108,14 @@
         opacity: 0;
       }
     }
+  }
+
+  .headerWithFilter {
+    padding-right: 68px;
+  }
+
+  .headerFiltered {
+    padding-right: 96px;
   }
 
   .headerEditable {
@@ -129,6 +139,85 @@
       background: rgba(9, 30, 66, 0.13);
       color: #516b7a;
     }
+  }
+
+  .headerClearFilterButton {
+    background: none;
+    box-shadow: none;
+    color: #798d99;
+    line-height: 32px;
+    margin: 0;
+    opacity: 0;
+    padding: 0;
+    position: absolute;
+    right: 66px;
+    top: 4px;
+    width: 28px;
+
+    &:hover {
+      background: rgba(9, 30, 66, 0.13);
+      color: #516b7a;
+    }
+  }
+
+  .headerClearFilterButtonCollapsed {
+    background: none;
+    box-shadow: none;
+    color: #798d99;
+    left: 0;
+    line-height: 24px;
+    margin: 0;
+    opacity: 0;
+    padding: 0;
+    position: absolute;
+    top: 0;
+    width: 32px;
+
+    &:hover {
+      background: rgba(9, 30, 66, 0.13);
+      color: #516b7a;
+    }
+  }
+
+  .headerFilterButton {
+    background: none;
+    box-shadow: none;
+    color: #798d99;
+    line-height: 32px;
+    margin: 0;
+    opacity: 0;
+    padding: 0;
+    position: absolute;
+    right: 36px;
+    top: 4px;
+    width: 28px;
+
+    &:hover {
+      background: rgba(9, 30, 66, 0.13);
+      color: #516b7a;
+    }
+  }
+
+  .headerFilterIcon {
+    color: #798d99;
+    position: absolute;
+    right: 44px;
+    top: 11px;
+  }
+
+  .headerFilterIconCollapsed {
+    color: #798d99;
+    line-height: 24px;
+    margin: 0;
+  }
+
+  .headerFilterSlotCollapsed {
+    flex: 0 0 auto;
+    height: 24px;
+    margin-bottom: 4px;
+    position: relative;
+    text-align: center;
+    width: 32px;
   }
 
   .headerCardsCount {
@@ -168,6 +257,16 @@
     overflow: hidden;
     padding: 40px 2px 8px;
     position: relative;
+
+    &:hover {
+      .headerClearFilterButtonCollapsed {
+        opacity: 1;
+      }
+
+      .headerIconHidable {
+        opacity: 0;
+      }
+    }
   }
 
   .headerCardsCountCollapsed {
