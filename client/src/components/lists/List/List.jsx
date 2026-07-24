@@ -22,6 +22,7 @@ import DroppableTypes from '../../../constants/DroppableTypes';
 import { BoardMembershipRoles, ListTypes } from '../../../constants/Enums';
 import { ListTypeIcons } from '../../../constants/Icons';
 import { isListKanban } from '../../../utils/record-helpers';
+import { shouldRenderListCollapsed } from '../../../utils/list-collapse';
 import EditName from './EditName';
 import ActionsStep from './ActionsStep';
 import ListFilterStep from '../ListFilterStep';
@@ -42,7 +43,7 @@ const INDEX_BY_ADD_CARD_POSITION = {
   [AddCardPositions.TOP]: 0,
 };
 
-const List = React.memo(({ id, index }) => {
+const List = React.memo(({ id, index, isDragActive }) => {
   const selectListById = useMemo(() => selectors.makeSelectListById(), []);
 
   const selectCardIdsByListId = useMemo(() => selectors.makeSelectCardIdsByListId(), []);
@@ -88,6 +89,7 @@ const List = React.memo(({ id, index }) => {
   const [t] = useTranslation();
   const [isEditNameOpened, setIsEditNameOpened] = useState(false);
   const [addCardPosition, setAddCardPosition] = useState(null);
+  const [isPeek, setIsPeek] = useState(false);
   const [scrollBottomState, scrollBottom] = useToggle();
   const [handleListMouseEnter, handleListMouseLeave] = useContext(BoardShortcutsContext);
 
@@ -120,16 +122,37 @@ const List = React.memo(({ id, index }) => {
     }
   }, [list.isPersisted, canEdit]);
 
+  const totalCardsCount = allCardIds.length;
+
+  const isRenderedCollapsed = shouldRenderListCollapsed({
+    isCollapsed: list.isCollapsed,
+    totalCardsCount,
+    isCardsFetching: list.isCardsFetching,
+    isDragActive,
+    isPeek,
+  });
+
   const handleCollapseClick = useCallback(
     (event) => {
       event.stopPropagation();
 
-      if (!list.isCollapsed) {
+      if (isRenderedCollapsed && !list.isCollapsed) {
+        // Auto-collapsed strip: peek at the empty list instead of touching the persisted flag
+        setIsPeek(true);
+        return;
+      }
+
+      if (!isRenderedCollapsed) {
         // The expanded content unmounts without firing its close callbacks,
         // so reset the related local state and clear the shortcuts hover entry
         setIsEditNameOpened(false);
         setAddCardPosition(null);
         handleListMouseLeave();
+
+        if (isPeek && totalCardsCount === 0) {
+          setIsPeek(false);
+          return;
+        }
       }
 
       dispatch(
@@ -138,7 +161,15 @@ const List = React.memo(({ id, index }) => {
         }),
       );
     },
-    [id, dispatch, list.isCollapsed, handleListMouseLeave],
+    [
+      id,
+      dispatch,
+      list.isCollapsed,
+      isRenderedCollapsed,
+      isPeek,
+      totalCardsCount,
+      handleListMouseLeave,
+    ],
   );
 
   const handleAddCardClick = useCallback(() => {
@@ -221,13 +252,18 @@ const List = React.memo(({ id, index }) => {
     cardsWrapperRef.current.scrollTop = cardsWrapperRef.current.scrollHeight;
   }, [scrollBottomState]);
 
+  useDidUpdate(() => {
+    if (totalCardsCount > 0) {
+      setIsPeek(false);
+    }
+  }, [totalCardsCount]);
+
   const ActionsPopup = usePopup(ActionsStep);
   const ArchiveCardsPopup = usePopup(ArchiveCardsStep);
   const ListFilterPopup = usePopup(ListFilterStep);
 
   const canFilter = list.isPersisted && isListKanban(list);
 
-  const totalCardsCount = allCardIds.length;
   const filteredCardsCount = cardIds.length;
 
   const cardsCountText =
@@ -275,7 +311,7 @@ const List = React.memo(({ id, index }) => {
       isDragDisabled={!list.isPersisted || !canEdit || isEditNameOpened}
     >
       {({ innerRef, draggableProps, dragHandleProps }) =>
-        list.isCollapsed ? (
+        isRenderedCollapsed ? (
           <div
             {...draggableProps} // eslint-disable-line react/jsx-props-no-spreading
             data-drag-scroller
@@ -360,13 +396,13 @@ const List = React.memo(({ id, index }) => {
               >
                 {list.isPersisted && (
                   <Button
-                    title={list.isCollapsed ? t('action.expandList') : t('action.collapseList')}
+                    title={isRenderedCollapsed ? t('action.expandList') : t('action.collapseList')}
                     className={styles.headerCollapseButton}
                     onClick={handleCollapseClick}
                   >
                     <Icon
                       fitted
-                      name={list.isCollapsed ? 'angle right' : 'angle down'}
+                      name={isRenderedCollapsed ? 'angle right' : 'angle down'}
                       size="small"
                     />
                   </Button>
@@ -490,6 +526,7 @@ const List = React.memo(({ id, index }) => {
 List.propTypes = {
   id: PropTypes.string.isRequired,
   index: PropTypes.number.isRequired,
+  isDragActive: PropTypes.bool.isRequired,
 };
 
 export default List;
