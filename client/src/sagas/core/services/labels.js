@@ -205,6 +205,14 @@ export function* removeLabelFromFilterInCurrentBoard(id) {
   yield call(removeLabelFromBoardFilter, id, boardId);
 }
 
+export function* addLabelToListFilter(id, listId) {
+  yield put(actions.addLabelToListFilter(id, listId));
+}
+
+export function* removeLabelFromListFilter(id, listId) {
+  yield put(actions.removeLabelFromListFilter(id, listId));
+}
+
 export default {
   createLabel,
   createLabelInCurrentBoard,
@@ -225,4 +233,6 @@ export default {
   addLabelToFilterInCurrentBoard,
   removeLabelFromBoardFilter,
   removeLabelFromFilterInCurrentBoard,
+  addLabelToListFilter,
+  removeLabelFromListFilter,
 };

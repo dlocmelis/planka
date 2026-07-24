@@ -95,6 +95,21 @@ const handleListDelete = (list, cards) => ({
   },
 });
 
+const updateCustomFieldFilterInList = (id, filterCustomFields) => ({
+  type: EntryActionTypes.CUSTOM_FIELD_FILTER_IN_LIST_UPDATE,
+  payload: {
+    id,
+    filterCustomFields,
+  },
+});
+
+const clearListFilter = (id) => ({
+  type: EntryActionTypes.LIST_FILTER_CLEAR,
+  payload: {
+    id,
+  },
+});
+
 export default {
   createListInCurrentBoard,
   handleListCreate,
@@ -108,4 +123,6 @@ export default {
   handleListClear,
   deleteList,
   handleListDelete,
+  updateCustomFieldFilterInList,
+  clearListFilter,
 };
