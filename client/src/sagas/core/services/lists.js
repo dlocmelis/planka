@@ -261,6 +261,14 @@ export function* handleListDelete(list, cards) {
   yield put(actions.handleListDelete(list, cards));
 }
 
+export function* updateCustomFieldFilterInList(id, filterCustomFields) {
+  yield put(actions.updateCustomFieldFilterInList(id, filterCustomFields));
+}
+
+export function* clearListFilter(id) {
+  yield put(actions.clearListFilter(id));
+}
+
 export default {
   createList,
   createListInCurrentBoard,
@@ -275,4 +283,6 @@ export default {
   handleListClear,
   deleteList,
   handleListDelete,
+  updateCustomFieldFilterInList,
+  clearListFilter,
 };

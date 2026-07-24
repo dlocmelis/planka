@@ -122,6 +122,22 @@ const removeLabelFromFilterInCurrentBoard = (id) => ({
   },
 });
 
+const addLabelToListFilter = (id, listId) => ({
+  type: EntryActionTypes.LABEL_TO_LIST_FILTER_ADD,
+  payload: {
+    id,
+    listId,
+  },
+});
+
+const removeLabelFromListFilter = (id, listId) => ({
+  type: EntryActionTypes.LABEL_FROM_LIST_FILTER_REMOVE,
+  payload: {
+    id,
+    listId,
+  },
+});
+
 export default {
   createLabelInCurrentBoard,
   createLabelFromCard,
@@ -139,4 +155,6 @@ export default {
   handleLabelFromCardRemove,
   addLabelToFilterInCurrentBoard,
   removeLabelFromFilterInCurrentBoard,
+  addLabelToListFilter,
+  removeLabelFromListFilter,
 };

@@ -258,6 +258,22 @@ const removeUserFromFilterInCurrentBoard = (id) => ({
   },
 });
 
+const addUserToListFilter = (id, listId) => ({
+  type: EntryActionTypes.USER_TO_LIST_FILTER_ADD,
+  payload: {
+    id,
+    listId,
+  },
+});
+
+const removeUserFromListFilter = (id, listId) => ({
+  type: EntryActionTypes.USER_FROM_LIST_FILTER_REMOVE,
+  payload: {
+    id,
+    listId,
+  },
+});
+
 export default {
   handleUsersReset,
   createUser,
@@ -296,4 +312,6 @@ export default {
   handleUserFromCardRemove,
   addUserToFilterInCurrentBoard,
   removeUserFromFilterInCurrentBoard,
+  addUserToListFilter,
+  removeUserFromListFilter,
 };
