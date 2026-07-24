@@ -27,7 +27,7 @@ const StepTypes = {
   FIELDS: 'FIELDS',
 };
 
-const ListFilterStep = React.memo(({ listId }) => {
+const ListFilterStep = React.memo(({ listId, onClose }) => {
   const selectFilterUserIdsByListId = useMemo(
     () => selectors.makeSelectFilterUserIdsByListId(),
     [],
@@ -138,7 +138,8 @@ const ListFilterStep = React.memo(({ listId }) => {
 
   const handleClearFilterClick = useCallback(() => {
     dispatch(entryActions.clearListFilter(listId));
-  }, [listId, dispatch]);
+    onClose();
+  }, [listId, onClose, dispatch]);
 
   if (step) {
     switch (step.type) {
@@ -232,6 +233,7 @@ const ListFilterStep = React.memo(({ listId }) => {
 
 ListFilterStep.propTypes = {
   listId: PropTypes.string.isRequired,
+  onClose: PropTypes.func.isRequired,
 };
 
 export default ListFilterStep;

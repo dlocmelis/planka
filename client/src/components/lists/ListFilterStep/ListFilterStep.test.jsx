@@ -71,6 +71,7 @@ let container;
 let root;
 let store;
 let dispatchedActions;
+let handleClose;
 
 window.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -78,7 +79,7 @@ const renderStep = () => {
   act(() => {
     root.render(
       <Provider store={store}>
-        <ListFilterStep listId="list-1" />
+        <ListFilterStep listId="list-1" onClose={handleClose} />
       </Provider>,
     );
   });
@@ -112,6 +113,7 @@ beforeEach(() => {
   mockFieldsStepPropsList.length = 0;
 
   dispatchedActions = [];
+  handleClose = jest.fn();
   store = createStore((state, action) => {
     dispatchedActions.push(action);
     return state || {};
@@ -269,7 +271,7 @@ test('removing a field chip dispatches an update without that field', () => {
   ]);
 });
 
-test('clear filter dispatches a single list filter clear action', () => {
+test('clear filter dispatches a single list filter clear action and closes the popup', () => {
   mockFilterUserIds = ['user-1'];
   mockFilterLabelIds = ['label-1'];
   mockFilterCustomFields = [
@@ -290,4 +292,6 @@ test('clear filter dispatches a single list filter clear action', () => {
       },
     },
   ]);
+
+  expect(handleClose).toHaveBeenCalled();
 });
