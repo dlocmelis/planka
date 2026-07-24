@@ -13,14 +13,18 @@ import { Popup } from '../../../lib/custom-ui';
 import selectors from '../../../selectors';
 import entryActions from '../../../entry-actions';
 import { useSteps } from '../../../hooks';
+import UserAvatar from '../../users/UserAvatar';
+import LabelChip from '../../labels/LabelChip';
 import BoardMembershipsStep from '../../board-memberships/BoardMembershipsStep';
 import LabelsStep from '../../labels/LabelsStep';
+import FieldsStep from './FieldsStep';
 
 import styles from './ListFilterStep.module.scss';
 
 const StepTypes = {
   MEMBERS: 'MEMBERS',
   LABELS: 'LABELS',
+  FIELDS: 'FIELDS',
 };
 
 const ListFilterStep = React.memo(({ listId, onClose }) => {
@@ -28,20 +32,30 @@ const ListFilterStep = React.memo(({ listId, onClose }) => {
     () => selectors.makeSelectFilterUserIdsByListId(),
     [],
   );
-
   const selectFilterLabelIdsByListId = useMemo(
     () => selectors.makeSelectFilterLabelIdsByListId(),
     [],
   );
-
+  const selectFilterCustomFieldsByListId = useMemo(
+    () => selectors.makeSelectFilterCustomFieldsByListId(),
+    [],
+  );
   const selectIsFilterActiveByListId = useMemo(
     () => selectors.makeSelectIsFilterActiveByListId(),
     [],
   );
 
-  const filterUserIds = useSelector((state) => selectFilterUserIdsByListId(state, listId));
-  const filterLabelIds = useSelector((state) => selectFilterLabelIdsByListId(state, listId));
+  const filterUserIds = useSelector((state) => selectFilterUserIdsByListId(state, listId)) || [];
+  const filterLabelIds = useSelector((state) => selectFilterLabelIdsByListId(state, listId)) || [];
+  const storedFilterCustomFields = useSelector((state) =>
+    selectFilterCustomFieldsByListId(state, listId),
+  );
   const isFilterActive = useSelector((state) => selectIsFilterActiveByListId(state, listId));
+
+  const filterCustomFields = useMemo(
+    () => storedFilterCustomFields || [],
+    [storedFilterCustomFields],
+  );
 
   const dispatch = useDispatch();
   const [t] = useTranslation();
@@ -61,6 +75,17 @@ const ListFilterStep = React.memo(({ listId, onClose }) => {
     [listId, dispatch],
   );
 
+  const handleUserClick = useCallback(
+    ({
+      currentTarget: {
+        dataset: { id: userId },
+      },
+    }) => {
+      dispatch(entryActions.removeUserFromListFilter(userId, listId));
+    },
+    [listId, dispatch],
+  );
+
   const handleLabelSelect = useCallback(
     (labelId) => {
       dispatch(entryActions.addLabelToListFilter(labelId, listId));
@@ -75,12 +100,40 @@ const ListFilterStep = React.memo(({ listId, onClose }) => {
     [listId, dispatch],
   );
 
+  const handleLabelClick = useCallback(
+    ({
+      currentTarget: {
+        dataset: { id: labelId },
+      },
+    }) => {
+      dispatch(entryActions.removeLabelFromListFilter(labelId, listId));
+    },
+    [listId, dispatch],
+  );
+
+  const handleFieldClick = useCallback(
+    ({
+      currentTarget: {
+        dataset: { name: fieldName },
+      },
+    }) => {
+      const nextFilterCustomFields = filterCustomFields.filter(({ name }) => name !== fieldName);
+
+      dispatch(entryActions.updateCustomFieldFilterInList(listId, nextFilterCustomFields));
+    },
+    [listId, filterCustomFields, dispatch],
+  );
+
   const handleMembersClick = useCallback(() => {
     openStep(StepTypes.MEMBERS);
   }, [openStep]);
 
   const handleLabelsClick = useCallback(() => {
     openStep(StepTypes.LABELS);
+  }, [openStep]);
+
+  const handleFieldsClick = useCallback(() => {
+    openStep(StepTypes.FIELDS);
   }, [openStep]);
 
   const handleClearFilterClick = useCallback(() => {
@@ -110,6 +163,8 @@ const ListFilterStep = React.memo(({ listId, onClose }) => {
             onBack={handleBack}
           />
         );
+      case StepTypes.FIELDS:
+        return <FieldsStep listId={listId} onBack={handleBack} />;
       default:
     }
   }
@@ -122,26 +177,53 @@ const ListFilterStep = React.memo(({ listId, onClose }) => {
         })}
       </Popup.Header>
       <Popup.Content>
+        {isFilterActive && (
+          <div className={styles.chips}>
+            {filterUserIds.map((userId) => (
+              <span key={userId} className={styles.chip}>
+                <UserAvatar id={userId} size="tiny" onClick={handleUserClick} />
+              </span>
+            ))}
+            {filterLabelIds.map((labelId) => (
+              <span key={labelId} className={styles.chip}>
+                <LabelChip id={labelId} size="small" onClick={handleLabelClick} />
+              </span>
+            ))}
+            {filterCustomFields.map(({ name, content }) => (
+              <span key={name} className={styles.chip}>
+                <button
+                  type="button"
+                  data-name={name}
+                  className={styles.fieldChip}
+                  onClick={handleFieldClick}
+                >
+                  {content ? `${name}: ${content}` : name}
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
         <Menu secondary vertical className={styles.menu}>
           <Menu.Item className={styles.menuItem} onClick={handleMembersClick}>
             <Icon name="user outline" className={styles.menuItemIcon} />
-            {t('common.filterByMembers', {
-              context: 'title',
-            })}
+            {t('common.members')}
           </Menu.Item>
           <Menu.Item className={styles.menuItem} onClick={handleLabelsClick}>
             <Icon name="bookmark outline" className={styles.menuItemIcon} />
-            {t('common.filterByLabels', {
-              context: 'title',
-            })}
+            {t('common.labels')}
+          </Menu.Item>
+          <Menu.Item className={styles.menuItem} onClick={handleFieldsClick}>
+            <Icon name="sliders horizontal" className={styles.menuItemIcon} />
+            {t('common.fields')}
           </Menu.Item>
           {isFilterActive && (
-            <Menu.Item className={styles.menuItem} onClick={handleClearFilterClick}>
-              <Icon name="eraser" className={styles.menuItemIcon} />
-              {t('action.clearFilter', {
-                context: 'title',
-              })}
-            </Menu.Item>
+            <>
+              <hr className={styles.divider} />
+              <Menu.Item className={styles.menuItem} onClick={handleClearFilterClick}>
+                <Icon name="cancel" className={styles.menuItemIcon} />
+                {t('action.clearFilter')}
+              </Menu.Item>
+            </>
           )}
         </Menu>
       </Popup.Content>
