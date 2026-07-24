@@ -220,6 +220,55 @@
     width: 32px;
   }
 
+  .collapsedDropExpansion {
+    background: #dfe3e6;
+    border-radius: 3px;
+    box-shadow: 0 8px 16px -4px rgba(9, 30, 66, 0.25);
+    left: 0;
+    padding: 8px;
+    position: absolute;
+    top: 0;
+    width: 272px;
+  }
+
+  .collapsedDropExpansionName {
+    color: #17394d;
+    font-weight: bold;
+    line-height: 20px;
+    overflow: hidden;
+    padding: 2px 8px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .collapsedDropExpansionSlot {
+    background: rgba(33, 133, 208, 0.08);
+    border: 2px dashed rgba(33, 133, 208, 0.4);
+    border-radius: 3px;
+    height: 80px;
+    margin-top: 8px;
+  }
+
+  .collapsedDropPlaceholder {
+    height: 0;
+    overflow: hidden;
+    width: 0;
+  }
+
+  .collapsedDropZone {
+    bottom: 0;
+    left: 0;
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+    top: 0;
+  }
+
+  .collapsedDropZoneActive {
+    background: rgba(33, 133, 208, 0.14);
+    border-radius: 3px;
+  }
+
   .headerCardsCount {
     color: #6b808c;
     display: inline-block;
@@ -327,7 +376,11 @@
 
   .innerWrapperCollapsed {
     margin-right: 8px;
+    // Anchors the strip drop zone and its hover expansion overlay; the raised
+    // z-index lets the overlay paint over the neighbor list without taking flow space
+    position: relative;
     width: 36px;
+    z-index: 1;
   }
 
   .outerWrapper {

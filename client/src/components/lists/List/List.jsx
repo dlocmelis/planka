@@ -304,6 +304,40 @@ const List = React.memo(({ id, index, isDragActive }) => {
     </Droppable>
   );
 
+  // Purely visual drop target for the collapsed strip: an absolutely-positioned,
+  // pointer-events-none layer covering the strip, so hovering a dragged card over it
+  // never changes any list's layout (rbd's captured geometry stays valid). Only one
+  // of collapsedDropNode/cardsNode is ever mounted, so the droppableId never clashes.
+  const collapsedDropNode = (
+    <Droppable
+      droppableId={`list:${id}`}
+      type={DroppableTypes.CARD}
+      isDropDisabled={!list.isPersisted || !canDropCard || list.isCollapsed}
+    >
+      {({ innerRef, droppableProps, placeholder }, { isDraggingOver }) => (
+        <div
+          {...droppableProps} // eslint-disable-line react/jsx-props-no-spreading
+          ref={innerRef}
+          className={classNames(
+            styles.collapsedDropZone,
+            isDraggingOver && styles.collapsedDropZoneActive,
+          )}
+        >
+          {isDraggingOver && (
+            <div className={styles.collapsedDropExpansion}>
+              <div className={styles.collapsedDropExpansionName}>
+                {list.name}
+                <span className={styles.headerCardsCount}>{cardsCountText}</span>
+              </div>
+              <div className={styles.collapsedDropExpansionSlot} />
+            </div>
+          )}
+          <div className={styles.collapsedDropPlaceholder}>{placeholder}</div>
+        </div>
+      )}
+    </Droppable>
+  );
+
   return (
     <Draggable
       draggableId={`list:${id}`}
@@ -363,6 +397,7 @@ const List = React.memo(({ id, index, isDragActive }) => {
                 <div className={styles.headerCardsCountCollapsed}>({totalCardsCount})</div>
               </div>
             </div>
+            {collapsedDropNode}
           </div>
         ) : (
           <div

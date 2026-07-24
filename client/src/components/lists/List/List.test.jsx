@@ -17,7 +17,10 @@ import { BoardShortcutsContext } from '../../../contexts';
 import List from './List';
 
 const mockDraggableRenderProps = [];
+const mockDroppableRenderProps = [];
 const mockEmptySelectedCardIds = [];
+
+let mockIsDraggingOver = false;
 
 let mockList;
 let mockAllCardIds;
@@ -38,12 +41,18 @@ jest.mock('react-beautiful-dnd', () => ({
       dragHandleProps: {},
     });
   },
-  Droppable: (props) =>
-    props.children({
-      innerRef: () => {},
-      droppableProps: {},
-      placeholder: null,
-    }),
+  Droppable: (props) => {
+    mockDroppableRenderProps.push(props);
+
+    return props.children(
+      {
+        innerRef: () => {},
+        droppableProps: {},
+        placeholder: 'RBD_PLACEHOLDER',
+      },
+      { isDraggingOver: mockIsDraggingOver },
+    );
+  },
 }));
 
 jest.mock('../../../lib/popup', () => ({
@@ -131,6 +140,15 @@ const expand = () => {
 
 const lastDraggableProps = () => mockDraggableRenderProps[mockDraggableRenderProps.length - 1];
 
+const lastDroppableProps = () => mockDroppableRenderProps[mockDroppableRenderProps.length - 1];
+
+// Forces a re-render through the store after mutating mock values (List is memoized,
+// so re-calling root.render with identical props would be skipped)
+const rerender = () => {
+  mockList = { ...mockList };
+  syncSelectors();
+};
+
 beforeEach(() => {
   mockList = {
     id: 'list-1',
@@ -144,6 +162,8 @@ beforeEach(() => {
   mockCardIds = ['card-1', 'card-2', 'card-3'];
   mockIsFilterActive = false;
   mockDraggableRenderProps.length = 0;
+  mockDroppableRenderProps.length = 0;
+  mockIsDraggingOver = false;
 
   dispatchedActions = [];
   store = createStore((state, action) => {
@@ -200,6 +220,82 @@ describe('collapsed strip', () => {
     });
     expect(container.querySelector('.cardsInnerWrapper')).not.toBeNull();
     expect(container.querySelector('.headerName').textContent).toContain('Todo');
+  });
+});
+
+describe('collapsed strip card droppable', () => {
+  test('renders a single card droppable with the same id as the expanded list', () => {
+    mockList = { ...mockList, isCollapsed: true };
+
+    renderList();
+
+    expect(mockDroppableRenderProps).toHaveLength(1);
+    expect(lastDroppableProps().droppableId).toBe('list:list-1');
+    expect(lastDroppableProps().type).toBe('CARD');
+  });
+
+  test('is drop-disabled for a persisted-collapsed list', () => {
+    mockList = { ...mockList, isCollapsed: true };
+
+    renderList();
+
+    expect(lastDroppableProps().isDropDisabled).toBe(true);
+  });
+
+  test('accepts drops on an auto-collapsed empty list', () => {
+    mockAllCardIds = [];
+    mockCardIds = [];
+
+    renderList();
+
+    // Empty and user-expanded, so the list renders as an auto-collapsed strip
+    expect(container.querySelector('.headerNameCollapsed')).not.toBeNull();
+    expect(lastDroppableProps().isDropDisabled).toBe(false);
+  });
+
+  test('shows the expansion overlay only while a card is dragged over the strip', () => {
+    mockAllCardIds = [];
+    mockCardIds = [];
+
+    renderList();
+
+    expect(container.querySelector('.collapsedDropExpansion')).toBeNull();
+    expect(container.querySelector('.collapsedDropZoneActive')).toBeNull();
+
+    mockIsDraggingOver = true;
+    rerender();
+
+    const expansion = container.querySelector('.collapsedDropExpansion');
+    expect(expansion).not.toBeNull();
+    expect(expansion.textContent).toContain('Todo');
+    expect(expansion.querySelector('.collapsedDropExpansionSlot')).not.toBeNull();
+    expect(container.querySelector('.collapsedDropZoneActive')).not.toBeNull();
+
+    mockIsDraggingOver = false;
+    rerender();
+
+    expect(container.querySelector('.collapsedDropExpansion')).toBeNull();
+    expect(container.querySelector('.collapsedDropZoneActive')).toBeNull();
+  });
+
+  test('renders the rbd placeholder inside the zero-size hidden container', () => {
+    mockList = { ...mockList, isCollapsed: true };
+
+    renderList();
+
+    expect(container.querySelector('.collapsedDropPlaceholder').textContent).toBe(
+      'RBD_PLACEHOLDER',
+    );
+  });
+
+  test('expanded branch keeps its single cards droppable without the strip drop zone', () => {
+    renderList();
+
+    expect(mockDroppableRenderProps).toHaveLength(1);
+    expect(lastDroppableProps().droppableId).toBe('list:list-1');
+    expect(lastDroppableProps().type).toBe('CARD');
+    expect(lastDroppableProps().isDropDisabled).toBe(false);
+    expect(container.querySelector('.collapsedDropZone')).toBeNull();
   });
 });
 
