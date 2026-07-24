@@ -101,12 +101,12 @@ let handleListMouseLeave;
 
 window.IS_REACT_ACT_ENVIRONMENT = true;
 
-const renderList = () => {
+const renderList = ({ isDragActive = false } = {}) => {
   act(() => {
     root.render(
       <Provider store={store}>
         <BoardShortcutsContext.Provider value={[handleListMouseEnter, handleListMouseLeave]}>
-          <List id="list-1" index={0} />
+          <List id="list-1" index={0} isDragActive={isDragActive} />
         </BoardShortcutsContext.Provider>
       </Provider>,
     );
@@ -429,5 +429,104 @@ describe('collapse interaction regressions', () => {
 
     // The name editor was closed on collapse instead of lingering in state
     expect(container.querySelector('.headerName')).not.toBeNull();
+  });
+});
+
+describe('card-drag freeze latch', () => {
+  test('keeps the auto-collapsed strip when the last card count goes 0->1 mid-drag', () => {
+    mockAllCardIds = [];
+    mockCardIds = [];
+
+    renderList();
+    expect(container.querySelector('.cardsInnerWrapper')).toBeNull();
+
+    // Arms the latch at the pre-drag (collapsed) value
+    renderList({ isDragActive: true });
+
+    // Simulates a socket event adding the list's first card mid-drag
+    mockAllCardIds = ['card-1'];
+    mockCardIds = ['card-1'];
+    syncSelectors();
+
+    expect(container.querySelector('.cardsInnerWrapper')).toBeNull();
+
+    renderList({ isDragActive: false });
+
+    // The drag ended, so the branch may catch up with the new card count
+    expect(container.querySelector('.cardsInnerWrapper')).not.toBeNull();
+  });
+
+  test('keeps the expanded column when the last card count goes 1->0 mid-drag', () => {
+    mockAllCardIds = ['card-1'];
+    mockCardIds = ['card-1'];
+
+    renderList();
+    expect(container.querySelector('.cardsInnerWrapper')).not.toBeNull();
+
+    // Arms the latch at the pre-drag (expanded) value
+    renderList({ isDragActive: true });
+
+    // Simulates a socket event removing the list's last card mid-drag
+    mockAllCardIds = [];
+    mockCardIds = [];
+    syncSelectors();
+
+    expect(container.querySelector('.cardsInnerWrapper')).not.toBeNull();
+
+    renderList({ isDragActive: false });
+
+    expect(container.querySelector('.cardsInnerWrapper')).toBeNull();
+  });
+
+  test('follows the card count immediately while no drag is active', () => {
+    mockAllCardIds = [];
+    mockCardIds = [];
+
+    renderList();
+    expect(container.querySelector('.cardsInnerWrapper')).toBeNull();
+
+    mockAllCardIds = ['card-1'];
+    mockCardIds = ['card-1'];
+    syncSelectors();
+
+    expect(container.querySelector('.cardsInnerWrapper')).not.toBeNull();
+
+    mockAllCardIds = [];
+    mockCardIds = [];
+    syncSelectors();
+
+    expect(container.querySelector('.cardsInnerWrapper')).toBeNull();
+  });
+
+  test('re-arms the latch for each successive drag', () => {
+    mockAllCardIds = [];
+    mockCardIds = [];
+
+    renderList();
+
+    // Drag #1 latches the auto-collapsed strip
+    renderList({ isDragActive: true });
+
+    mockAllCardIds = ['card-1'];
+    mockCardIds = ['card-1'];
+    syncSelectors();
+
+    expect(container.querySelector('.cardsInnerWrapper')).toBeNull();
+
+    // Ending the drag releases the latch and the list expands
+    renderList({ isDragActive: false });
+    expect(container.querySelector('.cardsInnerWrapper')).not.toBeNull();
+
+    // Drag #2 latches the expanded column
+    renderList({ isDragActive: true });
+
+    mockAllCardIds = [];
+    mockCardIds = [];
+    syncSelectors();
+
+    expect(container.querySelector('.cardsInnerWrapper')).not.toBeNull();
+
+    renderList({ isDragActive: false });
+    expect(container.querySelector('.cardsInnerWrapper')).toBeNull();
   });
 });

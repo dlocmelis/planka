@@ -124,13 +124,26 @@ const List = React.memo(({ id, index, isDragActive }) => {
 
   const totalCardsCount = allCardIds.length;
 
-  const isRenderedCollapsed = shouldRenderListCollapsed({
+  const computedIsRenderedCollapsed = shouldRenderListCollapsed({
     isCollapsed: list.isCollapsed,
     totalCardsCount,
     isCardsFetching: list.isCardsFetching,
-    isDragActive,
     isPeek,
   });
+
+  const dragLatchRef = useRef(null);
+
+  // While a card drag is active the collapsed/expanded branch is frozen at its pre-drag value
+  // so no list unmounts its Droppable or changes width mid-drag (e.g. socket events adding or
+  // removing a list's last card). The latch is armed by a flushSync render from onBeforeCapture,
+  // i.e. before react-beautiful-dnd captures dimensions
+  if (!isDragActive) {
+    dragLatchRef.current = null;
+  } else if (dragLatchRef.current === null) {
+    dragLatchRef.current = computedIsRenderedCollapsed;
+  }
+
+  const isRenderedCollapsed = dragLatchRef.current ?? computedIsRenderedCollapsed;
 
   const handleCollapseClick = useCallback(
     (event) => {

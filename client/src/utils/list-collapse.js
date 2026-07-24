@@ -8,6 +8,5 @@ export const shouldRenderListCollapsed = ({
   isCollapsed,
   totalCardsCount,
   isCardsFetching,
-  isDragActive,
   isPeek,
-}) => isCollapsed || (totalCardsCount === 0 && !isCardsFetching && !isDragActive && !isPeek);
+}) => isCollapsed || (totalCardsCount === 0 && !isCardsFetching && !isPeek);
