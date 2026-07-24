@@ -49,14 +49,22 @@ const NotificationEvents = React.memo(() => {
     (_, { name, checked }) => {
       const [sectionName, scopeName] = name.split('.');
 
+      // "all" acts as a group toggle: (de)selecting it (de)selects every scope in the section
+      const nextSection =
+        scopeName === 'all'
+          ? Object.fromEntries(
+              Object.keys(notificationEvents[sectionName]).map((scope) => [scope, checked]),
+            )
+          : {
+              ...notificationEvents[sectionName],
+              [scopeName]: checked,
+            };
+
       dispatch(
         entryActions.updateCurrentUser({
           notificationEvents: {
             ...notificationEvents,
-            [sectionName]: {
-              ...notificationEvents[sectionName],
-              [scopeName]: checked,
-            },
+            [sectionName]: nextSection,
           },
         }),
       );
