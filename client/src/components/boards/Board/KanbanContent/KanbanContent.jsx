@@ -4,6 +4,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import ReactDOM from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { DragDropContext, Droppable } from 'react-beautiful-dnd';
@@ -12,7 +13,7 @@ import { closePopup } from '../../../../lib/popup';
 
 import selectors from '../../../../selectors';
 import entryActions from '../../../../entry-actions';
-import parseDndId from '../../../../utils/parse-dnd-id';
+import parseDndId, { isCardDndId } from '../../../../utils/parse-dnd-id';
 import DroppableTypes from '../../../../constants/DroppableTypes';
 import { BoardMembershipRoles } from '../../../../constants/Enums';
 import AddList from './AddList';
@@ -45,25 +46,33 @@ const KanbanContent = React.memo(() => {
   const wrapperRef = useRef(null);
   const prevPositionRef = useRef(null);
 
-  const handleDragStart = useCallback(({ type }) => {
-    if (type === DroppableTypes.CARD) {
-      setIsCardDragActive(true);
+  const handleBeforeCapture = useCallback(({ draggableId }) => {
+    if (!isCardDndId(draggableId)) {
+      return;
     }
 
+    // Must be applied synchronously, before react-beautiful-dnd captures Droppable dimensions
+    ReactDOM.flushSync(() => {
+      setIsCardDragActive(true);
+    });
+  }, []);
+
+  const handleDragStart = useCallback(() => {
     document.body.classList.add(globalStyles.dragging);
     closePopup();
   }, []);
 
   const handleDragEnd = useCallback(
     ({ draggableId, type, source, destination }) => {
-      setIsCardDragActive(false);
       document.body.classList.remove(globalStyles.dragging);
 
       if (!destination) {
+        setIsCardDragActive(false);
         return;
       }
 
       if (source.droppableId === destination.droppableId && source.index === destination.index) {
+        setIsCardDragActive(false);
         return;
       }
 
@@ -82,6 +91,8 @@ const KanbanContent = React.memo(() => {
           break;
         default:
       }
+
+      setIsCardDragActive(false);
     },
     [dispatch],
   );
@@ -166,7 +177,11 @@ const KanbanContent = React.memo(() => {
     // eslint-disable-next-line jsx-a11y/no-static-element-interactions
     <div ref={wrapperRef} className={styles.wrapper} onMouseDown={handleMouseDown}>
       <div>
-        <DragDropContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DragDropContext
+          onBeforeCapture={handleBeforeCapture}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
           <Droppable droppableId="board" type={DroppableTypes.LIST} direction="horizontal">
             {({ innerRef, droppableProps, placeholder }) => (
               <div
