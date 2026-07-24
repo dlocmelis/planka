@@ -40,17 +40,23 @@ const KanbanContent = React.memo(() => {
   const dispatch = useDispatch();
   const [t] = useTranslation();
   const [isAddListOpened, setIsAddListOpened] = useState(false);
+  const [isCardDragActive, setIsCardDragActive] = useState(false);
 
   const wrapperRef = useRef(null);
   const prevPositionRef = useRef(null);
 
-  const handleDragStart = useCallback(() => {
+  const handleDragStart = useCallback(({ type }) => {
+    if (type === DroppableTypes.CARD) {
+      setIsCardDragActive(true);
+    }
+
     document.body.classList.add(globalStyles.dragging);
     closePopup();
   }, []);
 
   const handleDragEnd = useCallback(
     ({ draggableId, type, source, destination }) => {
+      setIsCardDragActive(false);
       document.body.classList.remove(globalStyles.dragging);
 
       if (!destination) {
@@ -170,7 +176,7 @@ const KanbanContent = React.memo(() => {
                 className={styles.lists}
               >
                 {listIds.map((listId, index) => (
-                  <List key={listId} id={listId} index={index} />
+                  <List key={listId} id={listId} index={index} isDragActive={isCardDragActive} />
                 ))}
                 {placeholder}
                 {canAddList && (
