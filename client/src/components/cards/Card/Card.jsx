@@ -49,8 +49,6 @@ const Card = React.memo(({ id, isInline }) => {
 
   const isSelected = useSelector((state) => selectIsCardSelected(state, id));
 
-  const isAnyCardSelected = useSelector(selectors.selectIsAnyCardSelected);
-
   const canUseActions = useSelector((state) => {
     const isManager = selectors.selectIsCurrentUserManagerForCurrentProject(state);
 
@@ -172,10 +170,7 @@ const Card = React.memo(({ id, isInline }) => {
             <>
               <Checkbox
                 checked={isSelected}
-                className={classNames(
-                  styles.checkbox,
-                  (isAnyCardSelected || isSelected) && styles.checkboxVisible,
-                )}
+                className={styles.checkbox}
                 onChange={handleSelectionToggle}
                 onClick={handleSelectionCheckboxClick}
                 onMouseDown={handleSelectionCheckboxMouseDown}
