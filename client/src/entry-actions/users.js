@@ -258,16 +258,16 @@ const removeUserFromFilterInCurrentBoard = (id) => ({
   },
 });
 
-const addUserToFilterInList = (id, listId) => ({
-  type: EntryActionTypes.USER_TO_FILTER_IN_LIST_ADD,
+const addUserToListFilter = (id, listId) => ({
+  type: EntryActionTypes.USER_TO_LIST_FILTER_ADD,
   payload: {
     id,
     listId,
   },
 });
 
-const removeUserFromFilterInList = (id, listId) => ({
-  type: EntryActionTypes.USER_FROM_FILTER_IN_LIST_REMOVE,
+const removeUserFromListFilter = (id, listId) => ({
+  type: EntryActionTypes.USER_FROM_LIST_FILTER_REMOVE,
   payload: {
     id,
     listId,
@@ -312,6 +312,6 @@ export default {
   handleUserFromCardRemove,
   addUserToFilterInCurrentBoard,
   removeUserFromFilterInCurrentBoard,
-  addUserToFilterInList,
-  removeUserFromFilterInList,
+  addUserToListFilter,
+  removeUserFromListFilter,
 };

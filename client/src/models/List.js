@@ -3,7 +3,7 @@
  * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
  */
 
-import { attr, fk } from 'redux-orm';
+import { attr, fk, many } from 'redux-orm';
 
 import BaseModel from './BaseModel';
 import buildSearchParts from '../utils/build-search-parts';
@@ -68,6 +68,11 @@ export default class extends BaseModel {
       as: 'board',
       relatedName: 'lists',
     }),
+    filterUsers: many('User', 'filterLists'),
+    filterLabels: many('Label', 'filterLists'),
+    filterCustomFields: attr({
+      getDefault: () => [],
+    }),
   };
 
   static reducer({ type, payload }, List) {
@@ -109,6 +114,77 @@ export default class extends BaseModel {
         }
 
         break;
+      case ActionTypes.USER_TO_LIST_FILTER_ADD: {
+        const listModel = List.withId(payload.listId);
+        listModel.filterUsers.add(payload.id);
+
+        listModel.update({
+          lastCard: null,
+          isCardsFetching: false,
+          isAllCardsFetched: null,
+        });
+
+        break;
+      }
+      case ActionTypes.USER_FROM_LIST_FILTER_REMOVE: {
+        const listModel = List.withId(payload.listId);
+        listModel.filterUsers.remove(payload.id);
+
+        listModel.update({
+          lastCard: null,
+          isCardsFetching: false,
+          isAllCardsFetched: null,
+        });
+
+        break;
+      }
+      case ActionTypes.LABEL_TO_LIST_FILTER_ADD: {
+        const listModel = List.withId(payload.listId);
+        listModel.filterLabels.add(payload.id);
+
+        listModel.update({
+          lastCard: null,
+          isCardsFetching: false,
+          isAllCardsFetched: null,
+        });
+
+        break;
+      }
+      case ActionTypes.LABEL_FROM_LIST_FILTER_REMOVE: {
+        const listModel = List.withId(payload.listId);
+        listModel.filterLabels.remove(payload.id);
+
+        listModel.update({
+          lastCard: null,
+          isCardsFetching: false,
+          isAllCardsFetched: null,
+        });
+
+        break;
+      }
+      case ActionTypes.CUSTOM_FIELD_FILTER_IN_LIST_UPDATE:
+        List.withId(payload.id).update({
+          filterCustomFields: payload.filterCustomFields,
+          lastCard: null,
+          isCardsFetching: false,
+          isAllCardsFetched: null,
+        });
+
+        break;
+      case ActionTypes.LIST_FILTER_CLEAR: {
+        const listModel = List.withId(payload.id);
+        listModel.filterUsers.clear();
+        listModel.filterLabels.clear();
+
+        listModel.update({
+          filterCustomFields: [],
+          lastCard: null,
+          isCardsFetching: false,
+          isAllCardsFetched: null,
+        });
+
+        break;
+      }
       case ActionTypes.BOARD_FETCH__SUCCESS:
         payload.lists.forEach((list) => {
           List.upsert(prepareList(list));
@@ -385,6 +461,72 @@ export default class extends BaseModel {
       cardModels = cardModels.filter((cardModel) => {
         const labels = cardModel.labels.toRefArray();
         return labels.some((label) => filterLabelIds.includes(label.id));
+      });
+    }
+
+    const listFilterUserIds = this.filterUsers.toRefArray().map((user) => user.id);
+
+    if (listFilterUserIds.length > 0) {
+      cardModels = cardModels.filter((cardModel) => {
+        const users = cardModel.users.toRefArray();
+
+        if (users.some((user) => listFilterUserIds.includes(user.id))) {
+          return true;
+        }
+
+        return cardModel
+          .getTaskListsQuerySet()
+          .toModelArray()
+          .some((taskListModel) =>
+            taskListModel
+              .getTasksQuerySet()
+              .toRefArray()
+              .some(
+                (task) => task.assigneeUserId && listFilterUserIds.includes(task.assigneeUserId),
+              ),
+          );
+      });
+    }
+
+    const listFilterLabelIds = this.filterLabels.toRefArray().map((label) => label.id);
+
+    if (listFilterLabelIds.length > 0) {
+      cardModels = cardModels.filter((cardModel) => {
+        const labels = cardModel.labels.toRefArray();
+        return labels.some((label) => listFilterLabelIds.includes(label.id));
+      });
+    }
+
+    const listFilterCustomFields = this.filterCustomFields || [];
+
+    if (listFilterCustomFields.length > 0) {
+      cardModels = cardModels.filter((cardModel) => {
+        const customFieldValueModels = cardModel.customFieldValues.toModelArray();
+
+        return listFilterCustomFields.some((filterCustomField) => {
+          const filterName = filterCustomField.name.toLowerCase();
+          const filterContent = filterCustomField.content
+            ? filterCustomField.content.toLowerCase()
+            : '';
+
+          return customFieldValueModels.some((customFieldValueModel) => {
+            const customFieldModel = customFieldValueModel.customField;
+
+            if (!customFieldModel || customFieldModel.name.toLowerCase() !== filterName) {
+              return false;
+            }
+
+            if (!customFieldValueModel.content) {
+              return false;
+            }
+
+            if (!filterContent) {
+              return true;
+            }
+
+            return customFieldValueModel.content.toLowerCase().includes(filterContent);
+          });
+        });
       });
     }
 

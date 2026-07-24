@@ -501,6 +501,14 @@ export function* removeUserFromFilterInCurrentBoard(id) {
   yield call(removeUserFromBoardFilter, id, boardId);
 }
 
+export function* addUserToListFilter(id, listId) {
+  yield put(actions.addUserToListFilter(id, listId));
+}
+
+export function* removeUserFromListFilter(id, listId) {
+  yield put(actions.removeUserFromListFilter(id, listId));
+}
+
 export default {
   handleUsersReset,
   createUser,
@@ -542,4 +550,6 @@ export default {
   addUserToFilterInCurrentBoard,
   removeUserFromBoardFilter,
   removeUserFromFilterInCurrentBoard,
+  addUserToListFilter,
+  removeUserFromListFilter,
 };

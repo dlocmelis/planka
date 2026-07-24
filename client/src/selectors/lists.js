@@ -65,6 +65,78 @@ export const makeSelectFilteredCardIdsByListId = () =>
 
 export const selectFilteredCardIdsByListId = makeSelectFilteredCardIdsByListId();
 
+export const makeSelectFilterUserIdsByListId = () =>
+  createSelector(
+    orm,
+    (_, id) => id,
+    ({ List }, id) => {
+      const listModel = List.withId(id);
+
+      if (!listModel) {
+        return listModel;
+      }
+
+      return listModel.filterUsers.toRefArray().map((user) => user.id);
+    },
+  );
+
+export const selectFilterUserIdsByListId = makeSelectFilterUserIdsByListId();
+
+export const makeSelectFilterLabelIdsByListId = () =>
+  createSelector(
+    orm,
+    (_, id) => id,
+    ({ List }, id) => {
+      const listModel = List.withId(id);
+
+      if (!listModel) {
+        return listModel;
+      }
+
+      return listModel.filterLabels.toRefArray().map((label) => label.id);
+    },
+  );
+
+export const selectFilterLabelIdsByListId = makeSelectFilterLabelIdsByListId();
+
+export const makeSelectFilterCustomFieldsByListId = () =>
+  createSelector(
+    orm,
+    (_, id) => id,
+    ({ List }, id) => {
+      const listModel = List.withId(id);
+
+      if (!listModel) {
+        return listModel;
+      }
+
+      return listModel.filterCustomFields;
+    },
+  );
+
+export const selectFilterCustomFieldsByListId = makeSelectFilterCustomFieldsByListId();
+
+export const makeSelectIsFilterActiveByListId = () =>
+  createSelector(
+    orm,
+    (_, id) => id,
+    ({ List }, id) => {
+      const listModel = List.withId(id);
+
+      if (!listModel) {
+        return false;
+      }
+
+      return (
+        listModel.filterUsers.exists() ||
+        listModel.filterLabels.exists() ||
+        listModel.filterCustomFields.length > 0
+      );
+    },
+  );
+
+export const selectIsFilterActiveByListId = makeSelectIsFilterActiveByListId();
+
 export const selectIsListWithIdAvailableForCurrentUser = createSelector(
   orm,
   (_, id) => id,
@@ -171,6 +243,14 @@ export default {
   selectCardIdsByListId,
   makeSelectFilteredCardIdsByListId,
   selectFilteredCardIdsByListId,
+  makeSelectFilterUserIdsByListId,
+  selectFilterUserIdsByListId,
+  makeSelectFilterLabelIdsByListId,
+  selectFilterLabelIdsByListId,
+  makeSelectFilterCustomFieldsByListId,
+  selectFilterCustomFieldsByListId,
+  makeSelectIsFilterActiveByListId,
+  selectIsFilterActiveByListId,
   selectIsListWithIdAvailableForCurrentUser,
   selectCurrentListId,
   selectCurrentList,
