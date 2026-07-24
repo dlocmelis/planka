@@ -65,6 +65,14 @@ const handleCustomFieldDelete = (customField) => ({
   },
 });
 
+const updateCustomFieldFilterInList = (listId, data) => ({
+  type: EntryActionTypes.CUSTOM_FIELD_FILTER_IN_LIST_UPDATE,
+  payload: {
+    listId,
+    data,
+  },
+});
+
 export default {
   createCustomFieldInBaseGroup,
   createCustomFieldInGroup,
@@ -74,4 +82,5 @@ export default {
   moveCustomField,
   deleteCustomField,
   handleCustomFieldDelete,
+  updateCustomFieldFilterInList,
 };
