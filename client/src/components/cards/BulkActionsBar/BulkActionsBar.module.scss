@@ -16,6 +16,7 @@
     padding: 6px 12px;
     position: fixed;
     transform: translateX(-50%);
+    // Board overlay tier: board content (cards, lists) must stay below this
     z-index: 800;
   }
 
@@ -77,6 +78,7 @@
     padding: 0 12px 12px;
     position: fixed;
     transform: translateX(-50%);
+    // Board overlay tier: board content (cards, lists) must stay below this
     z-index: 800;
   }
 
