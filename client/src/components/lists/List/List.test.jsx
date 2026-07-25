@@ -26,6 +26,7 @@ let mockList;
 let mockAllCardIds;
 let mockCardIds;
 let mockIsFilterActive;
+let mockBoardMembershipRole;
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => [(key) => key],
@@ -70,7 +71,7 @@ jest.mock('../../../selectors', () => ({
     selectIsFavoritesActiveForCurrentUser: () => false,
     selectSelectedCardIds: () => mockEmptySelectedCardIds,
     selectIsEditModeEnabled: () => true,
-    selectCurrentUserMembershipForCurrentBoard: () => ({ role: 'editor' }),
+    selectCurrentUserMembershipForCurrentBoard: () => ({ role: mockBoardMembershipRole }),
   },
 }));
 
@@ -161,6 +162,7 @@ beforeEach(() => {
   mockAllCardIds = ['card-1', 'card-2', 'card-3'];
   mockCardIds = ['card-1', 'card-2', 'card-3'];
   mockIsFilterActive = false;
+  mockBoardMembershipRole = 'editor';
   mockDraggableRenderProps.length = 0;
   mockDroppableRenderProps.length = 0;
   mockIsDraggingOver = false;
@@ -234,8 +236,35 @@ describe('collapsed strip card droppable', () => {
     expect(lastDroppableProps().type).toBe('CARD');
   });
 
-  test('is drop-disabled for a persisted-collapsed list', () => {
+  test('accepts drops on a user-collapsed list', () => {
     mockList = { ...mockList, isCollapsed: true };
+
+    renderList();
+
+    expect(lastDroppableProps().isDropDisabled).toBe(false);
+  });
+
+  test('accepts drops on a user-collapsed empty list', () => {
+    mockList = { ...mockList, isCollapsed: true };
+    mockAllCardIds = [];
+    mockCardIds = [];
+
+    renderList();
+
+    expect(lastDroppableProps().isDropDisabled).toBe(false);
+  });
+
+  test('is drop-disabled for a collapsed list the user cannot drop cards into', () => {
+    mockList = { ...mockList, isCollapsed: true };
+    mockBoardMembershipRole = 'viewer';
+
+    renderList();
+
+    expect(lastDroppableProps().isDropDisabled).toBe(true);
+  });
+
+  test('is drop-disabled for a collapsed list that is not persisted', () => {
+    mockList = { ...mockList, isCollapsed: true, isPersisted: false };
 
     renderList();
 
@@ -276,6 +305,44 @@ describe('collapsed strip card droppable', () => {
 
     expect(container.querySelector('.collapsedDropExpansion')).toBeNull();
     expect(container.querySelector('.collapsedDropZoneActive')).toBeNull();
+  });
+
+  test('shows the expansion overlay over a user-collapsed non-empty strip', () => {
+    mockList = { ...mockList, isCollapsed: true };
+
+    renderList();
+
+    expect(container.querySelector('.collapsedDropExpansion')).toBeNull();
+    expect(container.querySelector('.collapsedDropZoneActive')).toBeNull();
+
+    mockIsDraggingOver = true;
+    rerender();
+
+    const expansion = container.querySelector('.collapsedDropExpansion');
+    expect(expansion).not.toBeNull();
+    expect(expansion.textContent).toContain('Todo');
+    expect(expansion.querySelector('.collapsedDropExpansionSlot')).not.toBeNull();
+    expect(container.querySelector('.collapsedDropZoneActive')).not.toBeNull();
+
+    mockIsDraggingOver = false;
+    rerender();
+
+    expect(container.querySelector('.collapsedDropExpansion')).toBeNull();
+    expect(container.querySelector('.collapsedDropZoneActive')).toBeNull();
+  });
+
+  test('expansion overlay shows the total card count, not the filtered one', () => {
+    mockList = { ...mockList, isCollapsed: true };
+    mockIsFilterActive = true;
+    mockCardIds = ['card-1', 'card-2'];
+    mockIsDraggingOver = true;
+
+    renderList();
+
+    const expansion = container.querySelector('.collapsedDropExpansion');
+    expect(expansion.textContent).toContain('Todo');
+    expect(expansion.textContent).toContain('(3)');
+    expect(expansion.textContent).not.toContain('common.of');
   });
 
   test('renders the rbd placeholder inside the zero-size hidden container', () => {
