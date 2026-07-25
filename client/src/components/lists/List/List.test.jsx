@@ -18,6 +18,7 @@ import List from './List';
 
 const mockDraggableRenderProps = [];
 const mockDroppableRenderProps = [];
+const mockDroppableInnerRefNodes = [];
 const mockEmptySelectedCardIds = [];
 
 let mockIsDraggingOver = false;
@@ -46,8 +47,12 @@ jest.mock('react-beautiful-dnd', () => ({
 
     return props.children(
       {
-        innerRef: () => {},
-        droppableProps: {},
+        // Records the node the droppable is mounted on; the marker attribute tracks
+        // droppableProps landing on that very same node
+        innerRef: (node) => {
+          mockDroppableInnerRefNodes.push(node);
+        },
+        droppableProps: { 'data-mock-droppable-props': '' },
         placeholder: 'RBD_PLACEHOLDER',
       },
       { isDraggingOver: mockIsDraggingOver },
@@ -142,6 +147,14 @@ const lastDraggableProps = () => mockDraggableRenderProps[mockDraggableRenderPro
 
 const lastDroppableProps = () => mockDroppableRenderProps[mockDroppableRenderProps.length - 1];
 
+// React calls the previous ref callback with null before the new one with the node,
+// so only the mounted nodes are of interest
+const lastDroppableInnerRefNode = () => {
+  const nodes = mockDroppableInnerRefNodes.filter(Boolean);
+
+  return nodes[nodes.length - 1] || null;
+};
+
 // Forces a re-render through the store after mutating mock values (List is memoized,
 // so re-calling root.render with identical props would be skipped)
 const rerender = () => {
@@ -163,6 +176,7 @@ beforeEach(() => {
   mockIsFilterActive = false;
   mockDraggableRenderProps.length = 0;
   mockDroppableRenderProps.length = 0;
+  mockDroppableInnerRefNodes.length = 0;
   mockIsDraggingOver = false;
 
   dispatchedActions = [];
@@ -296,6 +310,80 @@ describe('collapsed strip card droppable', () => {
     expect(lastDroppableProps().type).toBe('CARD');
     expect(lastDroppableProps().isDropDisabled).toBe(false);
     expect(container.querySelector('.collapsedDropZone')).toBeNull();
+  });
+});
+
+describe('collapsed strip drag-over stacking', () => {
+  // An empty list renders as an auto-collapsed strip, the only collapsed state accepting drops
+  const renderStrip = () => {
+    mockAllCardIds = [];
+    mockCardIds = [];
+
+    renderList();
+  };
+
+  test('leaves the strip wrapper unraised while no card is dragged over it', () => {
+    renderStrip();
+
+    expect(container.querySelector('.innerWrapperCollapsed')).not.toBeNull();
+    expect(container.querySelector('.innerWrapperCollapsedDropTarget')).toBeNull();
+  });
+
+  test('raises the strip wrapper itself while a card is dragged over it', () => {
+    renderStrip();
+
+    mockIsDraggingOver = true;
+    rerender();
+
+    const wrapper = container.querySelector('.innerWrapperCollapsedDropTarget');
+    expect(wrapper).not.toBeNull();
+
+    // The modifier has to sit on the strip wrapper: that is the stacking context the
+    // expansion overlay must escape to paint over the following strips
+    expect(wrapper.classList.contains('innerWrapperCollapsed')).toBe(true);
+    expect(wrapper.querySelector('.collapsedDropExpansion')).not.toBeNull();
+
+    mockIsDraggingOver = false;
+    rerender();
+
+    expect(container.querySelector('.innerWrapperCollapsedDropTarget')).toBeNull();
+    expect(container.querySelector('.innerWrapperCollapsed')).not.toBeNull();
+  });
+
+  test('keeps the droppable mounted on the absolutely-positioned drop zone', () => {
+    mockIsDraggingOver = true;
+
+    renderStrip();
+
+    // The measured rect must stay the drop zone's, not the strip wrapper's
+    const dropZone = container.querySelector('.collapsedDropZone');
+    expect(dropZone).not.toBeNull();
+    expect(lastDroppableInnerRefNode()).toBe(dropZone);
+    expect(dropZone.hasAttribute('data-mock-droppable-props')).toBe(true);
+    expect(dropZone.parentElement).toBe(
+      container.querySelector('.innerWrapperCollapsedDropTarget'),
+    );
+  });
+
+  test('keeps the rbd placeholder inside the hidden placeholder container', () => {
+    mockIsDraggingOver = true;
+
+    renderStrip();
+
+    expect(
+      container.querySelector('.collapsedDropZone .collapsedDropPlaceholder').textContent,
+    ).toBe('RBD_PLACEHOLDER');
+  });
+
+  test('still registers exactly one droppable and one draggable for the list', () => {
+    mockIsDraggingOver = true;
+
+    renderStrip();
+
+    expect(mockDroppableRenderProps).toHaveLength(1);
+    expect(lastDroppableProps().droppableId).toBe('list:list-1');
+    expect(mockDraggableRenderProps).toHaveLength(1);
+    expect(lastDraggableProps().draggableId).toBe('list:list-1');
   });
 });
 

@@ -317,40 +317,6 @@ const List = React.memo(({ id, index, isDragActive }) => {
     </Droppable>
   );
 
-  // Purely visual drop target for the collapsed strip: an absolutely-positioned,
-  // pointer-events-none layer covering the strip, so hovering a dragged card over it
-  // never changes any list's layout (rbd's captured geometry stays valid). Only one
-  // of collapsedDropNode/cardsNode is ever mounted, so the droppableId never clashes.
-  const collapsedDropNode = (
-    <Droppable
-      droppableId={`list:${id}`}
-      type={DroppableTypes.CARD}
-      isDropDisabled={!list.isPersisted || !canDropCard || list.isCollapsed}
-    >
-      {({ innerRef, droppableProps, placeholder }, { isDraggingOver }) => (
-        <div
-          {...droppableProps} // eslint-disable-line react/jsx-props-no-spreading
-          ref={innerRef}
-          className={classNames(
-            styles.collapsedDropZone,
-            isDraggingOver && styles.collapsedDropZoneActive,
-          )}
-        >
-          {isDraggingOver && (
-            <div className={styles.collapsedDropExpansion}>
-              <div className={styles.collapsedDropExpansionName}>
-                {list.name}
-                <span className={styles.headerCardsCount}>{cardsCountText}</span>
-              </div>
-              <div className={styles.collapsedDropExpansionSlot} />
-            </div>
-          )}
-          <div className={styles.collapsedDropPlaceholder}>{placeholder}</div>
-        </div>
-      )}
-    </Droppable>
-  );
-
   return (
     <Draggable
       draggableId={`list:${id}`}
@@ -359,59 +325,97 @@ const List = React.memo(({ id, index, isDragActive }) => {
     >
       {({ innerRef, draggableProps, dragHandleProps }) =>
         isRenderedCollapsed ? (
-          <div
-            {...draggableProps} // eslint-disable-line react/jsx-props-no-spreading
-            data-drag-scroller
-            ref={innerRef}
-            className={styles.innerWrapperCollapsed}
+          // Purely visual drop target for the collapsed strip: an absolutely-positioned,
+          // pointer-events-none layer covering the strip, so hovering a dragged card over it
+          // never changes any list's layout (rbd's captured geometry stays valid). Only one
+          // of this droppable/cardsNode is ever mounted, so the droppableId never clashes.
+          // The droppable wraps the whole strip so isDraggingOver can also raise the strip
+          // wrapper, which is its own stacking context and would otherwise let every later
+          // strip paint over the expansion overlay; the node carrying innerRef/droppableProps
+          // stays the collapsedDropZone div, so the rect rbd measures is unchanged.
+          <Droppable
+            droppableId={`list:${id}`}
+            type={DroppableTypes.CARD}
+            isDropDisabled={!list.isPersisted || !canDropCard || list.isCollapsed}
           >
-            <div
-              ref={wrapperRef}
-              className={classNames(
-                styles.outerWrapper,
-                isFavoritesActive && styles.outerWrapperWithFavorites,
-                list.color && globalStyles[`background${upperFirst(camelCase(list.color))}Soft`],
-              )}
-              onTransitionEnd={handleWrapperTransitionEnd}
-            >
+            {({ innerRef: dropZoneRef, droppableProps, placeholder }, { isDraggingOver }) => (
               <div
-                {...dragHandleProps} // eslint-disable-line react/jsx-props-no-spreading
-                className={styles.headerCollapsed}
+                {...draggableProps} // eslint-disable-line react/jsx-props-no-spreading
+                data-drag-scroller
+                ref={innerRef}
+                className={classNames(
+                  styles.innerWrapperCollapsed,
+                  isDraggingOver && styles.innerWrapperCollapsedDropTarget,
+                )}
               >
-                {list.isPersisted && (
-                  <Button
-                    title={t('action.expandList')}
-                    className={styles.headerCollapseButton}
-                    onClick={handleCollapseClick}
+                <div
+                  ref={wrapperRef}
+                  className={classNames(
+                    styles.outerWrapper,
+                    isFavoritesActive && styles.outerWrapperWithFavorites,
+                    list.color &&
+                      globalStyles[`background${upperFirst(camelCase(list.color))}Soft`],
+                  )}
+                  onTransitionEnd={handleWrapperTransitionEnd}
+                >
+                  <div
+                    {...dragHandleProps} // eslint-disable-line react/jsx-props-no-spreading
+                    className={styles.headerCollapsed}
                   >
-                    <Icon fitted name="angle right" size="small" />
-                  </Button>
-                )}
-                {canFilter && isFilterActive && (
-                  <div className={styles.headerFilterSlotCollapsed}>
-                    <Icon
-                      name="filter"
-                      size="small"
-                      className={classNames(
-                        styles.headerFilterIconCollapsed,
-                        styles.headerIconHidable,
-                      )}
-                    />
-                    <Button
-                      title={t('action.clearFilter')}
-                      className={styles.headerClearFilterButtonCollapsed}
-                      onClick={handleClearFilterClick}
-                    >
-                      <Icon fitted name="cancel" size="small" />
-                    </Button>
+                    {list.isPersisted && (
+                      <Button
+                        title={t('action.expandList')}
+                        className={styles.headerCollapseButton}
+                        onClick={handleCollapseClick}
+                      >
+                        <Icon fitted name="angle right" size="small" />
+                      </Button>
+                    )}
+                    {canFilter && isFilterActive && (
+                      <div className={styles.headerFilterSlotCollapsed}>
+                        <Icon
+                          name="filter"
+                          size="small"
+                          className={classNames(
+                            styles.headerFilterIconCollapsed,
+                            styles.headerIconHidable,
+                          )}
+                        />
+                        <Button
+                          title={t('action.clearFilter')}
+                          className={styles.headerClearFilterButtonCollapsed}
+                          onClick={handleClearFilterClick}
+                        >
+                          <Icon fitted name="cancel" size="small" />
+                        </Button>
+                      </div>
+                    )}
+                    <div className={styles.headerNameCollapsed}>{list.name}</div>
+                    <div className={styles.headerCardsCountCollapsed}>({totalCardsCount})</div>
                   </div>
-                )}
-                <div className={styles.headerNameCollapsed}>{list.name}</div>
-                <div className={styles.headerCardsCountCollapsed}>({totalCardsCount})</div>
+                </div>
+                <div
+                  {...droppableProps} // eslint-disable-line react/jsx-props-no-spreading
+                  ref={dropZoneRef}
+                  className={classNames(
+                    styles.collapsedDropZone,
+                    isDraggingOver && styles.collapsedDropZoneActive,
+                  )}
+                >
+                  {isDraggingOver && (
+                    <div className={styles.collapsedDropExpansion}>
+                      <div className={styles.collapsedDropExpansionName}>
+                        {list.name}
+                        <span className={styles.headerCardsCount}>{cardsCountText}</span>
+                      </div>
+                      <div className={styles.collapsedDropExpansionSlot} />
+                    </div>
+                  )}
+                  <div className={styles.collapsedDropPlaceholder}>{placeholder}</div>
+                </div>
               </div>
-            </div>
-            {collapsedDropNode}
-          </div>
+            )}
+          </Droppable>
         ) : (
           <div
             {...draggableProps} // eslint-disable-line react/jsx-props-no-spreading
