@@ -12,7 +12,7 @@ import { Popup } from '../../../lib/custom-ui';
 import selectors from '../../../selectors';
 import entryActions from '../../../entry-actions';
 import { useSteps } from '../../../hooks';
-import { BoardMembershipRoles, ListTypes } from '../../../constants/Enums';
+import { BoardMembershipRoles } from '../../../constants/Enums';
 import LabelsStep from '../../labels/LabelsStep';
 import BoardMembershipsStep from '../../board-memberships/BoardMembershipsStep';
 import ConfirmationStep from '../../common/ConfirmationStep';
@@ -23,12 +23,12 @@ const StepTypes = {
   LABELS: 'LABELS',
   MEMBERS: 'MEMBERS',
   MOVE: 'MOVE',
+  ARCHIVE: 'ARCHIVE',
   DELETE: 'DELETE',
 };
 
 const BulkActionsBar = React.memo(() => {
   const selectCardById = useMemo(() => selectors.makeSelectCardById(), []);
-  const selectListById = useMemo(() => selectors.makeSelectListById(), []);
   const selectUserIdsByCardId = useMemo(() => selectors.makeSelectUserIdsByCardId(), []);
   const selectLabelIdsByCardId = useMemo(() => selectors.makeSelectLabelIdsByCardId(), []);
 
@@ -43,11 +43,8 @@ const BulkActionsBar = React.memo(() => {
           return acc;
         }
 
-        const list = selectListById(state, card.listId);
-
         acc.push({
           id: card.id,
-          listType: list ? list.type : null,
           userIds: selectUserIdsByCardId(state, id),
           labelIds: selectLabelIdsByCardId(state, id),
         });
@@ -59,7 +56,6 @@ const BulkActionsBar = React.memo(() => {
       left.every(
         (item, index) =>
           item.id === right[index].id &&
-          item.listType === right[index].listType &&
           shallowEqual(item.userIds, right[index].userIds) &&
           shallowEqual(item.labelIds, right[index].labelIds),
       ),
@@ -95,11 +91,6 @@ const BulkActionsBar = React.memo(() => {
       selectedCards.every((card) => card.userIds.includes(userId)),
     );
   }, [selectedCards]);
-
-  const hasCardInClosedList = useMemo(
-    () => selectedCards.some((card) => card.listType === ListTypes.CLOSED),
-    [selectedCards],
-  );
 
   const handleLabelSelect = useCallback(
     (labelId) => {
@@ -157,11 +148,9 @@ const BulkActionsBar = React.memo(() => {
     [selectedCards, handleBack, dispatch],
   );
 
-  const handleArchiveClick = useCallback(() => {
+  const handleArchiveConfirm = useCallback(() => {
     selectedCards.forEach((card) => {
-      if (card.listType === ListTypes.CLOSED) {
-        dispatch(entryActions.moveCardToArchive(card.id));
-      }
+      dispatch(entryActions.moveCardToArchive(card.id));
     });
 
     dispatch(entryActions.clearCardSelection());
@@ -189,6 +178,10 @@ const BulkActionsBar = React.memo(() => {
 
   const handleMoveClick = useCallback(() => {
     openStep(StepTypes.MOVE);
+  }, [openStep]);
+
+  const handleArchiveClick = useCallback(() => {
+    openStep(StepTypes.ARCHIVE);
   }, [openStep]);
 
   const handleDeleteClick = useCallback(() => {
@@ -264,6 +257,18 @@ const BulkActionsBar = React.memo(() => {
             </Popup.Content>
           </div>
         );
+      case StepTypes.ARCHIVE:
+        return (
+          <div className={styles.stepWrapper}>
+            <ConfirmationStep
+              title="common.archiveCards"
+              content="common.areYouSureYouWantToArchiveCards"
+              buttonContent="action.archiveCards"
+              onConfirm={handleArchiveConfirm}
+              onBack={handleBack}
+            />
+          </div>
+        );
       case StepTypes.DELETE:
         return (
           <div className={styles.stepWrapper}>
@@ -307,12 +312,7 @@ const BulkActionsBar = React.memo(() => {
               context: 'title',
             })}
           </button>
-          <button
-            type="button"
-            className={styles.button}
-            onClick={handleArchiveClick}
-            disabled={!hasCardInClosedList}
-          >
+          <button type="button" className={styles.button} onClick={handleArchiveClick}>
             <Icon name="archive" />
             {t('action.archive', {
               context: 'title',
