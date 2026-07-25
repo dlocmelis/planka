@@ -11,6 +11,8 @@ import { Progress } from 'semantic-ui-react';
 import { useDidUpdate, useToggle } from '../../../../lib/hooks';
 
 import selectors from '../../../../selectors';
+import { isListArchiveOrTrash } from '../../../../utils/record-helpers';
+import { BoardMembershipRoles } from '../../../../constants/Enums';
 import Task from './Task';
 
 import styles from './TaskList.module.scss';
@@ -18,6 +20,8 @@ import styles from './TaskList.module.scss';
 const TaskList = React.memo(({ id }) => {
   const selectTaskListById = useMemo(() => selectors.makeSelectTaskListById(), []);
   const selectTasksByTaskListId = useMemo(() => selectors.makeSelectTasksByTaskListId(), []);
+  const selectCardById = useMemo(() => selectors.makeSelectCardById(), []);
+  const selectListById = useMemo(() => selectors.makeSelectListById(), []);
 
   const taskLists = useSelector((state) => selectTaskListById(state, id));
   const tasks = useSelector((state) => selectTasksByTaskListId(state, id));
@@ -25,6 +29,24 @@ const TaskList = React.memo(({ id }) => {
   const defaultIsOpened = useSelector(
     (state) => selectors.selectCurrentBoard(state).expandTaskListsByDefault,
   );
+
+  // Mirrors the canToggle rule of the task list inside the card modal
+  const canToggle = useSelector((state) => {
+    const card = selectCardById(state, taskLists.cardId);
+
+    if (!card) {
+      return false;
+    }
+
+    const list = selectListById(state, card.listId);
+
+    if (!list || isListArchiveOrTrash(list)) {
+      return false;
+    }
+
+    const boardMembership = selectors.selectCurrentUserMembershipForCurrentBoard(state);
+    return !!boardMembership && boardMembership.role === BoardMembershipRoles.EDITOR;
+  });
 
   const [isOpened, toggleOpened] = useToggle(defaultIsOpened);
 
@@ -87,7 +109,7 @@ const TaskList = React.memo(({ id }) => {
       {isOpened && filteredTasks.length > 0 && (
         <ul className={styles.tasks}>
           {filteredTasks.map((task) => (
-            <Task key={task.id} id={task.id} />
+            <Task key={task.id} id={task.id} canToggle={canToggle} />
           ))}
         </ul>
       )}
