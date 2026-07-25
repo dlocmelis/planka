@@ -406,7 +406,10 @@ const List = React.memo(({ id, index, isDragActive }) => {
                     <div className={styles.collapsedDropExpansion}>
                       <div className={styles.collapsedDropExpansionName}>
                         {list.name}
-                        <span className={styles.headerCardsCount}>{cardsCountText}</span>
+                        {/* The raw total, same as the strip being expanded: the card is dropped
+                            into the whole list, not just the part the list filter leaves
+                            visible */}
+                        <span className={styles.headerCardsCount}>({totalCardsCount})</span>
                       </div>
                       <div className={styles.collapsedDropExpansionSlot} />
                     </div>
