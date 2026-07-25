@@ -6,17 +6,18 @@
 import React, { useCallback, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import classNames from 'classnames';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { Link } from 'react-router';
-import { Icon } from 'semantic-ui-react';
+import { Checkbox, Icon } from 'semantic-ui-react';
 
 import selectors from '../../../../selectors';
+import entryActions from '../../../../entry-actions';
 import Paths from '../../../../constants/Paths';
 import Linkify from '../../../common/Linkify';
 
 import styles from './Task.module.scss';
 
-const Task = React.memo(({ id }) => {
+const Task = React.memo(({ id, canToggle }) => {
   const selectTaskById = useMemo(() => selectors.makeSelectTaskById(), []);
   const selectLinkedCardById = useMemo(() => selectors.makeSelectCardById(), []);
 
@@ -26,12 +27,41 @@ const Task = React.memo(({ id }) => {
     (state) => task.linkedCardId && selectLinkedCardById(state, task.linkedCardId),
   );
 
+  const dispatch = useDispatch();
+
+  const handleToggleChange = useCallback(() => {
+    dispatch(
+      entryActions.updateTask(id, {
+        isCompleted: !task.isCompleted,
+      }),
+    );
+  }, [id, task.isCompleted, dispatch]);
+
+  // Keeps the toggle from opening the card modal or starting a card drag
+  const handleToggleClick = useCallback((event) => {
+    event.stopPropagation();
+  }, []);
+
+  const handleToggleMouseDown = useCallback((event) => {
+    event.stopPropagation();
+  }, []);
+
   const handleLinkClick = useCallback((event) => {
     event.stopPropagation();
   }, []);
 
   return (
     <li className={styles.wrapper}>
+      <span className={styles.checkboxWrapper}>
+        <Checkbox
+          checked={task.isCompleted}
+          disabled={!!task.linkedCardId || !task.isPersisted || !canToggle}
+          className={styles.checkbox}
+          onChange={handleToggleChange}
+          onClick={handleToggleClick}
+          onMouseDown={handleToggleMouseDown}
+        />
+      </span>
       {task.linkedCardId ? (
         <>
           <Icon name="exchange" size="small" className={styles.icon} />
@@ -52,6 +82,7 @@ const Task = React.memo(({ id }) => {
 
 Task.propTypes = {
   id: PropTypes.string.isRequired,
+  canToggle: PropTypes.bool.isRequired,
 };
 
 export default Task;

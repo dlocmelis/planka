@@ -4,11 +4,48 @@
  */
 
 :global(#app) {
+  .checkbox {
+    line-height: 12px;
+    margin: 0;
+    min-height: 12px;
+    min-width: 12px;
+    vertical-align: top;
+    width: 12px;
+
+    input,
+    label:before,
+    label:after {
+      height: 12px;
+      width: 12px;
+    }
+
+    label {
+      min-height: 12px;
+      padding-left: 12px;
+    }
+
+    label:after {
+      font-size: 9px;
+      line-height: 12px;
+    }
+  }
+
+  .checkboxWrapper {
+    flex: 0 0 auto;
+    height: 12px;
+    line-height: 1;
+    margin-right: 4px;
+    margin-top: 1px;
+  }
+
   .icon {
     color: rgba(9, 30, 66, 0.24);
   }
 
   .name {
+    flex: 1 1 auto;
+    min-width: 0;
+
     a:hover {
       text-decoration: underline;
     }
@@ -20,17 +57,11 @@
   }
 
   .wrapper {
-    display: block;
+    align-items: flex-start;
+    display: flex;
     font-size: 12px;
     line-height: 14px;
     overflow-wrap: break-word;
     padding-bottom: 6px;
-    padding-left: 14px;
-
-    &:before {
-      content: "–";
-      position: absolute;
-      left: 10px;
-    }
   }
 }
