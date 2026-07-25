@@ -21,6 +21,8 @@
     right: 2px;
     transition: background 85ms ease;
     width: 20px;
+    // Only needs to beat the non-positioned .content; must stay below the
+    // board overlay tier (BulkActionsBar)
     z-index: 1;
 
     &:hover {
@@ -46,6 +48,8 @@
     pointer-events: auto;
     position: absolute;
     right: 30px;
+    // Only needs to beat the non-positioned .content; must stay below the
+    // board overlay tier (BulkActionsBar)
     z-index: 1;
 
     label {
@@ -72,8 +76,8 @@
     box-shadow: 0 1px 0 #ccc;
     overflow: hidden;
     position: relative;
-    // Makes the card a self-contained stacking context so its absolutely
-    // positioned controls cannot paint over board-level overlays
+    // Visually inert, but makes every card its own stacking context so nothing
+    // declared inside a card can ever escape above a board-level overlay
     z-index: 0;
 
     &:hover {

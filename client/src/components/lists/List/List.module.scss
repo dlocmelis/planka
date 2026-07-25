@@ -224,7 +224,9 @@
     background: #dfe3e6;
     border-radius: 3px;
     box-shadow: 0 8px 16px -4px rgba(9, 30, 66, 0.25);
-    left: 0;
+    // Offset by the 4px the containing .collapsedDropZone is stretched past the strip on its
+    // left, so the preview stays flush with the strip it expands
+    left: 4px;
     padding: 8px;
     position: absolute;
     top: 0;
@@ -257,10 +259,13 @@
 
   .collapsedDropZone {
     bottom: 0;
-    left: 0;
+    // Stretched over half of the gutter on each side so the 36px hot-zone covers its own
+    // gutter (rbd matches the dragged card's center point). Not wider: overlapping the
+    // neighbouring list's droppable rect makes rbd's target resolution ambiguous
+    left: -4px;
     pointer-events: none;
     position: absolute;
-    right: 0;
+    right: -4px;
     top: 0;
   }
 
@@ -381,6 +386,13 @@
     position: relative;
     width: 36px;
     z-index: 1;
+  }
+
+  .innerWrapperCollapsedDropTarget {
+    // Every strip is a stacking context of its own, so a later sibling strip (opaque and
+    // full height) would paint over the hovered strip's expansion overlay. Raised only
+    // while a card is dragged over this strip, which lifts the whole context above them
+    z-index: 3;
   }
 
   .outerWrapper {
