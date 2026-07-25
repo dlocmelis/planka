@@ -224,7 +224,9 @@
     background: #dfe3e6;
     border-radius: 3px;
     box-shadow: 0 8px 16px -4px rgba(9, 30, 66, 0.25);
-    left: 0;
+    // Offset by the 4px the containing .collapsedDropZone is stretched past the strip on its
+    // left, so the preview stays flush with the strip it expands
+    left: 4px;
     padding: 8px;
     position: absolute;
     top: 0;
