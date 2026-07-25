@@ -46,17 +46,23 @@ const blockOf = (source, className) => {
   return source.slice(start, index - 1);
 };
 
-const pixelsOf = (source, className, property) => {
+// `unit` is matched literally right after the number, so an empty one only reads unitless
+// declarations (z-index) and never the leading digits of a `3px`
+const numericOf = (source, className, property, unit) => {
   const body = blockOf(source, className);
 
   if (body === null) {
     return null;
   }
 
-  const match = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*(-?\\d+)px`).exec(body);
+  const match = new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*(-?\\d+)${unit}(?![\\w.%-])`).exec(body);
 
   return match ? Number.parseInt(match[1], 10) : null;
 };
+
+const pixelsOf = (source, className, property) => numericOf(source, className, property, 'px');
+
+const unitlessOf = (source, className, property) => numericOf(source, className, property, '');
 
 const listScss = stripComments(fs.readFileSync(LIST_SCSS_PATH, 'utf8'));
 
@@ -74,12 +80,26 @@ describe('collapsed strip drop zone geometry', () => {
     // Symmetric, so the droppable's centre x — what rbd matches the dragged card against —
     // is exactly where it was before the extension
     expect(right).toBe(left);
-    expect(-left).toBeLessThanOrEqual(gutter / 2);
+    // Exactly the midpoint: two neighbouring zones then meet without overlapping and without
+    // leaving a dead strip of gutter between them
+    expect(-left * 2).toBe(gutter);
   });
 
   test('offsets the expansion preview so it stays flush with the strip', () => {
     // .collapsedDropExpansion is positioned against the drop zone, which starts left of the
     // strip, so its own left has to cancel that extension out
     expect(pixelsOf(listScss, 'collapsedDropExpansion', 'left')).toBe(-left);
+  });
+
+  test('raises the hovered strip above its neighbouring strips', () => {
+    // Every strip is a stacking context of its own, so sibling contexts with an equal z-index
+    // paint in DOM order and the strips after the hovered one — opaque and full height — would
+    // cover its expansion preview. The overlay is a child of that context and cannot escape it
+    // on its own, so the hovered strip itself has to outrank the others
+    const stripZIndex = unitlessOf(listScss, 'innerWrapperCollapsed', 'z-index');
+    const hoveredZIndex = unitlessOf(listScss, 'innerWrapperCollapsedDropTarget', 'z-index');
+
+    expect(stripZIndex).toEqual(expect.any(Number));
+    expect(hoveredZIndex).toBeGreaterThan(stripZIndex);
   });
 });
