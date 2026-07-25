@@ -16,6 +16,7 @@
     padding: 6px 12px;
     position: fixed;
     transform: translateX(-50%);
+    // 800 is the board-overlay tier; board content must stay below it
     z-index: 800;
   }
 
@@ -77,6 +78,7 @@
     padding: 0 12px 12px;
     position: fixed;
     transform: translateX(-50%);
+    // 800 is the board-overlay tier; board content must stay below it
     z-index: 800;
   }
 

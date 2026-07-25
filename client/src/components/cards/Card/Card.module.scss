@@ -21,7 +21,7 @@
     right: 2px;
     transition: background 85ms ease;
     width: 20px;
-    z-index: 1000;
+    z-index: 1;
 
     &:hover {
       background: #ebeef0;
@@ -46,7 +46,7 @@
     pointer-events: auto;
     position: absolute;
     right: 30px;
-    z-index: 1000;
+    z-index: 1;
 
     label {
       padding-left: 17px;
@@ -72,6 +72,9 @@
     box-shadow: 0 1px 0 #ccc;
     overflow: hidden;
     position: relative;
+    // Makes the card a self-contained stacking context so its absolutely
+    // positioned controls cannot paint over board-level overlays
+    z-index: 0;
 
     &:hover {
       background: #f5f6f7;
