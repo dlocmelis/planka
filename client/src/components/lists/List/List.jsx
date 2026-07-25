@@ -336,7 +336,7 @@ const List = React.memo(({ id, index, isDragActive }) => {
           <Droppable
             droppableId={`list:${id}`}
             type={DroppableTypes.CARD}
-            isDropDisabled={!list.isPersisted || !canDropCard || list.isCollapsed}
+            isDropDisabled={!list.isPersisted || !canDropCard}
           >
             {({ innerRef: dropZoneRef, droppableProps, placeholder }, { isDraggingOver }) => (
               <div
