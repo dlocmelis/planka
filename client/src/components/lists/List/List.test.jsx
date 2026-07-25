@@ -331,6 +331,20 @@ describe('collapsed strip card droppable', () => {
     expect(container.querySelector('.collapsedDropZoneActive')).toBeNull();
   });
 
+  test('expansion overlay shows the total card count, not the filtered one', () => {
+    mockList = { ...mockList, isCollapsed: true };
+    mockIsFilterActive = true;
+    mockCardIds = ['card-1', 'card-2'];
+    mockIsDraggingOver = true;
+
+    renderList();
+
+    const expansion = container.querySelector('.collapsedDropExpansion');
+    expect(expansion.textContent).toContain('Todo');
+    expect(expansion.textContent).toContain('(3)');
+    expect(expansion.textContent).not.toContain('common.of');
+  });
+
   test('renders the rbd placeholder inside the zero-size hidden container', () => {
     mockList = { ...mockList, isCollapsed: true };
 
