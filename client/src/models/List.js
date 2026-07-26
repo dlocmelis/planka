@@ -469,8 +469,9 @@ export default class extends BaseModel {
     const filterCreatorUserIds = this.board.filterCreatorUsers.toRefArray().map((user) => user.id);
 
     if (filterCreatorUserIds.length > 0) {
-      cardModels = cardModels.filter((cardModel) =>
-        filterCreatorUserIds.includes(cardModel.creatorUserId),
+      cardModels = cardModels.filter(
+        (cardModel) =>
+          cardModel.creatorUserId && filterCreatorUserIds.includes(cardModel.creatorUserId),
       );
     }
 

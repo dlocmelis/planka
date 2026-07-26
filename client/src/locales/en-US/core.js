@@ -212,6 +212,7 @@ export default {
       excludedEvents: 'Excluded events',
       expandTaskListsByDefault: 'Expand task lists by default',
       fields: 'Fields',
+      filterByCardCreator_title: 'Filter By Card Creator',
       filterByFields_title: 'Filter By Fields',
       filterByLabels_title: 'Filter By Labels',
       filterByMembers_title: 'Filter By Members',

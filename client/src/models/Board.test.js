@@ -35,8 +35,16 @@ const buildOrmState = () => {
   session.User.create({ id: 'user-1', role: UserRoles.ADMIN });
   session.User.create({ id: 'user-2', role: UserRoles.BOARD_USER });
 
-  session.BoardMembership.create({ id: 'membership-1', boardId: 'board-1', userId: 'user-1' });
-  session.BoardMembership.create({ id: 'membership-2', boardId: 'board-1', userId: 'user-2' });
+  session.BoardMembership.create({
+    id: 'membership-1',
+    boardId: 'board-1',
+    userId: 'user-1',
+  });
+  session.BoardMembership.create({
+    id: 'membership-2',
+    boardId: 'board-1',
+    userId: 'user-2',
+  });
 
   session.Label.create({ id: 'label-1', boardId: 'board-1', position: 1 });
 
@@ -64,6 +72,14 @@ const buildOrmState = () => {
     position: 3,
     name: 'Gamma card',
   });
+  // A card with no creator at all — it must never survive a non-empty creator filter.
+  session.Card.create({
+    id: 'card-4',
+    boardId: 'board-1',
+    listId: 'list-1',
+    position: 4,
+    name: 'Delta card',
+  });
 
   // Every other filter dimension matches more than one card, and matches cards with different
   // creators, so a test that combines it with the creator filter only passes if the creator
@@ -76,7 +92,7 @@ const buildOrmState = () => {
   return session.state;
 };
 
-const getFilteredCardIds = (ormState) =>
+const getBoardFilteredCardIds = (ormState) =>
   orm
     .session(ormState)
     .Board.withId('board-1')
@@ -102,20 +118,42 @@ const getFilterCreatorUserIds = (ormState) =>
 describe('Board creator filter', () => {
   test('keeps only cards created by the selected users', () => {
     const emptyFilterState = buildOrmState();
-    expect(getFilteredCardIds(emptyFilterState)).toEqual(['card-1', 'card-2', 'card-3']);
+    expect(getBoardFilteredCardIds(emptyFilterState)).toEqual([
+      'card-1',
+      'card-2',
+      'card-3',
+      'card-4',
+    ]);
 
     const ormState = reducer(
       emptyFilterState,
       actions.addCreatorUserToBoardFilter('user-1', 'board-1'),
     );
-    expect(getFilteredCardIds(ormState)).toEqual(['card-1', 'card-3']);
+    expect(getBoardFilteredCardIds(ormState)).toEqual(['card-1', 'card-3']);
     expect(getListFilteredCardIds(ormState)).toEqual(['card-1', 'card-3']);
+  });
 
-    const nextOrmState = reducer(
-      ormState,
-      actions.removeCreatorUserFromBoardFilter('user-1', 'board-1'),
+  test('restores every card once the last creator is removed', () => {
+    let ormState = reducer(
+      buildOrmState(),
+      actions.addCreatorUserToBoardFilter('user-1', 'board-1'),
     );
-    expect(getFilteredCardIds(nextOrmState)).toEqual(['card-1', 'card-2', 'card-3']);
+    ormState = reducer(ormState, actions.removeCreatorUserFromBoardFilter('user-1', 'board-1'));
+
+    expect(getBoardFilteredCardIds(ormState)).toEqual(['card-1', 'card-2', 'card-3', 'card-4']);
+    expect(getListFilteredCardIds(ormState)).toEqual(['card-1', 'card-2', 'card-3', 'card-4']);
+  });
+
+  test('accumulates several creators and drops cards without a creator', () => {
+    let ormState = reducer(
+      buildOrmState(),
+      actions.addCreatorUserToBoardFilter('user-1', 'board-1'),
+    );
+    ormState = reducer(ormState, actions.addCreatorUserToBoardFilter('user-2', 'board-1'));
+
+    expect(getFilterCreatorUserIds(ormState)).toEqual(['user-1', 'user-2']);
+    expect(getBoardFilteredCardIds(ormState)).toEqual(['card-1', 'card-2', 'card-3']);
+    expect(getListFilteredCardIds(ormState)).toEqual(['card-1', 'card-2', 'card-3']);
   });
 
   test('replace empties the previously selected creators', () => {
@@ -126,7 +164,7 @@ describe('Board creator filter', () => {
     ormState = reducer(ormState, actions.addCreatorUserToBoardFilter('user-2', 'board-1', true));
 
     expect(getFilterCreatorUserIds(ormState)).toEqual(['user-2']);
-    expect(getFilteredCardIds(ormState)).toEqual(['card-2']);
+    expect(getBoardFilteredCardIds(ormState)).toEqual(['card-2']);
   });
 
   test('combines with the member filter', () => {
@@ -134,7 +172,7 @@ describe('Board creator filter', () => {
       buildOrmState(),
       actions.addUserToBoardFilter('user-2', 'board-1'),
     );
-    expect(getFilteredCardIds(memberFilterState)).toEqual(['card-1', 'card-2']);
+    expect(getBoardFilteredCardIds(memberFilterState)).toEqual(['card-1', 'card-2']);
     expect(getListFilteredCardIds(memberFilterState)).toEqual(['card-1', 'card-2']);
 
     const ormState = reducer(
@@ -142,7 +180,7 @@ describe('Board creator filter', () => {
       actions.addCreatorUserToBoardFilter('user-1', 'board-1'),
     );
 
-    expect(getFilteredCardIds(ormState)).toEqual(['card-1']);
+    expect(getBoardFilteredCardIds(ormState)).toEqual(['card-1']);
     expect(getListFilteredCardIds(ormState)).toEqual(['card-1']);
   });
 
@@ -151,7 +189,7 @@ describe('Board creator filter', () => {
       buildOrmState(),
       actions.addLabelToBoardFilter('label-1', 'board-1'),
     );
-    expect(getFilteredCardIds(labelFilterState)).toEqual(['card-1', 'card-2']);
+    expect(getBoardFilteredCardIds(labelFilterState)).toEqual(['card-1', 'card-2']);
     expect(getListFilteredCardIds(labelFilterState)).toEqual(['card-1', 'card-2']);
 
     const ormState = reducer(
@@ -159,18 +197,18 @@ describe('Board creator filter', () => {
       actions.addCreatorUserToBoardFilter('user-1', 'board-1'),
     );
 
-    expect(getFilteredCardIds(ormState)).toEqual(['card-1']);
+    expect(getBoardFilteredCardIds(ormState)).toEqual(['card-1']);
     expect(getListFilteredCardIds(ormState)).toEqual(['card-1']);
   });
 
   test('combines with search', () => {
     const searchState = reducer(buildOrmState(), actions.searchInBoard('board-1', 'card'));
-    expect(getFilteredCardIds(searchState)).toEqual(['card-1', 'card-2', 'card-3']);
-    expect(getListFilteredCardIds(searchState)).toEqual(['card-1', 'card-2', 'card-3']);
+    expect(getBoardFilteredCardIds(searchState)).toEqual(['card-1', 'card-2', 'card-3', 'card-4']);
+    expect(getListFilteredCardIds(searchState)).toEqual(['card-1', 'card-2', 'card-3', 'card-4']);
 
     const ormState = reducer(searchState, actions.addCreatorUserToBoardFilter('user-1', 'board-1'));
 
-    expect(getFilteredCardIds(ormState)).toEqual(['card-1', 'card-3']);
+    expect(getBoardFilteredCardIds(ormState)).toEqual(['card-1', 'card-3']);
     expect(getListFilteredCardIds(ormState)).toEqual(['card-1', 'card-3']);
   });
 
@@ -230,7 +268,9 @@ describe('Board creator filter', () => {
 
     const state = {
       auth: { userId: 'user-1' },
-      router: { location: { pathname: Paths.BOARDS.replace(':id', 'board-1') } },
+      router: {
+        location: { pathname: Paths.BOARDS.replace(':id', 'board-1') },
+      },
       orm: ormState,
     };
 

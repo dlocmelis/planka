@@ -489,24 +489,6 @@ export const selectFilterUserIdsForCurrentBoard = createSelector(
   },
 );
 
-export const selectFilterLabelIdsForCurrentBoard = createSelector(
-  orm,
-  (state) => selectPath(state).boardId,
-  ({ Board }, id) => {
-    if (!id) {
-      return id;
-    }
-
-    const boardModel = Board.withId(id);
-
-    if (!boardModel) {
-      return boardModel;
-    }
-
-    return boardModel.filterLabels.toRefArray().map((label) => label.id);
-  },
-);
-
 export const selectFilterCreatorUserIdsForCurrentBoard = createSelector(
   orm,
   (state) => selectPath(state).boardId,
@@ -522,6 +504,24 @@ export const selectFilterCreatorUserIdsForCurrentBoard = createSelector(
     }
 
     return boardModel.filterCreatorUsers.toRefArray().map((user) => user.id);
+  },
+);
+
+export const selectFilterLabelIdsForCurrentBoard = createSelector(
+  orm,
+  (state) => selectPath(state).boardId,
+  ({ Board }, id) => {
+    if (!id) {
+      return id;
+    }
+
+    const boardModel = Board.withId(id);
+
+    if (!boardModel) {
+      return boardModel;
+    }
+
+    return boardModel.filterLabels.toRefArray().map((label) => label.id);
   },
 );
 
@@ -558,7 +558,7 @@ export default {
   selectCustomFieldGroupsForCurrentBoard,
   selectActivityIdsForCurrentBoard,
   selectFilterUserIdsForCurrentBoard,
-  selectFilterLabelIdsForCurrentBoard,
   selectFilterCreatorUserIdsForCurrentBoard,
+  selectFilterLabelIdsForCurrentBoard,
   selectIsBoardWithIdExists,
 };
