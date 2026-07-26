@@ -167,10 +167,17 @@ export default class extends BaseModel {
         Board.withId(payload.boardId).filterUsers.remove(payload.id);
 
         break;
-      case ActionTypes.CREATOR_USER_TO_BOARD_FILTER_ADD:
-        Board.withId(payload.boardId).filterCreatorUsers.add(payload.id);
+      case ActionTypes.CREATOR_USER_TO_BOARD_FILTER_ADD: {
+        const boardModel = Board.withId(payload.boardId);
+
+        if (payload.replace) {
+          boardModel.filterCreatorUsers.clear();
+        }
+
+        boardModel.filterCreatorUsers.add(payload.id);
 
         break;
+      }
       case ActionTypes.CREATOR_USER_FROM_BOARD_FILTER_REMOVE:
         Board.withId(payload.boardId).filterCreatorUsers.remove(payload.id);
 

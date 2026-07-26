@@ -258,10 +258,11 @@ const removeUserFromFilterInCurrentBoard = (id) => ({
   },
 });
 
-const addCreatorUserToFilterInCurrentBoard = (id) => ({
+const addCreatorUserToFilterInCurrentBoard = (id, replace = false) => ({
   type: EntryActionTypes.CREATOR_USER_TO_FILTER_IN_CURRENT_BOARD_ADD,
   payload: {
     id,
+    replace,
   },
 });
 

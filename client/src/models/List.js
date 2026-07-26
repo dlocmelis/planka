@@ -102,6 +102,8 @@ export default class extends BaseModel {
         break;
       case ActionTypes.USER_TO_BOARD_FILTER_ADD:
       case ActionTypes.USER_FROM_BOARD_FILTER_REMOVE:
+      case ActionTypes.CREATOR_USER_TO_BOARD_FILTER_ADD:
+      case ActionTypes.CREATOR_USER_FROM_BOARD_FILTER_REMOVE:
       case ActionTypes.IN_BOARD_SEARCH:
       case ActionTypes.LABEL_TO_BOARD_FILTER_ADD:
       case ActionTypes.LABEL_FROM_BOARD_FILTER_REMOVE:

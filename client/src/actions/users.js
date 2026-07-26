@@ -405,19 +405,22 @@ const removeUserFromBoardFilter = (id, boardId, currentListId) => ({
   },
 });
 
-const addCreatorUserToBoardFilter = (id, boardId) => ({
+const addCreatorUserToBoardFilter = (id, boardId, replace, currentListId) => ({
   type: ActionTypes.CREATOR_USER_TO_BOARD_FILTER_ADD,
   payload: {
     id,
     boardId,
+    replace,
+    currentListId,
   },
 });
 
-const removeCreatorUserFromBoardFilter = (id, boardId) => ({
+const removeCreatorUserFromBoardFilter = (id, boardId, currentListId) => ({
   type: ActionTypes.CREATOR_USER_FROM_BOARD_FILTER_REMOVE,
   payload: {
     id,
     boardId,
+    currentListId,
   },
 });
 
