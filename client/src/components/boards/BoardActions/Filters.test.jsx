@@ -186,6 +186,7 @@ test('the creator popup select and deselect handlers dispatch the creator filter
       type: EntryActionTypes.CREATOR_USER_TO_FILTER_IN_CURRENT_BOARD_ADD,
       payload: {
         id: 'user-2',
+        replace: false,
       },
     },
   ]);
@@ -215,6 +216,7 @@ test('the shortcut dispatches adding the current user as creator without a board
       type: EntryActionTypes.CREATOR_USER_TO_FILTER_IN_CURRENT_BOARD_ADD,
       payload: {
         id: CURRENT_USER_ID,
+        replace: false,
       },
     },
   ]);
