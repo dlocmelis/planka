@@ -38,13 +38,20 @@ const getByListId = async (listId, { exceptIdOrIds, sort = ['position', 'id'] } 
   return defaultFind(criteria, { sort });
 };
 
-const getByEndlessListId = async (listId, { before, search, userIds, labelIds }) => {
-  if (search || userIds || labelIds) {
+const getByEndlessListId = async (
+  listId,
+  { before, search, userIds, labelIds, creatorUserIds },
+) => {
+  if (search || userIds || labelIds || creatorUserIds) {
     if (userIds && userIds.length === 0) {
       return [];
     }
 
     if (labelIds && labelIds.length === 0) {
+      return [];
+    }
+
+    if (creatorUserIds && creatorUserIds.length === 0) {
       return [];
     }
 
@@ -106,6 +113,15 @@ const getByEndlessListId = async (listId, { before, search, userIds, labelIds })
       });
 
       query += ` AND card_label.label_id IN (${inValues.join(', ')})`;
+    }
+
+    if (creatorUserIds) {
+      const inValues = creatorUserIds.map((creatorUserId) => {
+        queryValues.push(creatorUserId);
+        return `$${queryValues.length}`;
+      });
+
+      query += ` AND card.creator_user_id IN (${inValues.join(', ')})`;
     }
 
     query += ` LIMIT ${LIMIT}`;

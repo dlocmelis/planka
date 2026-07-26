@@ -5,7 +5,8 @@ const rc = require('sails/accessible/rc');
 process.env.NODE_ENV = 'test';
 
 before(function beforeCallback(done) {
-  this.timeout(5000);
+  // Lifting against a real database (TEST_DATABASE_URL) takes noticeably longer than sails-disk
+  this.timeout(30000);
 
   dotenv.config({ quiet: true });
 

@@ -57,6 +57,13 @@
  *         schema:
  *           type: string
  *           example: 1357158568008091268,1357158568008091269
+ *       - name: creatorUserIds
+ *         in: query
+ *         required: false
+ *         description: Comma-separated user IDs to filter by card creator
+ *         schema:
+ *           type: string
+ *           example: 1357158568008091266,1357158568008091267
  *     responses:
  *       200:
  *         description: Cards retrieved successfully
@@ -190,6 +197,7 @@ module.exports = {
     },
     userIds: idsInput,
     labelIds: idsInput,
+    creatorUserIds: idsInput,
   },
 
   exits: {
@@ -244,11 +252,20 @@ module.exports = {
       filterLabelIds = filterLabelIds.filter((labelId) => availableLabelIdsSet.has(labelId));
     }
 
+    // Not narrowed to board memberships (unlike `userIds` above): a card's creator may have
+    // left the board or never been a member, and `creatorUserId` is already part of the
+    // response for every card the caller can read here, so this exposes nothing new
+    let filterCreatorUserIds;
+    if (inputs.creatorUserIds) {
+      filterCreatorUserIds = _.uniq(inputs.creatorUserIds.split(','));
+    }
+
     const cards = await Card.qm.getByEndlessListId(list.id, {
       before: inputs.before,
       search: inputs.search,
       userIds: filterUserIds,
       labelIds: filterLabelIds,
+      creatorUserIds: filterCreatorUserIds,
     });
 
     const cardIds = sails.helpers.utils.mapRecords(cards);
