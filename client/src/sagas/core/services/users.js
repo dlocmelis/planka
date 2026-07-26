@@ -501,6 +501,20 @@ export function* removeUserFromFilterInCurrentBoard(id) {
   yield call(removeUserFromBoardFilter, id, boardId);
 }
 
+// Unlike the member filter, the creator filter is applied client-side only, so there is
+// no current list whose fetched cards would have to be invalidated.
+export function* addCreatorUserToFilterInCurrentBoard(id) {
+  const { boardId } = yield select(selectors.selectPath);
+
+  yield put(actions.addCreatorUserToBoardFilter(id, boardId));
+}
+
+export function* removeCreatorUserFromFilterInCurrentBoard(id) {
+  const { boardId } = yield select(selectors.selectPath);
+
+  yield put(actions.removeCreatorUserFromBoardFilter(id, boardId));
+}
+
 export function* addUserToListFilter(id, listId) {
   yield put(actions.addUserToListFilter(id, listId));
 }
@@ -550,6 +564,8 @@ export default {
   addUserToFilterInCurrentBoard,
   removeUserFromBoardFilter,
   removeUserFromFilterInCurrentBoard,
+  addCreatorUserToFilterInCurrentBoard,
+  removeCreatorUserFromFilterInCurrentBoard,
   addUserToListFilter,
   removeUserFromListFilter,
 };

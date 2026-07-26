@@ -62,6 +62,7 @@ export default class extends BaseModel {
       relatedName: 'boards',
     }),
     filterUsers: many('User', 'filterBoards'),
+    filterCreatorUsers: many('User', 'filterCreatorBoards'),
     filterLabels: many('Label', 'filterBoards'),
   };
 
@@ -164,6 +165,14 @@ export default class extends BaseModel {
       }
       case ActionTypes.USER_FROM_BOARD_FILTER_REMOVE:
         Board.withId(payload.boardId).filterUsers.remove(payload.id);
+
+        break;
+      case ActionTypes.CREATOR_USER_TO_BOARD_FILTER_ADD:
+        Board.withId(payload.boardId).filterCreatorUsers.add(payload.id);
+
+        break;
+      case ActionTypes.CREATOR_USER_FROM_BOARD_FILTER_REMOVE:
+        Board.withId(payload.boardId).filterCreatorUsers.remove(payload.id);
 
         break;
       case ActionTypes.PROJECT_CREATE_HANDLE:
@@ -389,6 +398,15 @@ export default class extends BaseModel {
       });
     }
 
+    const filterCreatorUserIds = this.filterCreatorUsers.toRefArray().map((user) => user.id);
+
+    if (filterCreatorUserIds.length > 0) {
+      cardModels = cardModels.filter(
+        (cardModel) =>
+          cardModel.creatorUserId && filterCreatorUserIds.includes(cardModel.creatorUserId),
+      );
+    }
+
     return cardModels;
   }
 
@@ -443,6 +461,7 @@ export default class extends BaseModel {
 
   deleteClearable() {
     this.filterUsers.clear();
+    this.filterCreatorUsers.clear();
     this.filterLabels.clear();
   }
 

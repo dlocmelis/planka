@@ -405,6 +405,22 @@ const removeUserFromBoardFilter = (id, boardId, currentListId) => ({
   },
 });
 
+const addCreatorUserToBoardFilter = (id, boardId) => ({
+  type: ActionTypes.CREATOR_USER_TO_BOARD_FILTER_ADD,
+  payload: {
+    id,
+    boardId,
+  },
+});
+
+const removeCreatorUserFromBoardFilter = (id, boardId) => ({
+  type: ActionTypes.CREATOR_USER_FROM_BOARD_FILTER_REMOVE,
+  payload: {
+    id,
+    boardId,
+  },
+});
+
 const addUserToListFilter = (id, listId) => ({
   type: ActionTypes.USER_TO_LIST_FILTER_ADD,
   payload: {
@@ -446,6 +462,8 @@ export default {
   handleUserFromCardRemove,
   addUserToBoardFilter,
   removeUserFromBoardFilter,
+  addCreatorUserToBoardFilter,
+  removeCreatorUserFromBoardFilter,
   addUserToListFilter,
   removeUserFromListFilter,
 };
