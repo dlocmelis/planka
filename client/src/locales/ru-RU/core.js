@@ -212,6 +212,7 @@ export default {
       events: 'События',
       excludedEvents: 'Исключенные события',
       expandTaskListsByDefault: 'Разворачивать списки задач по умолчанию',
+      filterByCardCreator_title: 'Фильтр по создателю',
       filterByLabels_title: 'Фильтр по меткам',
       filterByMembers_title: 'Фильтр по участникам',
       forPersonalProjects: 'Для личных проектов.',

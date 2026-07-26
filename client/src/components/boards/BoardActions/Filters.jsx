@@ -27,6 +27,7 @@ import styles from './Filters.module.scss';
 const Filters = React.memo(() => {
   const board = useSelector(selectors.selectCurrentBoard);
   const userIds = useSelector(selectors.selectFilterUserIdsForCurrentBoard);
+  const creatorUserIds = useSelector(selectors.selectFilterCreatorUserIdsForCurrentBoard);
   const labelIds = useSelector(selectors.selectFilterLabelIdsForCurrentBoard);
   const hiddenListIds = useSelector(selectors.selectHiddenListIdsForCurrentBoard);
   const kanbanLists = useSelector(selectors.selectKanbanListsForCurrentBoard);
@@ -83,6 +84,35 @@ const Filters = React.memo(() => {
       },
     }) => {
       dispatch(entryActions.removeUserFromFilterInCurrentBoard(userId));
+    },
+    [dispatch],
+  );
+
+  const handleCreatorUserSelect = useCallback(
+    (userId) => {
+      dispatch(entryActions.addCreatorUserToFilterInCurrentBoard(userId));
+    },
+    [dispatch],
+  );
+
+  const handleCurrentUserAsCreatorSelect = useCallback(() => {
+    dispatch(entryActions.addCreatorUserToFilterInCurrentBoard(currentUserId));
+  }, [currentUserId, dispatch]);
+
+  const handleCreatorUserDeselect = useCallback(
+    (userId) => {
+      dispatch(entryActions.removeCreatorUserFromFilterInCurrentBoard(userId));
+    },
+    [dispatch],
+  );
+
+  const handleCreatorUserClick = useCallback(
+    ({
+      currentTarget: {
+        dataset: { id: userId },
+      },
+    }) => {
+      dispatch(entryActions.removeCreatorUserFromFilterInCurrentBoard(userId));
     },
     [dispatch],
   );
@@ -219,6 +249,37 @@ const Filters = React.memo(() => {
         {labelIds.map((labelId) => (
           <span key={labelId} className={styles.filterItem}>
             <LabelChip id={labelId} size="small" onClick={handleLabelClick} />
+          </span>
+        ))}
+      </span>
+      <span className={styles.filter}>
+        <BoardMembershipsPopup
+          currentUserIds={creatorUserIds}
+          title="common.filterByCardCreator"
+          onUserSelect={handleCreatorUserSelect}
+          onUserDeselect={handleCreatorUserDeselect}
+        >
+          <button type="button" className={styles.filterButton}>
+            <span className={styles.filterTitle}>{`${t('common.creator')}:`}</span>
+            {creatorUserIds.length === 0 && (
+              <span className={styles.filterLabel}>{t('common.all')}</span>
+            )}
+          </button>
+        </BoardMembershipsPopup>
+        {creatorUserIds.length === 0 && (
+          <button
+            type="button"
+            className={styles.filterButton}
+            onClick={handleCurrentUserAsCreatorSelect}
+          >
+            <span className={styles.filterLabel}>
+              <Icon fitted name="target" className={styles.filterLabelIcon} />
+            </span>
+          </button>
+        )}
+        {creatorUserIds.map((userId) => (
+          <span key={userId} className={styles.filterItem}>
+            <UserAvatar id={userId} size="tiny" onClick={handleCreatorUserClick} />
           </span>
         ))}
       </span>
