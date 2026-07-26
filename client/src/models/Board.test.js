@@ -65,8 +65,13 @@ const buildOrmState = () => {
     name: 'Gamma card',
   });
 
+  // Every other filter dimension matches more than one card, and matches cards with different
+  // creators, so a test that combines it with the creator filter only passes if the creator
+  // filter actually narrows the result.
   session.Card.withId('card-1').users.add('user-2');
+  session.Card.withId('card-2').users.add('user-2');
   session.Card.withId('card-1').labels.add('label-1');
+  session.Card.withId('card-2').labels.add('label-1');
 
   return session.state;
 };
@@ -125,36 +130,48 @@ describe('Board creator filter', () => {
   });
 
   test('combines with the member filter', () => {
-    let ormState = reducer(
+    const memberFilterState = reducer(
       buildOrmState(),
+      actions.addUserToBoardFilter('user-2', 'board-1'),
+    );
+    expect(getFilteredCardIds(memberFilterState)).toEqual(['card-1', 'card-2']);
+    expect(getListFilteredCardIds(memberFilterState)).toEqual(['card-1', 'card-2']);
+
+    const ormState = reducer(
+      memberFilterState,
       actions.addCreatorUserToBoardFilter('user-1', 'board-1'),
     );
-    ormState = reducer(ormState, actions.addUserToBoardFilter('user-2', 'board-1'));
 
     expect(getFilteredCardIds(ormState)).toEqual(['card-1']);
     expect(getListFilteredCardIds(ormState)).toEqual(['card-1']);
   });
 
   test('combines with the label filter', () => {
-    let ormState = reducer(
+    const labelFilterState = reducer(
       buildOrmState(),
+      actions.addLabelToBoardFilter('label-1', 'board-1'),
+    );
+    expect(getFilteredCardIds(labelFilterState)).toEqual(['card-1', 'card-2']);
+    expect(getListFilteredCardIds(labelFilterState)).toEqual(['card-1', 'card-2']);
+
+    const ormState = reducer(
+      labelFilterState,
       actions.addCreatorUserToBoardFilter('user-1', 'board-1'),
     );
-    ormState = reducer(ormState, actions.addLabelToBoardFilter('label-1', 'board-1'));
 
     expect(getFilteredCardIds(ormState)).toEqual(['card-1']);
     expect(getListFilteredCardIds(ormState)).toEqual(['card-1']);
   });
 
   test('combines with search', () => {
-    let ormState = reducer(
-      buildOrmState(),
-      actions.addCreatorUserToBoardFilter('user-1', 'board-1'),
-    );
-    ormState = reducer(ormState, actions.searchInBoard('board-1', 'gamma'));
+    const searchState = reducer(buildOrmState(), actions.searchInBoard('board-1', 'card'));
+    expect(getFilteredCardIds(searchState)).toEqual(['card-1', 'card-2', 'card-3']);
+    expect(getListFilteredCardIds(searchState)).toEqual(['card-1', 'card-2', 'card-3']);
 
-    expect(getFilteredCardIds(ormState)).toEqual(['card-3']);
-    expect(getListFilteredCardIds(ormState)).toEqual(['card-3']);
+    const ormState = reducer(searchState, actions.addCreatorUserToBoardFilter('user-1', 'board-1'));
+
+    expect(getFilteredCardIds(ormState)).toEqual(['card-1', 'card-3']);
+    expect(getListFilteredCardIds(ormState)).toEqual(['card-1', 'card-3']);
   });
 
   test('resets the pagination of the current list', () => {
