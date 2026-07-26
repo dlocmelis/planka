@@ -501,6 +501,30 @@ export function* removeUserFromFilterInCurrentBoard(id) {
   yield call(removeUserFromBoardFilter, id, boardId);
 }
 
+export function* addCreatorUserToBoardFilter(id, boardId, replace) {
+  const currentListId = yield select(selectors.selectCurrentListId);
+
+  yield put(actions.addCreatorUserToBoardFilter(id, boardId, replace, currentListId));
+}
+
+export function* addCreatorUserToFilterInCurrentBoard(id, replace) {
+  const { boardId } = yield select(selectors.selectPath);
+
+  yield call(addCreatorUserToBoardFilter, id, boardId, replace);
+}
+
+export function* removeCreatorUserFromBoardFilter(id, boardId) {
+  const currentListId = yield select(selectors.selectCurrentListId);
+
+  yield put(actions.removeCreatorUserFromBoardFilter(id, boardId, currentListId));
+}
+
+export function* removeCreatorUserFromFilterInCurrentBoard(id) {
+  const { boardId } = yield select(selectors.selectPath);
+
+  yield call(removeCreatorUserFromBoardFilter, id, boardId);
+}
+
 export function* addUserToListFilter(id, listId) {
   yield put(actions.addUserToListFilter(id, listId));
 }
@@ -550,6 +574,10 @@ export default {
   addUserToFilterInCurrentBoard,
   removeUserFromBoardFilter,
   removeUserFromFilterInCurrentBoard,
+  addCreatorUserToBoardFilter,
+  addCreatorUserToFilterInCurrentBoard,
+  removeCreatorUserFromBoardFilter,
+  removeCreatorUserFromFilterInCurrentBoard,
   addUserToListFilter,
   removeUserFromListFilter,
 };

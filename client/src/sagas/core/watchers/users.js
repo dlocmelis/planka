@@ -114,6 +114,14 @@ export default function* usersWatchers() {
     takeEvery(EntryActionTypes.USER_FROM_FILTER_IN_CURRENT_BOARD_REMOVE, ({ payload: { id } }) =>
       services.removeUserFromFilterInCurrentBoard(id),
     ),
+    takeEvery(
+      EntryActionTypes.CREATOR_USER_TO_FILTER_IN_CURRENT_BOARD_ADD,
+      ({ payload: { id, replace } }) => services.addCreatorUserToFilterInCurrentBoard(id, replace),
+    ),
+    takeEvery(
+      EntryActionTypes.CREATOR_USER_FROM_FILTER_IN_CURRENT_BOARD_REMOVE,
+      ({ payload: { id } }) => services.removeCreatorUserFromFilterInCurrentBoard(id),
+    ),
     takeEvery(EntryActionTypes.USER_TO_LIST_FILTER_ADD, ({ payload: { id, listId } }) =>
       services.addUserToListFilter(id, listId),
     ),

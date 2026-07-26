@@ -102,6 +102,8 @@ export default class extends BaseModel {
         break;
       case ActionTypes.USER_TO_BOARD_FILTER_ADD:
       case ActionTypes.USER_FROM_BOARD_FILTER_REMOVE:
+      case ActionTypes.CREATOR_USER_TO_BOARD_FILTER_ADD:
+      case ActionTypes.CREATOR_USER_FROM_BOARD_FILTER_REMOVE:
       case ActionTypes.IN_BOARD_SEARCH:
       case ActionTypes.LABEL_TO_BOARD_FILTER_ADD:
       case ActionTypes.LABEL_FROM_BOARD_FILTER_REMOVE:
@@ -462,6 +464,14 @@ export default class extends BaseModel {
         const labels = cardModel.labels.toRefArray();
         return labels.some((label) => filterLabelIds.includes(label.id));
       });
+    }
+
+    const filterCreatorUserIds = this.board.filterCreatorUsers.toRefArray().map((user) => user.id);
+
+    if (filterCreatorUserIds.length > 0) {
+      cardModels = cardModels.filter((cardModel) =>
+        filterCreatorUserIds.includes(cardModel.creatorUserId),
+      );
     }
 
     const listFilterUserIds = this.filterUsers.toRefArray().map((user) => user.id);

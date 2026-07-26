@@ -37,6 +37,7 @@ export function* fetchCards(listId) {
   const { search } = yield select(selectors.selectBoardById, boardId);
   const filterUserIds = yield select(selectors.selectFilterUserIdsForCurrentBoard);
   const filterLabelIds = yield select(selectors.selectFilterLabelIdsForCurrentBoard);
+  const filterCreatorUserIds = yield select(selectors.selectFilterCreatorUserIdsForCurrentBoard);
 
   function* getCardsRequest() {
     const response = {};
@@ -46,6 +47,8 @@ export function* fetchCards(listId) {
         search: (search && search.trim()) || undefined,
         userIds: filterUserIds.length > 0 ? filterUserIds.join(',') : undefined,
         labelIds: filterLabelIds.length > 0 ? filterLabelIds.join(',') : undefined,
+        creatorUserIds:
+          filterCreatorUserIds.length > 0 ? filterCreatorUserIds.join(',') : undefined,
         before: lastCard || undefined,
       });
     } catch (error) {

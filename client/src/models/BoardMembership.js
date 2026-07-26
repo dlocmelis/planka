@@ -142,6 +142,12 @@ export default class extends BaseModel {
     } catch {
       /* empty */
     }
+
+    try {
+      this.board.filterCreatorUsers.remove(this.userId);
+    } catch {
+      /* empty */
+    }
   }
 
   deleteWithRelated(isCurrentUser) {
