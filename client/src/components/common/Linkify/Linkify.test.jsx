@@ -63,6 +63,25 @@ const render = (children) => {
   });
 };
 
+// The shape the incident actually had: the subtask name is inside a card
+// modal, and the board is rendered behind it in the same React root. That is
+// why one bad link took the whole page and not just the link — a throw during
+// render propagates to the root, and React unmounts everything under it.
+const renderBoardWithCardModal = (subtaskName) => {
+  act(() => {
+    root.render(
+      <Provider store={store}>
+        <div>
+          <div data-testid="board">Lists and cards</div>
+          <div data-testid="card-modal">
+            <Linkify>{subtaskName}</Linkify>
+          </div>
+        </div>
+      </Provider>,
+    );
+  });
+};
+
 beforeEach(() => {
   mockCardsById = {};
 
@@ -90,6 +109,21 @@ describe('Linkify', () => {
     render(INCIDENT_NAME);
 
     expect(container.textContent).toBe(INCIDENT_NAME);
+    expect(container.childNodes.length).toBeGreaterThan(0);
+  });
+
+  it('leaves the board standing behind a card whose subtask name it cannot parse', () => {
+    renderBoardWithCardModal(INCIDENT_NAME);
+
+    // The acceptance criterion in its own words: opening the card must not
+    // blank the board. Before the fix the render itself threw the incident's
+    // `TypeError: Cannot read properties of null (reading 'pathname')` and
+    // React emptied the container on the way out — measured, not assumed:
+    // 0 child nodes, innerHTML "", no board element. Exactly what the live
+    // card did to #root on 2026-08-04.
+    expect(container.querySelector('[data-testid="board"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="board"]').textContent).toBe('Lists and cards');
+    expect(container.querySelector('[data-testid="card-modal"]').textContent).toBe(INCIDENT_NAME);
     expect(container.childNodes.length).toBeGreaterThan(0);
   });
 
