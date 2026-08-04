@@ -27,13 +27,18 @@ const Link = React.memo(({ href, content, stopPropagation, ...props }) => {
   const isSameSite =
     !!url && url.origin === window.location.origin && url.pathname.startsWith(Config.BASE_PATH);
 
+  // Depends on url, not url.pathname: href is not always parseable — a link
+  // cut mid-host, like `https://github.c…`, makes new URL() throw and leaves
+  // url null. Reading url.pathname in the dependency list threw before the
+  // guard below could run, and the error unmounted the whole app rather than
+  // one link.
   const cardsPathMatch = useMemo(() => {
     if (!isSameSite) {
       return null;
     }
 
     return matchPaths(url.pathname, [Paths.CARDS]);
-  }, [url.pathname, isSameSite]);
+  }, [url, isSameSite]);
 
   const card = useSelector((state) => {
     if (!cardsPathMatch) {
