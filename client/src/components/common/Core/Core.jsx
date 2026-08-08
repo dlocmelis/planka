@@ -15,6 +15,7 @@ import Message from './Message';
 import Toaster from '../Toaster';
 import Fixed from '../Fixed';
 import Static from '../Static';
+import BotChat from '../BotChat';
 import AdministrationModal from '../AdministrationModal';
 import AboutModal from '../AboutModal';
 import UserSettingsModal from '../../users/UserSettingsModal';
@@ -121,6 +122,7 @@ const Core = React.memo(() => {
           {project && project.backgroundType && <ProjectBackground />}
           <Fixed />
           <Static />
+          <BotChat />
           {modalNode}
         </>
       )}

@@ -292,6 +292,11 @@ export default {
 
   COMMENTS_IN_CURRENT_CARD_FETCH: `${PREFIX}/COMMENTS_IN_CURRENT_CARD_FETCH`,
   COMMENT_IN_CURRENT_CARD_CREATE: `${PREFIX}/COMMENT_IN_CURRENT_CARD_CREATE`,
+  // The same two, for a card that is not the one open — the floating chat with
+  // planka_bot talks on a card the user picked, which is very often not the
+  // card modal's. The services behind both have always taken a card id.
+  COMMENTS_FOR_CARD_FETCH: `${PREFIX}/COMMENTS_FOR_CARD_FETCH`,
+  COMMENT_FOR_CARD_CREATE: `${PREFIX}/COMMENT_FOR_CARD_CREATE`,
   COMMENT_CREATE_HANDLE: `${PREFIX}/COMMENT_CREATE_HANDLE`,
   COMMENT_UPDATE: `${PREFIX}/COMMENT_UPDATE`,
   COMMENT_UPDATE_HANDLE: `${PREFIX}/COMMENT_UPDATE_HANDLE`,

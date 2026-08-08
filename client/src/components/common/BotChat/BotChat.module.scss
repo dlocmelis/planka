@@ -1,0 +1,16 @@
+/*!
+ * Copyright (c) 2024 PLANKA Software GmbH
+ * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
+ */
+
+:global(#app) {
+  // A zero-sized fixed anchor the panel hangs off, so the panel grows out of
+  // wherever the launcher has been dragged to instead of out of a hardcoded
+  // corner. One layer below the launcher, which stays clickable over it.
+  .panelAnchor {
+    height: 0;
+    position: fixed;
+    width: 0;
+    z-index: 1002;
+  }
+}
