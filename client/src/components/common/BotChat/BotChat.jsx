@@ -3,8 +3,9 @@
  * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useDidUpdate } from '../../../lib/hooks';
 
 import selectors from '../../../selectors';
 import entryActions from '../../../entry-actions';
@@ -32,6 +33,9 @@ import styles from './BotChat.module.scss';
 
 /** Breathing room between the launcher and the panel that grows out of it. */
 const PANEL_GAP = 12;
+
+/** ...and between the panel and the two viewport edges it grows towards. */
+const PANEL_VIEWPORT_MARGIN = 16;
 
 /** How often the panel re-reads the clock while it is open, so "thinking"
  * turns into "still nothing" without waiting for the next message to arrive
@@ -71,8 +75,6 @@ const BotChat = React.memo(() => {
   const [lastSeenAt, setLastSeenAt] = useState(() => new Date());
   const [now, setNow] = useState(() => Date.now());
 
-  const isHydratedRef = useRef(false);
-
   // Read in an effect rather than in a lazy initializer so the first paint
   // does not depend on storage the browser may refuse, and so a viewport the
   // window has since been resized to is the one the position is clamped
@@ -94,8 +96,6 @@ const BotChat = React.memo(() => {
     if (storedCardId) {
       setCardId(storedCardId);
     }
-
-    isHydratedRef.current = true;
   }, []);
 
   // Keep a moved launcher and a widened panel on-screen through rotations and
@@ -120,10 +120,11 @@ const BotChat = React.memo(() => {
     }
   }, [openedCardId]);
 
-  useEffect(() => {
-    if (isHydratedRef.current) {
-      writeLastCardId(window.localStorage, cardId);
-    }
+  // Only once the conversation actually CHANGES: the first run of a plain
+  // effect happens before the hydrating one above has applied the stored card,
+  // and would erase it with the initial null.
+  useDidUpdate(() => {
+    writeLastCardId(window.localStorage, cardId);
   }, [cardId]);
 
   const card = useSelector((state) => (cardId ? selectCardById(state, cardId) : null));
@@ -256,6 +257,12 @@ const BotChat = React.memo(() => {
     return null;
   }
 
+  // The panel grows up and to the left out of the launcher, wherever the
+  // launcher has been dragged to — so both of the edges it grows towards are
+  // capped against the viewport, or a launcher parked near the top or the far
+  // left opens a panel with its head off the screen.
+  const panelBottom = position.bottom + LAUNCHER_SIZE + PANEL_GAP;
+
   return (
     <>
       {isOpened && (
@@ -264,7 +271,7 @@ const BotChat = React.memo(() => {
           role="dialog"
           aria-label={bot.name || bot.username}
           className={styles.panelAnchor}
-          style={{ right: position.right, bottom: position.bottom + LAUNCHER_SIZE + PANEL_GAP }}
+          style={{ right: position.right, bottom: panelBottom }}
           onKeyDown={handleKeyDown}
         >
           <Panel
@@ -276,6 +283,8 @@ const BotChat = React.memo(() => {
             isCommentsFetching={!!(card && card.isCommentsFetching)}
             canComment={canComment}
             width={width}
+            maxWidth={`calc(100vw - ${position.right + PANEL_VIEWPORT_MARGIN}px)`}
+            maxHeight={`calc(100dvh - ${panelBottom + PANEL_VIEWPORT_MARGIN}px)`}
             onWidthChange={handleWidthChange}
             onSubmit={handleSubmit}
             onSelectCard={handleSelectCard}

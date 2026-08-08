@@ -36,6 +36,7 @@ export default {
         'All changes will be automatically saved<br />after connection restored.',
       alphabetically: 'Alphabetically',
       alwaysDisplayCardCreator: 'Always display card creator',
+      andMoreCardsSearchToNarrow: 'and {{count}} more — search to narrow the list',
       apiKeyCreated_title: 'API Key Created',
       apiKey_title: 'API Key',
       archive: 'Archive',

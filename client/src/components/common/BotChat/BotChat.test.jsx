@@ -356,3 +356,28 @@ test('the panel width can be resized from the keyboard, and is remembered', () =
   expect(container.querySelector('[role="separator"]').getAttribute('aria-valuenow')).toBe('424');
   expect(window.localStorage.getItem('planka-bot-chat-panel-width')).toBe('424');
 });
+
+test('the conversation from the last visit is resumed, and stays remembered', () => {
+  window.localStorage.setItem('planka-bot-chat-card-id', 'card-1');
+
+  render();
+  click(launcher());
+
+  expect(container.textContent).toContain('Introduce chat with planka_bot');
+  expect(container.textContent).not.toContain('common.chooseACardToChatOn');
+  // Mounting must not erase what it just read.
+  expect(window.localStorage.getItem('planka-bot-chat-card-id')).toBe('card-1');
+});
+
+test('the panel is capped against the two viewport edges it grows towards', () => {
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+
+  render();
+  click(launcher());
+
+  // The default corner: 24px in, a 56px launcher, a 12px gap, and 16px of
+  // breathing room at the far edge.
+  const panel = container.querySelector('[role="separator"]').parentElement;
+  expect(panel.style.maxHeight).toBe('calc(100dvh - 108px)');
+  expect(panel.style.maxWidth).toBe('calc(100vw - 40px)');
+});

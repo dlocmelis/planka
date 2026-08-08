@@ -13,6 +13,12 @@ import selectors from '../../../selectors';
 
 import styles from './CardPicker.module.scss';
 
+/** How many conversations the list shows at once. A board runs to hundreds of
+ * cards and this is a 400px-wide panel; the search box above is how the rest
+ * are reached, and the list says outright how many it is not showing rather
+ * than ending in silence. */
+const VISIBLE_LIMIT = 50;
+
 /**
  * Which conversation the panel is on.
  *
@@ -28,12 +34,15 @@ const CardPicker = React.memo(({ onSelect }) => {
   const [t] = useTranslation();
   const [search, setSearch] = useState('');
 
-  const filteredCards = useMemo(() => {
+  const { visibleCards, hiddenTotal } = useMemo(() => {
     const term = search.trim().toLowerCase();
     const matching =
       term === '' ? cards : cards.filter((card) => (card.name || '').toLowerCase().includes(term));
 
-    return matching.slice(0, 50);
+    return {
+      visibleCards: matching.slice(0, VISIBLE_LIMIT),
+      hiddenTotal: Math.max(0, matching.length - VISIBLE_LIMIT),
+    };
   }, [cards, search]);
 
   const handleSearchChange = useCallback((_, { value }) => {
@@ -61,11 +70,11 @@ const CardPicker = React.memo(({ onSelect }) => {
           onChange={handleSearchChange}
         />
       </div>
-      {filteredCards.length === 0 ? (
+      {visibleCards.length === 0 ? (
         <div className={styles.empty}>{t('common.noCardsToChatOn')}</div>
       ) : (
         <ul className={styles.items}>
-          {filteredCards.map((card) => (
+          {visibleCards.map((card) => (
             <li key={card.id}>
               <button
                 type="button"
@@ -78,6 +87,11 @@ const CardPicker = React.memo(({ onSelect }) => {
               </button>
             </li>
           ))}
+          {hiddenTotal > 0 && (
+            <li className={styles.more}>
+              {t('common.andMoreCardsSearchToNarrow', { count: hiddenTotal })}
+            </li>
+          )}
         </ul>
       )}
     </div>

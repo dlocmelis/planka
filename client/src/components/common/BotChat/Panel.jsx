@@ -43,6 +43,8 @@ const Panel = React.memo(
     isCommentsFetching,
     canComment,
     width,
+    maxWidth,
+    maxHeight,
     onWidthChange,
     onSubmit,
     onSelectCard,
@@ -173,7 +175,7 @@ const Panel = React.memo(
     }
 
     return (
-      <div className={styles.wrapper} style={{ width }}>
+      <div className={styles.wrapper} style={{ width, maxWidth, maxHeight }}>
         {/* The WAI-ARIA window-splitter pattern: a focusable `separator` with
             aria-valuenow/min/max IS an interactive widget, which is exactly
             what makes the panel resizable without a pointer. The two rules
@@ -256,6 +258,8 @@ Panel.propTypes = {
   isCommentsFetching: PropTypes.bool.isRequired,
   canComment: PropTypes.bool.isRequired,
   width: PropTypes.number.isRequired,
+  maxWidth: PropTypes.string.isRequired,
+  maxHeight: PropTypes.string.isRequired,
   onWidthChange: PropTypes.func.isRequired,
   onSubmit: PropTypes.func.isRequired,
   onSelectCard: PropTypes.func.isRequired,
