@@ -59,6 +59,18 @@ bot user, set it before the app bundle loads — in `index.html` (dev) or in the
 
 Leave it unset for `planka_bot`.
 
+## What a message costs
+
+Every message is a comment, and every human comment on a card starts a triage
+job in devteam-orchestrator — a whole agent session. So an answer takes
+minutes rather than seconds, and it queues behind whatever else the pipeline
+is running. The panel says `planka_bot is thinking…` while your message is the
+last thing in the thread, and after ten minutes says so plainly instead of
+spinning forever.
+
+This is the cost the board already paid for commenting; the widget adds no new
+one. It does make it much easier to spend, which is worth knowing.
+
 ## Where the code is
 
 | Piece | File |
