@@ -167,7 +167,14 @@ const buildTtsConfig = (custom) => {
  * null rather than false wherever it would be guessing.
  */
 const warnIfUnreachable = (hostname, what) => {
-  if (isOutgoingHostAllowed(hostname, process.env) !== false) {
+  // The allowlist variables have no home in `sails.config.custom` — they belong
+  // to `start.sh` rather than to this app — so the environment is where they
+  // have to be read from. The PROXY does have one, and it is taken from there
+  // so that this check and every outbound call in the feature (which dial
+  // `sails.config.custom.outgoingProxy`) agree about whether one is in use.
+  const env = { ...process.env, OUTGOING_PROXY: sails.config.custom.outgoingProxy };
+
+  if (isOutgoingHostAllowed(hostname, env) !== false) {
     return;
   }
 

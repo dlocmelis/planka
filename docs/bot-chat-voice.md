@@ -54,8 +54,23 @@ each is spoken once — including when the synthesis failed, which is not retrie
 accept and a reply with nothing speakable in it (a bare heading, a fenced block)
 are both answered 422; the row says so on a second line and the loop carries on
 listening. The mode only turns itself off for something that would refuse EVERY
-turn — the feature going away (503), the provider behind it failing (502), a
-microphone that was denied — and the sentence it leaves says which.
+turn — the feature going away (503), the provider behind it failing (502), an
+expired session (401), a microphone that was denied — and the sentence it leaves
+says which. The 401 also logs the app out: these two endpoints are the only
+requests in the client that do not go through `sagas/core/request.js`, which is
+what turns a 401 into a logout everywhere else.
+
+**Stopping is a real cancellation.** The Stop button is offered for the whole
+turn, not only for the clip, so most presses of it land while the synthesis is
+still in flight. It aborts that request — the answer is not paid for to the end
+and then discarded — marks the message spoken so nothing offers it again, and
+leaves the microphone shut until the loop is back to listening. That last part
+is the half-duplex guarantee: an answer that played after Stop would be playing
+under an armed microphone, which is the bot's own voice being transcribed and
+posted to the card as a comment. `newSpeechTurn` in
+`client/src/hooks/use-voice-chat.js` is what owns a turn; every write to shared
+state goes through `isSpeechTurnOwner`, so a run that lost the turn at an await
+point cannot write over the one that replaced it.
 
 **The mode is remembered per browser** (`planka-bot-chat-voice`), like the
 panel's width. Nothing opens a microphone on the strength of that alone: the
@@ -152,6 +167,14 @@ itself, where `start.sh` never builds these rules at all.
 `server/utils/voice.js` `isOutgoingHostAllowed` is the rule, and it reads a
 leading dot the way Squid's `dstdomain` does.
 
+One corner of "set at all" is narrower than the paragraph above: `start.sh`
+returns *before starting Squid* when all four of its rule lists come out empty,
+and its `localhost,postgres` default for `OUTGOING_BLOCKED_HOSTS` applies only
+when that variable is UNSET. So `OUTGOING_BLOCKED_HOSTS=""` together with an
+empty `OUTGOING_ALLOWED_HOSTS` means no proxy runs and nothing is denied, and
+the check is silent there too rather than warning about 502s that cannot
+happen.
+
 ### The rest of the knobs
 
 Every one of these has a working default; a deployment that sets only the two
@@ -163,7 +186,7 @@ keys above gets a sensible configuration.
 | `VOICE_STT_MODEL` | `nova-3` | The model that serves both keyterm prompting and `language=multi`. |
 | `VOICE_STT_LANGUAGE` | `multi` | Nova-3's code-switching mode (en/es/fr/de/hi/ru/pt/ja/it/nl). A BCP-47 code such as `lv` transcribes that language alone. |
 | `VOICE_STT_KEYTERMS` | `PLANKA,planka_bot` | Comma-separated product vocabulary, sent as repeated `keyterm` parameters. |
-| `VOICE_STT_MAX_BYTES` | `700kb` | See the note below before raising it. |
+| `VOICE_STT_MAX_BYTES` | `700kb` | See the note below before raising it. A value that does not name a size turns speech-to-text off with an error rather than quietly leaving the upload uncapped. |
 | `VOICE_STT_MAX_DURATION_SEC` | `300` | Enforced against the duration the provider reports — so a recording refused here has already been transcribed and billed. Lower it and the browser ends its turns inside it rather than paying to be refused; see *What it costs*. |
 | `VOICE_STT_TIMEOUT_SEC` | `60` | |
 | `VOICE_TTS_PROVIDER` | `cartesia` | The only accepted value. |

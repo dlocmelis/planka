@@ -231,6 +231,28 @@ const isOutgoingHostAllowed = (hostname, env) => {
     return null;
   }
 
+  // The one way an allowlist can be SET and still not be in force. `start.sh`
+  // returns before writing any Squid config when all four of its rule lists
+  // come out empty, and its `localhost,postgres` default applies only when
+  // OUTGOING_BLOCKED_HOSTS is UNSET — so a deployment that sets that variable
+  // to nothing, and leaves the other three empty too, gets no proxy at all and
+  // therefore nothing denied. Without this, an empty OUTGOING_ALLOWED_HOSTS
+  // would read as "denies everything" and every boot would print a warning
+  // about 502s that cannot happen.
+  //
+  // Emptiness is bash's, not JavaScript's: `-z` is false for a single space, so
+  // a value of ' ' does start the proxy.
+  const isUnsetOrEmpty = (value) => value === undefined || value === '';
+
+  if (
+    source.OUTGOING_BLOCKED_HOSTS === '' &&
+    isUnsetOrEmpty(source.OUTGOING_BLOCKED_IPS) &&
+    isUnsetOrEmpty(source.OUTGOING_ALLOWED_HOSTS) &&
+    isUnsetOrEmpty(source.OUTGOING_ALLOWED_IPS)
+  ) {
+    return null;
+  }
+
   const wanted = String(hostname || '')
     .trim()
     .toLowerCase();

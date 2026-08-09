@@ -198,6 +198,41 @@ describe('voice', () => {
       );
     });
 
+    it('should say nothing when start.sh would not start a proxy at all', () => {
+      // The one way an allowlist can be set and still not be in force, and the
+      // one false positive this check can produce. start.sh returns before
+      // writing any config when all four of its rule lists come out empty, and
+      // its `localhost,postgres` default applies only when
+      // OUTGOING_BLOCKED_HOSTS is UNSET — so setting that to nothing, with the
+      // other three empty, means no proxy runs and nothing is denied. Answering
+      // `false` here would print a boot warning about 502s that cannot happen.
+      expect(
+        isOutgoingHostAllowed('api.cartesia.ai', {
+          OUTGOING_BLOCKED_HOSTS: '',
+          OUTGOING_ALLOWED_HOSTS: '',
+        }),
+      ).to.equal(null);
+
+      // Emptiness is bash's `-z`, which a single space does not satisfy: that
+      // value DOES start the proxy, and then the empty allowlist denies
+      // everything.
+      expect(
+        isOutgoingHostAllowed('api.cartesia.ai', {
+          OUTGOING_BLOCKED_HOSTS: ' ',
+          OUTGOING_ALLOWED_HOSTS: '',
+        }),
+      ).to.equal(false);
+
+      // And one real rule anywhere is enough to start it.
+      expect(
+        isOutgoingHostAllowed('api.cartesia.ai', {
+          OUTGOING_BLOCKED_HOSTS: '',
+          OUTGOING_BLOCKED_IPS: '10.0.0.0/8',
+          OUTGOING_ALLOWED_HOSTS: '',
+        }),
+      ).to.equal(false);
+    });
+
     it('should accept an exact entry, whatever its spacing and casing', () => {
       expect(
         isOutgoingHostAllowed('api.deepgram.com', {

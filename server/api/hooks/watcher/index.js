@@ -37,7 +37,14 @@ module.exports = function defineWatcherHook(sails) {
     async initialize() {
       sails.log.info('Initializing custom hook (`watcher`)');
 
-      setInterval(checkSocketConnectionsToLogout, 60 * 1000);
+      // Unreferenced, so it is not a reason for the process to stay alive. It
+      // still fires every minute for as long as something else — the HTTP
+      // server — keeps it running, which is every deployment. What changes is
+      // `sails.lower()`: without this the timer is a live handle on the event
+      // loop afterwards, so a lifted-and-lowered Sails never exits, which is
+      // why the test script carries `--exit` and why a leak introduced later
+      // would be invisible behind it.
+      setInterval(checkSocketConnectionsToLogout, 60 * 1000).unref();
     },
   };
 };

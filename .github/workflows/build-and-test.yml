@@ -48,6 +48,15 @@ jobs:
           cd client
           INDEX_FORMAT=ejs npm run build
 
+      # Before the server below claims port 1337: `server/test/lifecycle.test.js`
+      # lifts Sails itself, so the two cannot both be up. Neither suite needs
+      # Postgres — the test environment falls back to an in-memory sails-disk
+      # datastore — and `.env` is only wanted for the three required keys.
+      - name: Run server and client unit tests
+        run: |
+          cp server/.env.sample server/.env
+          npm test
+
       - name: Set up and start server for testing
         env:
           DEFAULT_ADMIN_EMAIL: demo@demo.demo
