@@ -217,8 +217,9 @@ module.exports = {
     // itself is not in it — only how much of it was spoken.
     sails.log.info(
       `Voice synthesis: card=${card.id} user=${currentUser.id} provider=${tts.provider} ` +
-        `voice=${result.voice} language=${result.language || '-'} chars=${result.chars} ` +
-        `audioBytes=${result.audio.length} elapsedMs=${Date.now() - startedAt}`,
+        `voice=${result.voice} voiceSource=${result.voiceSource} language=${result.language || '-'} ` +
+        `chars=${result.chars} audioBytes=${result.audio.length} ` +
+        `elapsedMs=${Date.now() - startedAt}`,
     );
 
     return {

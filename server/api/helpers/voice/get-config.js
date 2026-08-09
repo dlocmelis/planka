@@ -102,6 +102,12 @@ const buildTtsConfig = (custom) => {
       model: (custom.voiceTtsModel || 'sonic-3.5').trim(),
       voice: (custom.voiceTtsVoice || '').trim(),
       voiceByLanguage,
+      // The automatic switch: a language with no pin of its own is looked up in
+      // the provider's catalogue. On by default, as it is in setl — leaving it
+      // off means every non-English reply is read by the English fallback voice,
+      // which is the behaviour the switch exists to end. `false` is the only
+      // value that turns it off, so an unset key and a typo both leave it on.
+      isAutoVoice: custom.voiceTtsAutoVoice !== false,
       container,
       sampleRate: custom.voiceTtsSampleRate || 44100,
       bitRate: custom.voiceTtsBitRate || 128000,

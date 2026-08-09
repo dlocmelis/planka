@@ -146,8 +146,16 @@ module.exports.custom = {
   // id rather than one picked off an account-scoped list.
   voiceTtsVoice: process.env.VOICE_TTS_VOICE || 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4',
   // Per-language pins for the voice switch, `ru=<id>,de=<id>`. A language with
-  // no entry is read by the voice above.
+  // no entry is looked up in the provider's catalogue (see voiceTtsAutoVoice)
+  // and, failing that, read by the voice above.
   voiceTtsVoices: process.env.VOICE_TTS_VOICES || '',
+  // The automatic switch: a language with no pin of its own gets a voice from
+  // Cartesia's own catalogue, one lookup per language per process. On by
+  // default, as it is in setl — Cartesia's voices are published PER LANGUAGE,
+  // so with it off every non-English reply is read by the English fallback
+  // voice above. Written `!== 'false'` rather than the `=== 'true'` the rest of
+  // this file uses because this one defaults ON: an unset key must leave it on.
+  voiceTtsAutoVoice: process.env.VOICE_TTS_AUTO_VOICE !== 'false',
   voiceTtsOutputFormat: process.env.VOICE_TTS_OUTPUT_FORMAT || 'mp3',
   voiceTtsSampleRate: envToNumber(process.env.VOICE_TTS_SAMPLE_RATE) || 44100,
   voiceTtsBitRate: envToNumber(process.env.VOICE_TTS_BIT_RATE) || 128000,

@@ -124,6 +124,7 @@ keys above gets a sensible configuration.
 | `VOICE_TTS_MODEL` | `sonic-3.5` | |
 | `VOICE_TTS_VOICE` | Cartesia's documented "Skylar" id | The fallback voice, used when no language was resolved. |
 | `VOICE_TTS_VOICES` | *(empty)* | Per-language pins, `ru=<id>,de=<id>`. Two-letter codes only — the key is matched against a DETECTED language, which is always the ISO-639-1 form. |
+| `VOICE_TTS_AUTO_VOICE` | `true` | The automatic voice switch — see below. `false` turns it off; anything else leaves it on. |
 | `VOICE_TTS_OUTPUT_FORMAT` | `mp3` | `mp3` or `wav`. |
 | `VOICE_TTS_SAMPLE_RATE` | `44100` | |
 | `VOICE_TTS_BIT_RATE` | `128000` | mp3 only. |
@@ -135,6 +136,46 @@ invalid provider, output format or voice map logs an error at boot and disables
 that half. A typo in one optional value must not stop PLANKA from booting, and
 silently serving the default instead would be the "nobody chose this" failure
 the validation exists to prevent.
+
+### Which voice reads the answer
+
+**Cartesia's voices are published per language.** The fallback this ships,
+Skylar, reports language `en` with en-US native plus hi-IN, es-MX, de-DE, he-IL,
+it-IT, pt-BR and ta-IN — Russian is not among them. So a Russian reply read by
+the fallback voice is not the same voice with an accent; it is a voice being
+asked for a language it was not published for. And since transcription defaults
+to `multi` — ten languages, Russian included — that is a turn any deployment can
+reach without configuring anything.
+
+Three steps, in order, which is setl's own (`data/core/tts/cartesia.go`):
+
+1. **The voice the client sent back**, so a conversation keeps one voice.
+2. **`VOICE_TTS_VOICES`**, the deployment's own pin for that language. Checked
+   before the network, so a deployment that has chosen its voices never pays for
+   a lookup.
+3. **The provider's catalogue** — `GET /voices/?limit=10&language=<code>`,
+   preferring a voice whose NATIVE locale is that language over one that merely
+   covers it. This is `VOICE_TTS_AUTO_VOICE`, and it is on by default.
+
+The answer is cached for the life of the process, per language, including the
+answer "there is no voice for this language" (Latvian is that case) — the
+catalogue changes on Cartesia's release schedule, not on ours, and the lookup
+sits in front of the audio. A lookup that FAILS is remembered for 30 seconds
+only, so a blip heals within a conversation while a hung catalogue still costs
+one message a second rather than every message.
+
+**Nothing here can cost a user their answer.** A catalogue that is empty, slow
+or broken falls back to `VOICE_TTS_VOICE` and sends NO language with it — naming
+a language a voice was not published for is a 400 on every message, which is
+worse than the wrong accent. The synthesis log line carries `voiceSource=` so an
+operator can tell the cases apart: `request`, `config`, `catalog`, `novoice`
+(pin one), `lookupfailed` (an incident) or `default` (nothing was detected).
+
+There is deliberately **no table of voice ids in this repository**. The
+catalogue is dated, account-visible and Cartesia's to change, so a checked-in
+table rots into a 400 on every synthesis in whichever language lost its id
+first. A deployment that wants a particular voice names it in
+`VOICE_TTS_VOICES`, having listened to it.
 
 ### Why 700 KB, and what happens if you raise it
 
@@ -167,6 +208,8 @@ about 180 KB. Left to itself Chrome would record at 128 kbit/s.
 | Transcription endpoint | `server/api/controllers/voice/transcribe.js` |
 | Speech endpoint | `server/api/controllers/voice/speak.js` |
 | Deepgram / Cartesia | `server/api/helpers/voice/{transcribe,synthesize}.js` |
+| The voice switch: catalogue lookup and its cache | `server/api/helpers/voice/lookup-voice.js` |
+| Which voice out of a listing, and why | `server/utils/voice-catalog.js` |
 | Allowlist, voice map, length rules | `server/utils/voice.js` |
 | Markdown → speakable text, table narration | `server/utils/voice-speech-text.js` |
 | Config resolution and the feature gate | `server/api/helpers/voice/get-config.js` |
@@ -187,6 +230,12 @@ what came across:
 - **The Cartesia call** — the request shape, the mandatory `Cartesia-Version`
   header, both credential headers and the refusal to follow redirects, from
   setl's `data/core/tts/cartesia.go`.
+- **The per-language voice switch** — the resolution order, the catalogue query
+  and `pickVoice`'s native-locale preference, from setl's
+  `data/core/tts/cartesia_voices.go`. Its one hand-picked entry
+  (`builtinVoiceByLanguage`, Russian) did not come across: it exists because
+  somebody chose that voice for that product by name, and everything setl says
+  about a checked-in id rotting applies to a copy of it here.
 - **Markdown → speech** — the strip and the table narration, verbatim, from
   setl's `data/core/tts/markdown.go` and `table.go`. The cases in
   `server/test/utils/voice-speech-text.test.js` are the same inputs and the same
@@ -207,3 +256,12 @@ the code:
   parts. A planka_bot reply arrives complete, minutes later, so the whole clip is
   synthesized in one request. The voice/language pin the assistant needs for
   multi-part replies is still carried, so a conversation keeps one voice.
+- **Server-side language detection of the reply** (setl's
+  `data/core/tts/language.go`). setl detects the language of each ANSWER and
+  chooses a voice for that; here the language is the one the user's own
+  utterance was transcribed as, sent up by the client. It is the same answer
+  whenever the bot replies in the language it was asked in, which is what
+  planka_bot does, and it needs no language model on a Sails server. Where they
+  differ — an English answer to a Russian question — the Russian voice reads the
+  English, which is the direction setl's own `builtinVoiceByLanguage` note
+  describes as acceptable.

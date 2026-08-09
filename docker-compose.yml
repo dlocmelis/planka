@@ -130,6 +130,7 @@ services:
       # - VOICE_STT_KEYTERMS=PLANKA,planka_bot
       # - VOICE_TTS_VOICE=
       # - VOICE_TTS_VOICES=
+      # - VOICE_TTS_AUTO_VOICE=true
 
       # --------------------------------------------------------------------
       # Outgoing traffic control (internal Squid proxy)

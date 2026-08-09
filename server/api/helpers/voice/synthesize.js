@@ -13,7 +13,8 @@
  *  - The `Cartesia-Version` header is MANDATORY. A request without it is
  *    answered 400 ("Cartesia-Version header is required in YYYY-MM-DD form").
  *    It is a dated contract, so bumping it means re-reading the request shape
- *    below, not just the constant.
+ *    below, not just the constant — which lives in `utils/voice.js` because the
+ *    voice lookup sends it too.
  *  - The credential goes in BOTH headers Cartesia accepts. `Authorization:
  *    Bearer` is the documented form and `X-API-Key` the older one that is
  *    still honoured; they name the same secret, so there is nothing to
@@ -33,6 +34,7 @@ const { ProxyAgent } = require('undici');
 
 const endpoints = require('../../../utils/voice-endpoints');
 const {
+  CARTESIA_VERSION,
   VoiceProviderError,
   VoiceRequestError,
   isLanguageCode,
@@ -40,14 +42,12 @@ const {
   normalizeLanguage,
   speechTextLength,
 } = require('../../../utils/voice');
+const { VoiceSources } = require('../../../utils/voice-catalog');
 const {
   cutSpeechText,
   hasSpeakableContent,
   stripMarkdown,
 } = require('../../../utils/voice-speech-text');
-
-/** The API version this request shape belongs to. */
-const CARTESIA_VERSION = '2026-03-01';
 
 /** How much longer the PREPARED text may be than the accepted input before it
  * is cut. Narration turns a table into prose, so the prepared text is longer
@@ -73,29 +73,59 @@ const outputFormatFor = (config) =>
 /**
  * Which voice reads this message, and in which language.
  *
+ * Three steps, which is setl's own order (`data/core/tts/cartesia.go`
+ * `resolveVoice`): a voice the CALLER named, then the deployment's own
+ * `VOICE_TTS_VOICES` pin for the language, then the provider's catalogue. The
+ * pin is checked before the network so a deployment that has chosen its voices
+ * never pays for a lookup.
+ *
  * A VOICE ON ITS OWN IS NOT A DECISION: the language is only reported back
- * when one was actually resolved, because a reply spoken in parts pins the
- * first part's answer onto the rest, and a default voice reported as though it
- * had been chosen is how a Russian answer ends up read in an American accent
- * for the rest of the message.
+ * when one was actually resolved, because the reply's voice is pinned onto the
+ * rest of the conversation, and a default voice reported as though it had been
+ * chosen is how one undetectable reply fixes an American accent onto every
+ * Russian answer after it.
  */
-const resolveVoice = (config, requestedVoice, requestedLanguage) => {
+const resolveVoice = async (config, requestedVoice, requestedLanguage) => {
   if (requestedVoice) {
     if (!isVoiceId(requestedVoice)) {
       throw new VoiceRequestError('Voice id is not valid');
     }
 
-    return { voice: requestedVoice, language: normalizeLanguage(requestedLanguage) };
+    return {
+      voice: requestedVoice,
+      language: normalizeLanguage(requestedLanguage),
+      source: VoiceSources.REQUEST,
+    };
   }
 
   const language = normalizeLanguage(requestedLanguage);
 
   if (language && config.voiceByLanguage[language]) {
-    return { voice: config.voiceByLanguage[language], language };
+    return {
+      voice: config.voiceByLanguage[language],
+      language,
+      source: VoiceSources.CONFIG,
+    };
   }
 
-  // The fallback voice, and no language decision to report with it.
-  return { voice: config.voice, language: null };
+  // Nothing to choose by. Asking the catalogue "which voice speaks null" is not
+  // a question, so the fallback reads it and nothing is reported as decided.
+  if (!language || !config.isAutoVoice) {
+    return { voice: config.voice, language: null, source: VoiceSources.DEFAULT };
+  }
+
+  const { voice, source } = await sails.helpers.voice.lookupVoice(language);
+
+  if (voice) {
+    return { voice, language, source };
+  }
+
+  // The catalogue had none, or could not be asked. Either way the fallback
+  // voice reads it — and WITHOUT the language, because naming a language a
+  // voice was not published for is a 400 on every message rather than a worse
+  // accent. `source` says which of the two happened, for the operator who has
+  // to decide whether to pin one.
+  return { voice: config.voice, language: null, source };
 };
 
 module.exports = {
@@ -145,7 +175,7 @@ module.exports = {
       throw new VoiceRequestError('There is nothing in that message to read aloud');
     }
 
-    const { voice, language } = resolveVoice(tts, inputs.voice, inputs.language);
+    const { voice, language, source } = await resolveVoice(tts, inputs.voice, inputs.language);
 
     const body = {
       model_id: tts.model,
@@ -206,6 +236,9 @@ module.exports = {
       contentType: contentTypeFor(tts.container),
       voice,
       language,
+      // Not answered to the client — it is an operator's signal, and it goes in
+      // the synthesis log line rather than on the wire.
+      voiceSource: source,
       chars: speechTextLength(prepared),
     };
   },

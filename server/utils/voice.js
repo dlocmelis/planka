@@ -23,6 +23,19 @@ const VoiceProviderError = require('./voice-provider-error');
 const VoiceRequestError = require('./voice-request-error');
 
 /**
+ * The dated contract every Cartesia request belongs to, synthesis and voice
+ * lookup alike.
+ *
+ * The header is MANDATORY — a request without it is answered 400
+ * ("Cartesia-Version header is required in YYYY-MM-DD form") — and because it
+ * is DATED, bumping it means re-reading the request shapes in
+ * `api/helpers/voice/{synthesize,lookup-voice}.js`, not just the constant. It
+ * is here rather than beside either of them because two callers send it and a
+ * second copy is how they come to disagree.
+ */
+const CARTESIA_VERSION = '2026-03-01';
+
+/**
  * The containers a browser's MediaRecorder actually produces, plus the two a
  * non-browser client (a test, curl) reaches for first.
  *
@@ -202,6 +215,7 @@ const formatBytes = (bytes) => {
 
 module.exports = {
   AUDIO_MIME_TYPES,
+  CARTESIA_VERSION,
   VoiceProviderError,
   VoiceRequestError,
   allowedAudioMimeTypes,

@@ -121,9 +121,13 @@ describe('Voice chat endpoints', function describeVoice() {
 
         providerCalls.push(call);
 
-        const canned = req.url.startsWith('/tts/bytes')
-          ? providerResponses.cartesia
-          : providerResponses.deepgram;
+        let canned = providerResponses.deepgram;
+
+        if (req.url.startsWith('/tts/bytes')) {
+          canned = providerResponses.cartesia;
+        } else if (req.url.startsWith('/voices/')) {
+          canned = providerResponses.voices;
+        }
 
         res.writeHead(canned.status, canned.headers);
         res.end(canned.body);
@@ -242,6 +246,30 @@ describe('Voice chat endpoints', function describeVoice() {
         status: 200,
         headers: { 'Content-Type': 'audio/mpeg' },
         body: Buffer.from([0xff, 0xfb, 0x90, 0x00]),
+      },
+      // GET /voices/ — the catalogue the automatic voice switch reads. The
+      // shape is Cartesia's, cut to the fields the switch uses.
+      voices: {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          has_more: false,
+          data: [
+            {
+              id: 'catalog-covers-de',
+              language: 'de',
+              locales: [
+                { locale: 'en-US', is_native: true },
+                { locale: 'de-DE', is_native: false },
+              ],
+            },
+            {
+              id: 'catalog-native-de',
+              language: 'de',
+              locales: [{ locale: 'de-DE', is_native: true }],
+            },
+          ],
+        }),
       },
     };
 
@@ -555,6 +583,146 @@ describe('Voice chat endpoints', function describeVoice() {
 
       expect(res.status).to.equal(422);
       expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    /**
+     * The automatic voice switch: a language the deployment has NOT pinned a
+     * voice for is looked up in the provider's own catalogue.
+     *
+     * It matters because Cartesia's voices are published PER LANGUAGE — the
+     * fallback this ships is an en-US voice — and the transcription default is
+     * `multi`, ten languages including Russian. Without the switch, every
+     * non-English reply on a deployment that configured nothing but the two
+     * keys is read by an English voice.
+     */
+    describe('the automatic voice switch', () => {
+      /** Only the calls to GET /voices/, in order. */
+      const lookups = () => providerCalls.filter((call) => call.url.startsWith('/voices/'));
+
+      it('asks the catalogue for a language nobody pinned, and prefers a native voice', async () => {
+        const res = await postSpeech(tokens.editor, {
+          text: 'Es wartet auf Review.',
+          language: 'de',
+        });
+
+        expect(res.status).to.equal(200);
+        // Not `catalog-covers-de`, which merely covers de-DE: a covering voice
+        // is the very thing the switch exists to move away from.
+        expect(res.body.item.voice).to.equal('catalog-native-de');
+        expect(res.body.item.language).to.equal('de');
+
+        expect(lookups()).to.have.lengthOf(1);
+        expect(lookups()[0].url).to.equal('/voices/?limit=10&language=de');
+
+        const speech = providerCalls.find((call) => call.url === '/tts/bytes');
+        const body = JSON.parse(speech.body.toString());
+        expect(body.voice).to.deep.equal({ mode: 'id', id: 'catalog-native-de' });
+        // Named on the wire, which is safe now: this voice was published for it.
+        expect(body.language).to.equal('de');
+      });
+
+      it('sends the lookup the same version and credential headers as the synthesis', async () => {
+        await postSpeech(tokens.editor, { text: 'Es wartet auf Review.', language: 'de' });
+
+        const [lookup] = lookups();
+        expect(lookup.headers['cartesia-version']).to.equal('2026-03-01');
+        expect(lookup.headers.authorization).to.equal('Bearer cartesia-test-key');
+        expect(lookup.headers['x-api-key']).to.equal('cartesia-test-key');
+      });
+
+      it('asks once per language, not once per message', async () => {
+        // The lookup sits IN FRONT of the audio, so paying for it on every
+        // message is the thing the cache exists to stop.
+        await postSpeech(tokens.editor, { text: 'Erste Antwort.', language: 'de' });
+        await postSpeech(tokens.editor, { text: 'Zweite Antwort.', language: 'de-AT' });
+
+        expect(lookups()).to.have.lengthOf(1);
+        expect(providerCalls.filter((call) => call.url === '/tts/bytes')).to.have.lengthOf(2);
+      });
+
+      it('never asks for a language the deployment pinned itself', async () => {
+        // `withVoice` pins ru=voice-ru. A deployment that has chosen its voices
+        // must not pay for a round trip to be told so.
+        const res = await postSpeech(tokens.editor, { text: 'Ждём ревью.', language: 'ru' });
+
+        expect(res.body.item.voice).to.equal('voice-ru');
+        expect(lookups()).to.have.lengthOf(0);
+      });
+
+      it('falls back without a language when the catalogue serves none', async () => {
+        // Latvian is exactly this case against the live API: the listing comes
+        // back empty. The fallback voice reads it and the language is NOT sent
+        // — naming a language a voice was not published for is a 400 on every
+        // message, which is worse than an accent.
+        providerResponses.voices = {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ has_more: false, data: [] }),
+        };
+
+        const res = await postSpeech(tokens.editor, {
+          text: 'Gaida pārskatīšanu.',
+          language: 'lv',
+        });
+
+        expect(res.status).to.equal(200);
+        expect(res.body.item.voice).to.equal(sails.config.custom.voiceTtsVoice);
+        expect(res.body.item.language).to.equal(null);
+
+        const speech = providerCalls.find((call) => call.url === '/tts/bytes');
+        expect(JSON.parse(speech.body.toString())).to.not.have.property('language');
+      });
+
+      it('still answers when the lookup itself fails', async () => {
+        // A catalogue that is down must cost the message its switch, not its
+        // answer.
+        providerResponses.voices = { status: 500, headers: {}, body: 'catalogue on fire' };
+
+        const res = await postSpeech(tokens.editor, {
+          text: 'Es wartet auf Review.',
+          language: 'de',
+        });
+
+        expect(res.status).to.equal(200);
+        expect(res.body.item.voice).to.equal(sails.config.custom.voiceTtsVoice);
+        expect(res.body.item.language).to.equal(null);
+      });
+
+      it('does not re-ask a failed language on the very next message', async () => {
+        providerResponses.voices = { status: 500, headers: {}, body: 'catalogue on fire' };
+
+        await postSpeech(tokens.editor, { text: 'Erste Antwort.', language: 'de' });
+        await postSpeech(tokens.editor, { text: 'Zweite Antwort.', language: 'de' });
+
+        // A provider that HANGS would otherwise cost every message the timeout.
+        expect(lookups()).to.have.lengthOf(1);
+      });
+
+      it('asks nobody when the switch is turned off', async () => {
+        withVoice({ voiceTtsAutoVoice: false });
+
+        const res = await postSpeech(tokens.editor, {
+          text: 'Es wartet auf Review.',
+          language: 'de',
+        });
+
+        expect(res.status).to.equal(200);
+        expect(lookups()).to.have.lengthOf(0);
+        expect(res.body.item.voice).to.equal(sails.config.custom.voiceTtsVoice);
+        expect(res.body.item.language).to.equal(null);
+      });
+
+      it('asks nobody when the caller sent a voice back', async () => {
+        // The pin that keeps one conversation in one voice outranks everything.
+        const res = await postSpeech(tokens.editor, {
+          text: 'Zweite Antwort.',
+          voice: 'catalog-native-de',
+          language: 'de',
+        });
+
+        expect(res.body.item.voice).to.equal('catalog-native-de');
+        expect(lookups()).to.have.lengthOf(0);
+      });
     });
 
     it('answers 502 when the provider is broken, and never plays silence', async () => {
