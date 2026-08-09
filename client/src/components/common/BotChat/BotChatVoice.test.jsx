@@ -1089,6 +1089,55 @@ test('a recording over the cap is refused with a sentence rather than vanishing'
   expect(voiceToggle().getAttribute('aria-pressed')).toBe('true');
 });
 
+test('a turn ends inside a recording ceiling the deployment lowered', async () => {
+  // 10 s, so the loop has 10 s less its idle window to spend on one turn — well
+  // under the 45 s it would otherwise take to force-end a shout.
+  mockVoiceCapability = { ...mockVoiceCapability, sttMaxDurationSec: 10 };
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  // One unbroken stretch of talking, longer than the lowered ceiling allows for
+  // a turn and far shorter than the shipped maxUtteranceMs.
+  await hold(VOICE_DB, 10000 - VOICE_CHAT_TUNING.idleRestartMs + VOICE_CHAT_TUNING.frameIntervalMs);
+  await settle();
+
+  // Force-ended and SENT, rather than carrying on to 45 s and being refused by
+  // the server after it had already been transcribed and billed.
+  expect(mockTranscribe).toHaveBeenCalledTimes(1);
+});
+
+test('a recording longer than the server accepts is never uploaded', async () => {
+  // The pathological case the shortened turn cannot cover: a room noisy enough
+  // to keep resetting the idle clock without ever opening a turn, so the
+  // recorder accumulates in front of the sentence that eventually arrives.
+  mockVoiceCapability = { ...mockVoiceCapability, sttMaxDurationSec: 4 };
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  // Blips just short of a turn, spaced under the idle window, for longer than
+  // the ceiling: nothing is thrown away and nothing is sent.
+  for (let index = 0; index < 6; index += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    await hold(VOICE_DB, VOICE_CHAT_TUNING.frameIntervalMs);
+    // eslint-disable-next-line no-await-in-loop
+    await hold(QUIET_DB, VOICE_CHAT_TUNING.idleRestartMs - VOICE_CHAT_TUNING.frameIntervalMs);
+  }
+
+  await saySomething();
+
+  expect(mockTranscribe).not.toHaveBeenCalled();
+  expect(status().textContent).toContain('common.voiceChatRecordingTooLong');
+  // One refused turn is not a broken mode.
+  expect(status().textContent).toContain('common.voiceChatListening');
+  expect(voiceToggle().getAttribute('aria-pressed')).toBe('true');
+});
+
 test('a read-only card gets no status row and no microphone', async () => {
   mockMembership = { id: 'membership-1', role: BoardMembershipRoles.VIEWER, canComment: false };
   window.localStorage.setItem('planka-bot-chat-voice', 'true');

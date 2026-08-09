@@ -36,10 +36,12 @@ import {
   RECORDER_AUDIO_BITS_PER_SECOND,
   VOICE_CHAT_AUDIO_CONSTRAINTS,
   VOICE_FRAME_INTERVAL_MS,
+  RecordingAvailabilities,
   SpeakAvailabilities,
   VadEvents,
   VoiceChatStopReasons,
   formatBytes,
+  formatSeconds,
   frameLevelDb,
   isRecordingSupported,
   isRefusal,
@@ -47,11 +49,14 @@ import {
   microphoneStopReason,
   newVadState,
   pickRecorderMimeType,
+  recordingAvailability,
+  recordingLimitMs,
   requestStopReason,
   sameLanguage,
   speakAvailability,
   uploadContentType,
   vadStep,
+  voiceChatTuning,
 } from '../utils/voice-chat';
 
 /**
@@ -100,6 +105,11 @@ export default function useVoiceChat({
   const recorderRef = useRef(null);
   const recorderChunksRef = useRef([]);
   const recorderMimeRef = useRef('');
+  // When the running recorder was started, so the length of what it holds is a
+  // measurement rather than a guess. The VAD bounds the UTTERANCE; a recording
+  // is that plus however much silence was in front of it, and the server's
+  // ceiling is on the recording.
+  const recorderStartedAtRef = useRef(null);
   const vadRef = useRef(null);
   const isUploadingRef = useRef(false);
   const isSpeakingRef = useRef(false);
@@ -126,6 +136,10 @@ export default function useVoiceChat({
   const onNoticeRef = useRef(onNotice);
   const onStopRef = useRef(onStop);
   const capabilityRef = useRef(capability);
+  // The deployment's own ceiling folded into the tuning, in a ref rather than in
+  // the sampler effect's dependencies: a bootstrap that arrives late must not
+  // tear the microphone down and reopen it.
+  const tuningRef = useRef(null);
   const cardIdRef = useRef(cardId);
   // Nothing in this hook goes through the saga layer, which is what normally
   // attaches the bearer token — so it is attached here, from the same place the
@@ -139,6 +153,7 @@ export default function useVoiceChat({
   onNoticeRef.current = onNotice;
   onStopRef.current = onStop;
   capabilityRef.current = capability;
+  tuningRef.current = voiceChatTuning(capability);
   cardIdRef.current = cardId;
   authHeadersRef.current = accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined;
 
@@ -199,6 +214,7 @@ export default function useVoiceChat({
     }
 
     recorderRef.current = null;
+    recorderStartedAtRef.current = null;
     recorder.ondataavailable = null;
     recorder.onstop = null;
     recorder.onerror = null;
@@ -255,6 +271,7 @@ export default function useVoiceChat({
     }
 
     recorderRef.current = recorder;
+    recorderStartedAtRef.current = performance.now();
   }, [dropRecorder]);
 
   /** Upload one utterance and hand the transcript back. Every early return here
@@ -262,7 +279,7 @@ export default function useVoiceChat({
    * nothing in, and a mode that was switched off mid-upload are all "nothing to
    * say", not failures to report. */
   const transcribe = useCallback(
-    async (blob, generation) => {
+    async (blob, generation, durationMs) => {
       const capabilityNow = capabilityRef.current;
       const targetCardId = cardIdRef.current;
 
@@ -276,19 +293,29 @@ export default function useVoiceChat({
         return;
       }
 
-      // Checked here rather than discovered as a 422: the server's cap is
-      // published in the bootstrap precisely so an oversized recording costs
-      // nothing to refuse. It is SAID, not dropped in silence — a turn that
-      // vanished with no explanation is the worst outcome of the three.
-      if (
-        capabilityNow &&
-        typeof capabilityNow.sttMaxBytes === 'number' &&
-        capabilityNow.sttMaxBytes > 0 &&
-        blob.size > capabilityNow.sttMaxBytes
-      ) {
+      // Checked here rather than discovered as a 422: both of the server's caps
+      // are published in the bootstrap precisely so a recording it would refuse
+      // costs nothing to refuse. The duration one is the expensive half — the
+      // server measures it from what the provider reports, so a recording
+      // refused for length up there has already been transcribed and billed.
+      //
+      // It is SAID, not dropped in silence — a turn that vanished with no
+      // explanation is the worst outcome of the three.
+      const availability = recordingAvailability(blob.size, durationMs, capabilityNow);
+
+      if (availability === RecordingAvailabilities.TOO_LARGE) {
         onNoticeRef.current('common.voiceChatRecordingTooLarge', {
           size: formatBytes(blob.size),
           limit: formatBytes(capabilityNow.sttMaxBytes),
+        });
+
+        return;
+      }
+
+      if (availability === RecordingAvailabilities.TOO_LONG) {
+        onNoticeRef.current('common.voiceChatRecordingTooLong', {
+          duration: formatSeconds(durationMs),
+          limit: formatSeconds(recordingLimitMs(capabilityNow)),
         });
 
         return;
@@ -386,6 +413,11 @@ export default function useVoiceChat({
 
       const chunks = recorderChunksRef.current;
       recorderRef.current = null;
+      // Read before `startRecorder` below overwrites it. Null only for a
+      // recorder nobody timed, which `recordingAvailability` treats as "no
+      // measurement" rather than as a refusal.
+      const startedAt = recorderStartedAtRef.current;
+      recorderStartedAtRef.current = null;
 
       let isSettled = false;
 
@@ -401,7 +433,7 @@ export default function useVoiceChat({
         const blob = new Blob(chunks, { type: recorderMimeRef.current || chunks[0]?.type || '' });
         chunks.length = 0;
 
-        transcribe(blob, generation);
+        transcribe(blob, generation, startedAt === null ? null : performance.now() - startedAt);
 
         // The microphone is still open and the room may already be talking
         // again, so a fresh recorder goes in immediately rather than waiting
@@ -614,7 +646,10 @@ export default function useVoiceChat({
         const { state, event } = vadStep(
           vadRef.current,
           { db: frameLevelDb(buffer), atMs: performance.now() },
-          { armed },
+          // The tuning carries this deployment's own recording ceiling, so a
+          // turn ENDS inside it rather than being refused after it has been
+          // paid for. See `voiceChatTuning`.
+          { armed, tuning: tuningRef.current },
         );
 
         vadRef.current = state;

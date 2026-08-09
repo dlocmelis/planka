@@ -5,6 +5,7 @@
 
 import {
   RECORDER_MIME_CANDIDATES,
+  RecordingAvailabilities,
   SILENCE_DBFS,
   SpeakAvailabilities,
   VOICE_CHAT_TUNING,
@@ -12,6 +13,7 @@ import {
   VoiceChatPhases,
   VoiceChatStopReasons,
   formatBytes,
+  formatSeconds,
   frameLevelDb,
   isRecordingSupported,
   isSendableTranscript,
@@ -20,6 +22,8 @@ import {
   pickRecorderMimeType,
   isRefusal,
   readVoiceChatEnabled,
+  recordingAvailability,
+  recordingLimitMs,
   requestStopReason,
   sameLanguage,
   speakAvailability,
@@ -27,6 +31,7 @@ import {
   uploadContentType,
   vadStep,
   voiceChatPhase,
+  voiceChatTuning,
   writeVoiceChatEnabled,
 } from './voice-chat';
 
@@ -45,13 +50,13 @@ const QUIET_DB = -70;
  * The whole endpointing contract is expressed this way rather than through a
  * microphone: same frames in, same events out.
  */
-const run = (state, { db, ms, atMs = 0, armed = true }) => {
+const run = (state, { db, ms, atMs = 0, armed = true, tuning = undefined }) => {
   let current = state;
   const events = [];
   let time = atMs;
 
   for (let elapsed = 0; elapsed < ms; elapsed += frameIntervalMs) {
-    const result = vadStep(current, { db, atMs: time }, { armed });
+    const result = vadStep(current, { db, atMs: time }, { armed, tuning });
     current = result.state;
 
     if (result.event) {
@@ -291,6 +296,96 @@ describe('voice-chat', () => {
     });
   });
 
+  describe('voiceChatTuning(capability)', () => {
+    it('leaves the default deployment on the shipped tuning, object and all', () => {
+      // Identity, not equality: 300 s is far above the 45 s ceiling, so there is
+      // nothing to fold in and every frame should compare the same object.
+      expect(voiceChatTuning({ sttMaxDurationSec: 300 })).toBe(VOICE_CHAT_TUNING);
+      expect(voiceChatTuning({ sttMaxDurationSec: null })).toBe(VOICE_CHAT_TUNING);
+      expect(voiceChatTuning({})).toBe(VOICE_CHAT_TUNING);
+      expect(voiceChatTuning(null)).toBe(VOICE_CHAT_TUNING);
+    });
+
+    it('ends a turn inside a ceiling the deployment lowered', () => {
+      // A recording is the utterance plus whatever silence was in front of it,
+      // and the loop tolerates a whole idleRestartMs of that before throwing it
+      // away — so the budget is the ceiling less that, not the ceiling.
+      const tuning = voiceChatTuning({ sttMaxDurationSec: 30 });
+
+      expect(tuning.maxUtteranceMs).toBe(30000 - idleRestartMs);
+      expect(tuning.minSpeechMs).toBe(minSpeechMs);
+    });
+
+    it('keeps one usable turn where the ceiling is smaller than one', () => {
+      // Nothing here can honour a two-second ceiling by ending turns earlier —
+      // there would be no turn left. The loop keeps a turn a person can speak
+      // into and `recordingAvailability` refuses the upload instead.
+      const tuning = voiceChatTuning({ sttMaxDurationSec: 2 });
+
+      expect(tuning.maxUtteranceMs).toBe(minSpeechMs + silenceHangoverMs);
+    });
+
+    it('is the tuning vadStep actually endpoints against', () => {
+      const tuning = voiceChatTuning({ sttMaxDurationSec: 10 });
+      const shortened = tuning.maxUtteranceMs;
+
+      expect(shortened).toBeLessThan(maxUtteranceMs);
+
+      // One unbroken shout, longer than the shortened ceiling and shorter than
+      // the shipped one: it must be force-ended, and it is not without the
+      // tuning.
+      const { events } = run(newVadState(0), {
+        db: VOICE_DB,
+        ms: shortened + 2 * frameIntervalMs,
+        tuning,
+      });
+
+      expect(events.map(({ event }) => event)).toEqual([
+        VadEvents.SPEECH_START,
+        VadEvents.UTTERANCE_TOO_LONG,
+      ]);
+
+      const withoutTuning = run(newVadState(0), {
+        db: VOICE_DB,
+        ms: shortened + 2 * frameIntervalMs,
+      });
+
+      expect(withoutTuning.events.map(({ event }) => event)).toEqual([VadEvents.SPEECH_START]);
+    });
+  });
+
+  describe('recordingAvailability(sizeBytes, durationMs, capability) / recordingLimitMs', () => {
+    const capability = { sttMaxBytes: 700 * 1024, sttMaxDurationSec: 30 };
+
+    it('lets an ordinary recording through', () => {
+      expect(recordingAvailability(1024, 5000, capability)).toBe(RecordingAvailabilities.READY);
+    });
+
+    it('refuses one over the byte cap', () => {
+      expect(recordingAvailability(800 * 1024, 5000, capability)).toBe(
+        RecordingAvailabilities.TOO_LARGE,
+      );
+    });
+
+    it('refuses one over the duration cap, which the server only finds out after paying', () => {
+      expect(recordingAvailability(1024, 30001, capability)).toBe(RecordingAvailabilities.TOO_LONG);
+      expect(recordingAvailability(1024, 30000, capability)).toBe(RecordingAvailabilities.READY);
+    });
+
+    it('treats an unmeasured duration as no reason to refuse', () => {
+      expect(recordingAvailability(1024, null, capability)).toBe(RecordingAvailabilities.READY);
+    });
+
+    it('reads a missing ceiling as no ceiling rather than as zero', () => {
+      expect(recordingAvailability(9e9, 9e9, { sttMaxBytes: null, sttMaxDurationSec: null })).toBe(
+        RecordingAvailabilities.READY,
+      );
+      expect(recordingAvailability(9e9, 9e9, null)).toBe(RecordingAvailabilities.READY);
+      expect(recordingLimitMs(null)).toBe(0);
+      expect(recordingLimitMs({ sttMaxDurationSec: 30 })).toBe(30000);
+    });
+  });
+
   describe('isSendableTranscript(text)', () => {
     it('refuses what a provider answers a burst of noise with', () => {
       expect(isSendableTranscript('')).toBe(false);
@@ -485,6 +580,13 @@ describe('voice-chat', () => {
       expect(formatBytes(512)).toBe('512 bytes');
       expect(formatBytes(2048)).toBe('2 KB');
       expect(formatBytes(3 * 1024 * 1024)).toBe('3.0 MB');
+    });
+  });
+
+  describe('formatSeconds(ms)', () => {
+    it('renders a duration in the unit the ceiling is set in', () => {
+      expect(formatSeconds(30000)).toBe('30s');
+      expect(formatSeconds(31400)).toBe('31s');
     });
   });
 

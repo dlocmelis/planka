@@ -74,7 +74,13 @@ character — so the loop is written to spend as little as it can:
 
 - A silent recording is thrown away and restarted every 4 seconds, so only the
   speech that eventually arrives is uploaded.
-- A turn is force-ended at 45 seconds rather than growing without bound.
+- A turn is force-ended at 45 seconds rather than growing without bound — or
+  earlier, where `VOICE_STT_MAX_DURATION_SEC` is lower than that. **Both of the
+  server's caps are honoured in the browser BEFORE the upload**, and the
+  duration one is the expensive half: the server can only measure it from what
+  the provider reports, so a recording it refuses for length has already been
+  transcribed and paid for. A deployment that lowers that ceiling to spend less
+  would otherwise pay for every long turn and never get one.
 - A burst of noise that a provider heard nothing in ("" or ".") is not posted,
   so it costs no comment and no agent session.
 - Nothing is ever retried automatically.
@@ -158,7 +164,7 @@ keys above gets a sensible configuration.
 | `VOICE_STT_LANGUAGE` | `multi` | Nova-3's code-switching mode (en/es/fr/de/hi/ru/pt/ja/it/nl). A BCP-47 code such as `lv` transcribes that language alone. |
 | `VOICE_STT_KEYTERMS` | `PLANKA,planka_bot` | Comma-separated product vocabulary, sent as repeated `keyterm` parameters. |
 | `VOICE_STT_MAX_BYTES` | `700kb` | See the note below before raising it. |
-| `VOICE_STT_MAX_DURATION_SEC` | `300` | Enforced against the duration the provider reports. |
+| `VOICE_STT_MAX_DURATION_SEC` | `300` | Enforced against the duration the provider reports — so a recording refused here has already been transcribed and billed. Lower it and the browser ends its turns inside it rather than paying to be refused; see *What it costs*. |
 | `VOICE_STT_TIMEOUT_SEC` | `60` | |
 | `VOICE_TTS_PROVIDER` | `cartesia` | The only accepted value. |
 | `VOICE_TTS_MODEL` | `sonic-3.5` | |
@@ -248,7 +254,7 @@ about 180 KB. Left to itself Chrome would record at 128 kbit/s.
 
 | Piece | File |
 | --- | --- |
-| Endpointing, recorder choice, phases, storage — all pure | `client/src/utils/voice-chat.js` |
+| Endpointing, recorder choice, phases, the two upload caps, storage — all pure | `client/src/utils/voice-chat.js` |
 | Microphone, sampler, recorder, upload, playback | `client/src/hooks/use-voice-chat.js` |
 | The toggle beside Send, the status row | `client/src/components/common/BotChat/{Composer,VoiceStatus}.jsx` |
 | Mode state, which reply to speak, posting a transcript | `client/src/components/common/BotChat/BotChat.jsx` |
@@ -291,7 +297,7 @@ what came across:
   expectations as `TestNarrateTable` there, so a table is read out the same way
   by both products. **Change one side and change the other.**
 
-Three things were deliberately left behind, each with its reason recorded beside
+Four things were deliberately left behind, each with its reason recorded beside
 the code:
 
 - **Barge-in and echo suppression** (setl-web's `suppressEchoedSpeech`) — see

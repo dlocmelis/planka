@@ -221,6 +221,54 @@ export const VOICE_CHAT_TUNING = Object.freeze({
 export const VOICE_FRAME_INTERVAL_MS = VOICE_CHAT_TUNING.frameIntervalMs;
 
 /**
+ * The tuning to run THIS deployment's loop with.
+ *
+ * `VOICE_STT_MAX_DURATION_SEC` is the server's ceiling on one recording, and it
+ * is published in the bootstrap so that the browser can end a turn inside it.
+ * Honouring it here rather than discovering it as a refusal is the whole point:
+ * the server enforces that ceiling against the duration the PROVIDER reports
+ * (`server/api/helpers/voice/transcribe.js`), which is measured after the
+ * recording has been uploaded AND transcribed — the call this feature is billed
+ * for. A deployment that lowers the ceiling to spend less would otherwise pay
+ * for every long turn and never get one, for ever, since nothing here retries
+ * differently.
+ *
+ * The budget is the ceiling less `idleRestartMs`: a recorder that is already
+ * running when speech starts may be holding that much silence in front of it,
+ * because silence is only thrown away once a whole `idleRestartMs` of it has
+ * gone by with nothing said.
+ *
+ * A deployment on the default gets `VOICE_CHAT_TUNING` ITSELF back rather than a
+ * copy — 300 s is far above the 45 s ceiling, so nothing changes, and one
+ * identical object keeps every frame comparing the same tuning.
+ */
+export const voiceChatTuning = (capability) => {
+  const maxDurationSec = capability && capability.sttMaxDurationSec;
+
+  if (typeof maxDurationSec !== 'number' || !(maxDurationSec > 0)) {
+    return VOICE_CHAT_TUNING;
+  }
+
+  const budgetMs = maxDurationSec * 1000 - VOICE_CHAT_TUNING.idleRestartMs;
+
+  if (budgetMs >= VOICE_CHAT_TUNING.maxUtteranceMs) {
+    return VOICE_CHAT_TUNING;
+  }
+
+  return Object.freeze({
+    ...VOICE_CHAT_TUNING,
+    // Never below one turn's worth. A ceiling that low cannot be met by ending
+    // turns earlier — there would be no turn left to end — so the loop keeps a
+    // usable one and `recordingAvailability` is what stops the recording being
+    // spent on a refusal.
+    maxUtteranceMs: Math.max(
+      VOICE_CHAT_TUNING.minSpeechMs + VOICE_CHAT_TUNING.silenceHangoverMs,
+      budgetMs,
+    ),
+  });
+};
+
+/**
  * Microphone constraints for voice chat.
  *
  * All three are asked for by name rather than left to the browser. Echo
@@ -674,6 +722,50 @@ export const speakAvailability = (text, capability) => {
   return SpeakAvailabilities.READY;
 };
 
+/** Whether a recording may be uploaded at all, and why not when it may not. */
+export const RecordingAvailabilities = {
+  READY: 'ready',
+  /** Past `VOICE_STT_MAX_BYTES`. */
+  TOO_LARGE: 'too-large',
+  /** Past `VOICE_STT_MAX_DURATION_SEC`. */
+  TOO_LONG: 'too-long',
+};
+
+/** This deployment's ceiling on one recording, in ms, or 0 where it has none. */
+export const recordingLimitMs = (capability) => {
+  const maxDurationSec = capability && capability.sttMaxDurationSec;
+
+  return typeof maxDurationSec === 'number' && maxDurationSec > 0 ? maxDurationSec * 1000 : 0;
+};
+
+/**
+ * Whether this recording may be uploaded.
+ *
+ * Both ceilings are the server's own, published in the bootstrap precisely so
+ * that a recording it would refuse costs nothing to refuse. The duration one
+ * matters more than it looks: the server measures duration from what the
+ * PROVIDER reports, so a recording refused for length there has already been
+ * uploaded and transcribed, and transcription is billed by the audio minute.
+ *
+ * A duration nobody measured (`null`) is not a reason to refuse — the recording
+ * goes up and the server decides.
+ */
+export const recordingAvailability = (sizeBytes, durationMs, capability) => {
+  const maxBytes = capability && capability.sttMaxBytes;
+
+  if (typeof maxBytes === 'number' && maxBytes > 0 && sizeBytes > maxBytes) {
+    return RecordingAvailabilities.TOO_LARGE;
+  }
+
+  const limitMs = recordingLimitMs(capability);
+
+  if (limitMs > 0 && typeof durationMs === 'number' && durationMs > limitMs) {
+    return RecordingAvailabilities.TOO_LONG;
+  }
+
+  return RecordingAvailabilities.READY;
+};
+
 /**
  * Whether two language tags name the same language.
  *
@@ -793,6 +885,11 @@ export const formatBytes = (bytes) => {
 
   return `${bytes} bytes`;
 };
+
+/** Whole seconds for a duration in ms, for user-facing copy only. The same unit
+ * `VOICE_STT_MAX_DURATION_SEC` is set in, so the two numbers in the sentence are
+ * comparable. */
+export const formatSeconds = (ms) => `${Math.round(ms / 1000)}s`;
 
 /**
  * What a stopped mode tells the user, as i18n keys rather than sentences.

@@ -422,6 +422,8 @@ export default {
         'Voice chat is off: the speech service is not answering. Try again in a minute.',
       voiceChatRecordingTooLarge:
         'That recording was {{size}}, over the {{limit}} limit, so it was not sent. Try shorter turns.',
+      voiceChatRecordingTooLong:
+        'That recording was {{duration}}, over the {{limit}} limit this server accepts, so it was not sent. Try shorter turns.',
       voiceChatSpeaking: 'Reading the answer aloud…',
       voiceChatTranscribing: 'Sending what you said…',
       voiceChatTurnRefused: 'That turn was not accepted; try saying it again.',

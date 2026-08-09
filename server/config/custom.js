@@ -130,11 +130,14 @@ module.exports.custom = {
   // (skipper's default). 700 KB of audio is ~956 KB encoded, which fits with
   // room for the envelope. Raising this without also raising the body-parser
   // limit turns an oversized recording into a parser error instead of the
-  // 400 the client knows how to explain.
+  // 422 the client knows how to explain.
   voiceSttMaxBytes: envToBytes(process.env.VOICE_STT_MAX_BYTES || '700kb'),
   // Enforced against the duration the provider reports: browsers do not write a
   // reliable duration into a streamed webm/ogg container, so nothing before the
-  // call can be trusted.
+  // call can be trusted. That also makes it the ceiling a refusal has already
+  // been billed for, which is why it is published in the bootstrap and the
+  // browser ends its turns inside it (client/src/utils/voice-chat.js
+  // `voiceChatTuning`, `recordingAvailability`).
   voiceSttMaxDurationSec: envToNumber(process.env.VOICE_STT_MAX_DURATION_SEC) || 300,
   voiceSttTimeoutSec: envToNumber(process.env.VOICE_STT_TIMEOUT_SEC) || 60,
 
@@ -159,7 +162,7 @@ module.exports.custom = {
   voiceTtsOutputFormat: process.env.VOICE_TTS_OUTPUT_FORMAT || 'mp3',
   voiceTtsSampleRate: envToNumber(process.env.VOICE_TTS_SAMPLE_RATE) || 44100,
   voiceTtsBitRate: envToNumber(process.env.VOICE_TTS_BIT_RATE) || 128000,
-  // Longer input is rejected with a 400, never truncated. Lower than setl's
+  // Longer input is rejected with a 422, never truncated. Lower than setl's
   // 5000 because this endpoint answers with the whole clip in one response
   // rather than streaming it, so the ceiling is also the bound on how much
   // audio is held in memory at once.
