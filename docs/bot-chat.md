@@ -37,7 +37,14 @@ the top of the new one.
 The launcher only appears on a board that planka_bot is a **member** of — a
 chat nobody is listening to is worse than no launcher — and only comments if
 the current user's board membership allows it (editor, or `canComment`), which
-is the same rule the server enforces on `POST /cards/:id/comments`.
+is the same rule the server enforces on `POST /cards/:id/comments`. A card in
+the archive or the trash is read-only everywhere in Planka, so the panel will
+show its thread and say that rather than blaming your membership.
+
+The button can be picked up (press and hold, then drag) and parked anywhere
+along the edges of the window; the panel grows up and to the left out of
+wherever it was left, sliding back down only as far as it must to stay a panel
+worth reading on a small window.
 
 ## Setup
 

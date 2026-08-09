@@ -15,9 +15,12 @@ import {
   LAUNCHER_POSITION_KEY,
   LAUNCHER_SIZE,
   LAST_CARD_KEY,
+  MIN_PANEL_HEIGHT,
   MIN_PANEL_WIDTH,
   MessageAuthors,
   PANEL_EDGE_MARGIN,
+  PANEL_LAUNCHER_GAP,
+  PANEL_VIEWPORT_MARGIN,
   PANEL_WIDTH_KEY,
   THREAD_BOTTOM_SLACK_PX,
   botMentionMarkup,
@@ -28,6 +31,7 @@ import {
   isAtThreadBottom,
   maxPanelWidth,
   mentionsBot,
+  panelAnchor,
   panelWidthAfterDrag,
   readLastCardId,
   readLauncherPosition,
@@ -185,6 +189,51 @@ describe('panel width', () => {
     expect(readPanelWidth(createStorage(), 1400)).toBeNull();
     expect(readPanelWidth(createStorage({ [PANEL_WIDTH_KEY]: 'wide' }), 1400)).toBeNull();
     expect(readPanelWidth(createStorage({ [PANEL_WIDTH_KEY]: '0' }), 1400)).toBeNull();
+  });
+});
+
+describe('panelAnchor', () => {
+  const VIEWPORT = { width: 1400, height: 900 };
+
+  /** What the caller's `calc(100dvh - Npx)` / `calc(100vw - Npx)` leave the
+   * panel — the whole reason the anchor is clamped at all. */
+  const roomLeft = (anchor, viewport) => ({
+    height: viewport.height - (anchor.bottom + PANEL_VIEWPORT_MARGIN),
+    width: viewport.width - (anchor.right + PANEL_VIEWPORT_MARGIN),
+  });
+
+  test('hangs the panel off the launcher, clear of it by the gap', () => {
+    expect(panelAnchor({ right: 24, bottom: 24 }, VIEWPORT)).toEqual({
+      right: 24,
+      bottom: 24 + LAUNCHER_SIZE + PANEL_LAUNCHER_GAP,
+    });
+  });
+
+  test('a launcher dragged to the top leaves the panel its minimum height', () => {
+    // The top of what clampLauncherPosition allows. Anchored naively the panel
+    // would be asked for a NEGATIVE max-height, which CSS clamps to zero — an
+    // open panel with nothing in it.
+    const position = clampLauncherPosition({ right: 24, bottom: 10000 }, VIEWPORT);
+    const anchor = panelAnchor(position, VIEWPORT);
+
+    expect(anchor.bottom).toBeLessThan(position.bottom + LAUNCHER_SIZE + PANEL_LAUNCHER_GAP);
+    expect(roomLeft(anchor, VIEWPORT).height).toBe(MIN_PANEL_HEIGHT);
+  });
+
+  test('a launcher dragged to the far left leaves the panel its minimum width', () => {
+    const position = clampLauncherPosition({ right: 10000, bottom: 24 }, VIEWPORT);
+    const anchor = panelAnchor(position, VIEWPORT);
+
+    expect(anchor.right).toBeLessThan(position.right);
+    expect(roomLeft(anchor, VIEWPORT).width).toBe(MIN_PANEL_WIDTH);
+  });
+
+  test('never asks for a negative offset on a viewport smaller than the panel', () => {
+    const tiny = { width: 200, height: 200 };
+    const anchor = panelAnchor(clampLauncherPosition({ right: 24, bottom: 24 }, tiny), tiny);
+
+    expect(anchor.right).toBe(0);
+    expect(anchor.bottom).toBe(0);
   });
 });
 

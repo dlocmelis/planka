@@ -15,7 +15,12 @@ import { createStore } from 'redux';
 
 import EntryActionTypes from '../../../constants/EntryActionTypes';
 import { BoardMembershipRoles, ListTypes } from '../../../constants/Enums';
-import { MessageAuthors } from '../../../utils/bot-chat';
+import {
+  LAUNCHER_SIZE,
+  MIN_PANEL_HEIGHT,
+  MIN_PANEL_WIDTH,
+  MessageAuthors,
+} from '../../../utils/bot-chat';
 import BotChat from './BotChat';
 
 const BOT = { id: 'user-bot', username: 'planka_bot', name: 'Orchestrator Bot' };
@@ -735,4 +740,86 @@ test('the panel is capped against the two viewport edges it grows towards', () =
   const panel = container.querySelector('[role="separator"]').parentElement;
   expect(panel.style.maxHeight).toBe('calc(100dvh - 108px)');
   expect(panel.style.maxWidth).toBe('calc(100vw - 40px)');
+});
+
+/** What a `calc(100dvh - Npx)` cap leaves the panel to occupy. */
+const roomLeftBy = (cap, viewportPx) => viewportPx - Number(/- (\d+)px\)$/.exec(cap)[1]);
+
+test('a launcher parked in the far corner still opens a panel worth reading', () => {
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+  // Dragged up the screen and across to the left — which is exactly what the
+  // drag is FOR, and what used to drive both caps negative. A negative
+  // `calc()` is clamped to zero rather than ignored, so the panel opened with
+  // no size at all and the button looked broken.
+  window.localStorage.setItem(
+    'planka-bot-chat-launcher-position',
+    JSON.stringify({ right: 900, bottom: 700 }),
+  );
+
+  render();
+  click(launcher());
+
+  const panel = container.querySelector('[role="separator"]').parentElement;
+  expect(roomLeftBy(panel.style.maxHeight, window.innerHeight)).toBeGreaterThanOrEqual(
+    MIN_PANEL_HEIGHT,
+  );
+  expect(roomLeftBy(panel.style.maxWidth, window.innerWidth)).toBeGreaterThanOrEqual(
+    MIN_PANEL_WIDTH,
+  );
+});
+
+test('the floating button is a circle of the size the drag arithmetic clamps against', () => {
+  render();
+
+  // A `button` is shrink-to-fit, and a `position: fixed` box with only `right`
+  // set doubly so: left to the stylesheet the width is the avatar's, the
+  // circle comes out an ellipse, and every clamp that reasons in
+  // LAUNCHER_SIZE is reasoning about a button that is not that size.
+  expect(launcher().style.width).toBe(`${LAUNCHER_SIZE}px`);
+  expect(launcher().style.height).toBe(`${LAUNCHER_SIZE}px`);
+});
+
+test('the Enter an input method presses to confirm a candidate does not send', () => {
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+
+  render();
+  click(launcher());
+
+  const field = container.querySelector('textarea');
+  type(field, '進捗');
+
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, isComposing: true }),
+    );
+  });
+
+  // ...and the legacy signal from browsers that leave `isComposing` false.
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, keyCode: 229 }),
+    );
+  });
+
+  expect(actionsOfType(EntryActionTypes.COMMENT_FOR_CARD_CREATE)).toHaveLength(0);
+  expect(container.querySelector('textarea').value).toBe('進捗');
+
+  // The Enter that ends the composition still sends.
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
+
+  expect(actionsOfType(EntryActionTypes.COMMENT_FOR_CARD_CREATE)).toHaveLength(1);
+});
+
+test('a card in the archive says so instead of blaming your board membership', () => {
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+  mockLists = [{ id: 'list-1', type: ListTypes.ARCHIVE, name: 'Archive' }];
+
+  render();
+  click(launcher());
+
+  expect(container.querySelector('textarea').disabled).toBe(true);
+  expect(container.textContent).toContain('common.youCannotCommentOnACardInTheArchiveOrTrash');
+  expect(container.textContent).not.toContain('common.youCannotCommentOnThisBoard');
 });

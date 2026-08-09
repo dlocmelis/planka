@@ -201,6 +201,49 @@ export const writePanelWidth = (storage, width) => {
   }
 };
 
+/* Where the panel hangs */
+
+/** Breathing room between the launcher and the panel that grows out of it. */
+export const PANEL_LAUNCHER_GAP = 12;
+
+/** ...and between the panel and the two viewport edges it grows towards. */
+export const PANEL_VIEWPORT_MARGIN = 16;
+
+/** The least room the panel needs to be worth opening: a header, a message or
+ * two and the composer. */
+export const MIN_PANEL_HEIGHT = 280;
+
+/**
+ * Where the panel's bottom-right corner sits, given where the launcher has
+ * been dragged to.
+ *
+ * The panel grows UP and to the LEFT out of the launcher, so the caller turns
+ * this corner into the two maxima that keep it on screen —
+ * `calc(100dvh - bottom - margin)` and `calc(100vw - right - margin)`. Left
+ * alone, a launcher parked near the top or the far left drives both of those
+ * to nothing: a `calc()` that resolves negative is clamped to zero rather than
+ * ignored, so the panel opens with no height at all and the button looks
+ * broken. Both are perfectly reachable — `clampLauncherPosition` lets the
+ * launcher go right up to either edge, and dragging it out of the way is the
+ * whole point of the gesture.
+ *
+ * So the corner slides back down and to the right as far as it has to for the
+ * panel to keep its minimum. The launcher paints above the panel
+ * (`Launcher.module.scss` z-index) and stays a toggle, so it is still there to
+ * close what it opened when the two overlap.
+ */
+export const panelAnchor = (position, viewport) => {
+  const lowestTop = Math.max(0, viewport.height - MIN_PANEL_HEIGHT - PANEL_VIEWPORT_MARGIN);
+  const furthestLeft = Math.max(0, viewport.width - MIN_PANEL_WIDTH - PANEL_VIEWPORT_MARGIN);
+
+  const bottom = Math.max(position.bottom, 0) + LAUNCHER_SIZE + PANEL_LAUNCHER_GAP;
+
+  return {
+    right: Math.round(Math.min(Math.max(position.right, 0), furthestLeft)),
+    bottom: Math.round(Math.min(bottom, lowestTop)),
+  };
+};
+
 /* The thread's scroll position */
 
 /**

@@ -28,7 +28,8 @@
     box-shadow: 0 6px 16px rgba(9, 30, 66, 0.35);
     cursor: pointer;
     display: flex;
-    height: 56px;
+    // Width and height are set inline from LAUNCHER_SIZE (utils/bot-chat.js),
+    // which is also what the drag clamps against — one number, one place.
     justify-content: center;
     outline: none;
     padding: 0;

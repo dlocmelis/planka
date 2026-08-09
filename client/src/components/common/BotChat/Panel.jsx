@@ -45,6 +45,7 @@ const Panel = React.memo(
     isCommentsFetching,
     hasEarlierMessages,
     canComment,
+    isCardArchivedOrTrashed,
     width,
     maxWidth,
     maxHeight,
@@ -321,7 +322,11 @@ const Panel = React.memo(
         {bodyNode}
         {cardId && <Composer bot={bot} isDisabled={!canComment} onSubmit={onSubmit} />}
         {cardId && !canComment && (
-          <div className={styles.readOnly}>{t('common.youCannotCommentOnThisBoard')}</div>
+          <div className={styles.readOnly}>
+            {isCardArchivedOrTrashed
+              ? t('common.youCannotCommentOnACardInTheArchiveOrTrash')
+              : t('common.youCannotCommentOnThisBoard')}
+          </div>
         )}
       </div>
     );
@@ -339,6 +344,7 @@ Panel.propTypes = {
   isCommentsFetching: PropTypes.bool.isRequired,
   hasEarlierMessages: PropTypes.bool.isRequired,
   canComment: PropTypes.bool.isRequired,
+  isCardArchivedOrTrashed: PropTypes.bool.isRequired,
   width: PropTypes.number.isRequired,
   maxWidth: PropTypes.string.isRequired,
   maxHeight: PropTypes.string.isRequired,

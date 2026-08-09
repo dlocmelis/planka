@@ -14,10 +14,11 @@ import { isListArchiveOrTrash } from '../../../utils/record-helpers';
 import {
   DEFAULT_LAUNCHER_POSITION,
   DEFAULT_PANEL_WIDTH,
-  LAUNCHER_SIZE,
+  PANEL_VIEWPORT_MARGIN,
   botReplyState,
   clampLauncherPosition,
   clampPanelWidth,
+  panelAnchor,
   readLastCardId,
   readLauncherPosition,
   readPanelWidth,
@@ -31,11 +32,13 @@ import Panel from './Panel';
 
 import styles from './BotChat.module.scss';
 
-/** Breathing room between the launcher and the panel that grows out of it. */
-const PANEL_GAP = 12;
-
-/** ...and between the panel and the two viewport edges it grows towards. */
-const PANEL_VIEWPORT_MARGIN = 16;
+/** The viewport the launcher is clamped against and the panel is capped
+ * against. Read through a helper so there is one answer to "how big is the
+ * window" and it is safe where there is none. */
+const viewportSize = () =>
+  typeof window === 'undefined'
+    ? { width: 0, height: 0 }
+    : { width: window.innerWidth, height: window.innerHeight };
 
 /** How often the panel re-reads the clock while it is open, so "thinking"
  * turns into "still nothing" without waiting for the next message to arrive
@@ -69,6 +72,7 @@ const BotChat = React.memo(() => {
   const [cardId, setCardId] = useState(null);
   const [position, setPosition] = useState(DEFAULT_LAUNCHER_POSITION);
   const [width, setWidth] = useState(DEFAULT_PANEL_WIDTH);
+  const [viewport, setViewport] = useState(viewportSize);
   // Nothing that was already on the board when this tab loaded counts as
   // unread: the badge means "something arrived while you were here and not
   // looking", which is the only meaning that stays true across a reload.
@@ -80,8 +84,7 @@ const BotChat = React.memo(() => {
   // window has since been resized to is the one the position is clamped
   // against.
   useEffect(() => {
-    const viewport = { width: window.innerWidth, height: window.innerHeight };
-    const storedPosition = readLauncherPosition(window.localStorage, viewport);
+    const storedPosition = readLauncherPosition(window.localStorage, viewportSize());
     const storedWidth = readPanelWidth(window.localStorage, window.innerWidth);
     const storedCardId = readLastCardId(window.localStorage);
 
@@ -102,10 +105,15 @@ const BotChat = React.memo(() => {
   // window resizes.
   useEffect(() => {
     const handleResize = () => {
-      const viewport = { width: window.innerWidth, height: window.innerHeight };
+      const nextViewport = viewportSize();
 
-      setPosition((current) => clampLauncherPosition(current, viewport));
-      setWidth((current) => clampPanelWidth(current, viewport.width));
+      // Tracked as state rather than read at render time: a position that is
+      // already inside the new viewport does not change, so the two setters
+      // below would not re-render, and the panel's caps would go on being
+      // computed against the window the tab was opened at.
+      setViewport(nextViewport);
+      setPosition((current) => clampLauncherPosition(current, nextViewport));
+      setWidth((current) => clampPanelWidth(current, nextViewport.width));
     };
 
     window.addEventListener('resize', handleResize);
@@ -137,23 +145,35 @@ const BotChat = React.memo(() => {
 
   const messages = useSelector((state) => selectChatMessagesForCard(state, activeCardId));
 
-  const canComment = useSelector((state) => {
+  // The board's own rule, which is the one the server enforces on
+  // POST /cards/:id/comments: a membership, and editor or `canComment` on it.
+  const canCommentOnBoard = useSelector((state) => {
     const boardMembership = selectors.selectCurrentUserMembershipForCurrentBoard(state);
 
     if (!boardMembership) {
       return false;
     }
 
-    if (card) {
-      const list = selectListById(state, card.listId);
-
-      if (list && isListArchiveOrTrash(list)) {
-        return false;
-      }
-    }
-
     return boardMembership.role === BoardMembershipRoles.EDITOR || !!boardMembership.canComment;
   });
+
+  // ...and the card's, kept apart from it so the panel can say WHICH of the
+  // two is stopping it. An archived card is still openable — the whole app
+  // renders it read-only rather than hiding it (Attachments, TaskList,
+  // CustomField all do the same) — so a chat that followed the user into one
+  // and then blamed their board membership would be telling them something
+  // untrue about their account.
+  const isCardArchivedOrTrashed = useSelector((state) => {
+    if (!card) {
+      return false;
+    }
+
+    const list = selectListById(state, card.listId);
+
+    return !!list && isListArchiveOrTrash(list);
+  });
+
+  const canComment = canCommentOnBoard && !isCardArchivedOrTrashed;
 
   // The thread has to be loaded before it can be read or counted, and comments
   // are fetched per card — the board's own bootstrap does not carry them.
@@ -274,9 +294,10 @@ const BotChat = React.memo(() => {
 
   // The panel grows up and to the left out of the launcher, wherever the
   // launcher has been dragged to — so both of the edges it grows towards are
-  // capped against the viewport, or a launcher parked near the top or the far
-  // left opens a panel with its head off the screen.
-  const panelBottom = position.bottom + LAUNCHER_SIZE + PANEL_GAP;
+  // capped against the viewport, and the corner it hangs from slides back when
+  // the launcher is parked too near the top or the far left for a panel to fit
+  // above it (`panelAnchor`).
+  const anchor = panelAnchor(position, viewport);
 
   return (
     <>
@@ -286,7 +307,7 @@ const BotChat = React.memo(() => {
           role="dialog"
           aria-label={bot.name || bot.username}
           className={styles.panelAnchor}
-          style={{ right: position.right, bottom: panelBottom }}
+          style={{ right: anchor.right, bottom: anchor.bottom }}
           onKeyDown={handleKeyDown}
         >
           <Panel
@@ -298,9 +319,10 @@ const BotChat = React.memo(() => {
             isCommentsFetching={!!(card && card.isCommentsFetching)}
             hasEarlierMessages={!!(activeCardId && card && card.isAllCommentsFetched === false)}
             canComment={canComment}
+            isCardArchivedOrTrashed={isCardArchivedOrTrashed}
             width={width}
-            maxWidth={`calc(100vw - ${position.right + PANEL_VIEWPORT_MARGIN}px)`}
-            maxHeight={`calc(100dvh - ${panelBottom + PANEL_VIEWPORT_MARGIN}px)`}
+            maxWidth={`calc(100vw - ${anchor.right + PANEL_VIEWPORT_MARGIN}px)`}
+            maxHeight={`calc(100dvh - ${anchor.bottom + PANEL_VIEWPORT_MARGIN}px)`}
             onWidthChange={handleWidthChange}
             onSubmit={handleSubmit}
             onSelectCard={handleSelectCard}

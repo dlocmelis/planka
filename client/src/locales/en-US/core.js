@@ -408,6 +408,8 @@ export default {
       whatsNew_title: "What's New",
       withoutBaseGroup: 'Without base group',
       writeComment: 'Write a comment...',
+      youCannotCommentOnACardInTheArchiveOrTrash:
+        'You cannot comment on a card in the archive or trash.',
       youCannotCommentOnThisBoard: 'You cannot comment on this board.',
     },
 

@@ -78,6 +78,16 @@ const Composer = React.memo(({ bot, isDisabled, onSubmit }) => {
 
   const handleKeyDown = useCallback(
     (event) => {
+      // An input method confirming a candidate presses Enter too. This is the
+      // only plain-Enter submit in the app — Planka's own comment box wants
+      // Ctrl/Cmd+Enter — and the app ships ja-JP, ko-KR, zh-CN, zh-TW and
+      // vi-VN, so without this the first Enter of a conversion sends half a
+      // sentence. `keyCode === 229` is the same signal from browsers that do
+      // not set `isComposing` on the key event itself.
+      if (event.nativeEvent.isComposing || event.keyCode === 229) {
+        return;
+      }
+
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
         submit();

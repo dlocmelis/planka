@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import {
   LAUNCHER_HOLD_CANCEL_PX,
   LAUNCHER_HOLD_MS,
+  LAUNCHER_SIZE,
   clampLauncherPosition,
   unreadBadgeLabel,
 } from '../../../utils/bot-chat';
@@ -187,7 +188,18 @@ const Launcher = React.memo(({ bot, position, unreadCount, isOpened, onToggle, o
       }
       aria-expanded={isOpened}
       className={classNames(styles.launcher, isDragging && styles.launcherDragging)}
-      style={{ right: position.right, bottom: position.bottom }}
+      // Sized from the constant rather than from the stylesheet so the circle
+      // and the arithmetic cannot drift apart: LAUNCHER_SIZE is what clamps the
+      // drag to the viewport and what the panel hangs itself off. A `button`
+      // is shrink-to-fit — doubly so with `position: fixed` and only one of
+      // left/right set — so a width left to the stylesheet is the width of the
+      // avatar inside, and the round button comes out an ellipse.
+      style={{
+        right: position.right,
+        bottom: position.bottom,
+        width: LAUNCHER_SIZE,
+        height: LAUNCHER_SIZE,
+      }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerEnd}
