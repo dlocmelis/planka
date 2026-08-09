@@ -15,7 +15,10 @@
  *       of the board — which is the bar GET /cards/{cardId}/comments applies.
  *       The text comes from the CLIENT rather than from stored history: the
  *       panel already holds the markdown it rendered, and the card only ties
- *       the spend to a conversation the caller can actually see.
+ *       the spend to a conversation the caller can actually see. Metered: a
+ *       caller who has used their share of the deployment's synthesis budget
+ *       for the window is answered 429 with the seconds until the next message
+ *       would be read.
  *     tags:
  *       - Voice
  *     operationId: speakMessage
@@ -90,6 +93,8 @@
  *         $ref: '#/components/responses/NotFound'
  *       422:
  *         $ref: '#/components/responses/UnprocessableEntity'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       502:
  *         $ref: '#/components/responses/BadGateway'
  *       503:
@@ -97,7 +102,12 @@
  */
 
 const { idInput } = require('../../../utils/inputs');
-const { VoiceProviderError, VoiceRequestError } = require('../../../utils/voice');
+const {
+  PREPARED_TEXT_FACTOR,
+  VoiceProviderError,
+  VoiceRequestError,
+} = require('../../../utils/voice');
+const { voiceRateLimiter } = require('../../../utils/voice-rate-limit');
 
 const Errors = {
   CARD_NOT_FOUND: {
@@ -111,6 +121,9 @@ const Errors = {
   },
   SPEECH_FAILED: {
     speechFailed: 'Speech synthesis failed',
+  },
+  TOO_MANY_TURNS: {
+    tooManyTurns: 'Too many messages read aloud just now',
   },
 };
 
@@ -158,6 +171,11 @@ module.exports = {
     speechFailed: {
       responseType: 'badGateway',
     },
+    // See the twin of this in `transcribe.js`: a spent budget is neither an
+    // outage nor a missing feature, so it is neither of those two responses.
+    tooManyTurns: {
+      responseType: 'tooManyRequests',
+    },
   },
 
   async fn(inputs) {
@@ -201,6 +219,34 @@ module.exports = {
       }
     }
 
+    // The last gate before anything is billable — see the twin of this in
+    // `transcribe.js`. What it reserves is the most this message could be
+    // billed for, which is NOT what was sent: narration expands a table into
+    // prose, and `PREPARED_TEXT_FACTOR` is the ceiling on that expansion.
+    // `text.length` counts UTF-16 units and the provider counts code points, so
+    // it is an over-estimate of an over-estimate; both errors are on the safe
+    // side, and the settle below replaces the guess with the real figure.
+    const reservation = voiceRateLimiter.reserve({
+      scope: 'tts',
+      userId: currentUser.id,
+      limits: tts.rateLimit,
+      units: inputs.text.length * PREPARED_TEXT_FACTOR,
+    });
+
+    if (!reservation.isAllowed) {
+      sails.log.warn(
+        `Voice synthesis refused by the rate limit: card=${card.id} user=${currentUser.id} ` +
+          `exceeded=${reservation.exceeded} retryAfterSec=${reservation.retryAfterSec}`,
+      );
+
+      throw {
+        tooManyTurns: {
+          message: 'Too many messages read aloud just now; this one is on screen',
+          retryAfterSec: reservation.retryAfterSec,
+        },
+      };
+    }
+
     const startedAt = Date.now();
 
     let result;
@@ -211,6 +257,9 @@ module.exports = {
         voice: inputs.voice,
       });
     } catch (error) {
+      // Not refunded, for the reason `transcribe.js` gives at the same point: a
+      // 200 with no audio in it was billed all the same, and a budget that
+      // comes back whenever a turn fails is one that can be farmed by failing.
       if (error instanceof VoiceRequestError) {
         throw { cannotSpeak: error.message };
       }
@@ -233,6 +282,15 @@ module.exports = {
 
       throw { speechFailed: 'That message could not be read aloud right now; please try again' };
     }
+
+    // What the provider actually read, which is the figure it bills against.
+    voiceRateLimiter.settle({
+      scope: 'tts',
+      userId: currentUser.id,
+      limits: tts.rateLimit,
+      reserved: reservation.reserved,
+      spent: result.chars,
+    });
 
     // Metered per character, so this is the per-user cost record. The message
     // itself is not in it — only how much of it was spoken.

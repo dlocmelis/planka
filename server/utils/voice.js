@@ -286,6 +286,21 @@ const isOutgoingHostAllowed = (hostname, env) => {
 const speechTextLength = (text) => [...String(text || '')].length;
 
 /**
+ * How much longer the PREPARED text may be than the accepted input before it is
+ * cut. Narration turns a table into prose, so the text that is actually
+ * synthesized is longer than the markdown the ceiling measured — three times is
+ * setl's own headroom, and the cut speaks "…the rest is on screen…" rather than
+ * stopping dead.
+ *
+ * It lives here rather than in `helpers/voice/synthesize.js`, which is the only
+ * place that applies it, because it is also the factor between what a caller
+ * SENDS and what the vendor BILLS: the spending cap in
+ * `controllers/voice/speak.js` has to reserve against the same number, and two
+ * copies of it would drift into a cap that is quietly three times what it says.
+ */
+const PREPARED_TEXT_FACTOR = 3;
+
+/**
  * How much of a provider's ERROR body is worth taking into memory before it is
  * quoted into a log line. Generous for an HTML error page, small enough that a
  * provider answering an outage with something enormous costs nothing.
@@ -375,6 +390,7 @@ module.exports = {
   CARTESIA_VERSION,
   INTERNAL_OUTGOING_PROXY,
   MAX_PROVIDER_ERROR_BYTES,
+  PREPARED_TEXT_FACTOR,
   VoiceProviderError,
   VoiceRequestError,
   allowedAudioMimeTypes,

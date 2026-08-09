@@ -13,6 +13,9 @@
  *       voice chat mode of the planka_bot chat panel. Requires the same board
  *       permissions as commenting on the card, because the transcript is what
  *       the panel is about to post as a comment. The audio is never stored.
+ *       Metered: a caller who has used their share of the deployment's
+ *       transcription budget for the window is answered 429 with the seconds
+ *       until the next turn would be accepted.
  *     tags:
  *       - Voice
  *     operationId: transcribeVoiceRecording
@@ -85,6 +88,8 @@
  *         $ref: '#/components/responses/NotFound'
  *       422:
  *         $ref: '#/components/responses/UnprocessableEntity'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       502:
  *         $ref: '#/components/responses/BadGateway'
  *       503:
@@ -99,6 +104,13 @@ const {
   formatBytes,
   normalizeAudioMimeType,
 } = require('../../../utils/voice');
+const { voiceRateLimiter } = require('../../../utils/voice-rate-limit');
+
+/** What a turn reserves against the audio budget when the deployment has taken
+ * the per-recording duration cap off. Nothing else bounds how long a recording
+ * can be then, so the reservation falls back to the same five minutes the cap
+ * defaults to rather than to nothing at all. */
+const UNCAPPED_RESERVED_AUDIO_SEC = 300;
 
 const Errors = {
   NOT_ENOUGH_RIGHTS: {
@@ -115,6 +127,9 @@ const Errors = {
   },
   TRANSCRIPTION_FAILED: {
     transcriptionFailed: 'Transcription failed',
+  },
+  TOO_MANY_TURNS: {
+    tooManyTurns: 'Too many voice turns just now',
   },
 };
 
@@ -176,6 +191,12 @@ module.exports = {
     },
     transcriptionFailed: {
       responseType: 'badGateway',
+    },
+    // Not `badGateway` and not `serviceUnavailable`: this caller has spent
+    // their share of what the deployment pays for, which is neither an outage
+    // nor a feature that is missing. The client keeps the mode on and waits.
+    tooManyTurns: {
+      responseType: 'tooManyRequests',
     },
   },
 
@@ -240,6 +261,37 @@ module.exports = {
       throw Errors.NOT_ENOUGH_RIGHTS;
     }
 
+    // The last gate before anything is billable, and the only one in this
+    // feature that bounds more than a single request: without it one account
+    // with a script is an open transcription service paid for by whoever put
+    // the key in the environment.
+    //
+    // It reserves the most this recording could cost — the duration ceiling,
+    // since nothing before the provider answers knows how long the audio really
+    // is — and settles to the real figure below.
+    const reservedSec = stt.maxDurationSec > 0 ? stt.maxDurationSec : UNCAPPED_RESERVED_AUDIO_SEC;
+
+    const reservation = voiceRateLimiter.reserve({
+      scope: 'stt',
+      userId: currentUser.id,
+      limits: stt.rateLimit,
+      units: reservedSec,
+    });
+
+    if (!reservation.isAllowed) {
+      sails.log.warn(
+        `Voice transcription refused by the rate limit: card=${card.id} user=${currentUser.id} ` +
+          `exceeded=${reservation.exceeded} retryAfterSec=${reservation.retryAfterSec}`,
+      );
+
+      throw {
+        tooManyTurns: {
+          message: 'Too many voice turns just now; give it a moment and say that again',
+          retryAfterSec: reservation.retryAfterSec,
+        },
+      };
+    }
+
     const startedAt = Date.now();
 
     let result;
@@ -250,6 +302,11 @@ module.exports = {
         language: inputs.language,
       });
     } catch (error) {
+      // The reservation is NOT given back. This server cannot tell a provider
+      // that charged for the call from one that did not — the duration refusal
+      // below is thrown against a transcript that was already billed for — and
+      // a budget that is refunded whenever a turn fails is one an abusive
+      // caller can farm by failing on purpose.
       if (error instanceof VoiceRequestError) {
         throw { invalidRecording: error.message };
       }
@@ -285,6 +342,18 @@ module.exports = {
         transcriptionFailed: 'The recording could not be transcribed right now; please try again',
       };
     }
+
+    // What it really cost, now that the provider has said. Usually far less
+    // than was reserved — a turn is a sentence, the reservation is the ceiling
+    // — and the difference goes straight back, so a conversation of ordinary
+    // turns never comes near the budget.
+    voiceRateLimiter.settle({
+      scope: 'stt',
+      userId: currentUser.id,
+      limits: stt.rateLimit,
+      reserved: reservation.reserved,
+      spent: result.durationSec,
+    });
 
     // One summary line per transcription: this endpoint is metered per audio
     // minute, so it is the per-user cost record. Note what is NOT here — the

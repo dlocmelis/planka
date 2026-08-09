@@ -140,6 +140,19 @@ module.exports.custom = {
   // `voiceChatTuning`, `recordingAvailability`).
   voiceSttMaxDurationSec: envToNumber(process.env.VOICE_STT_MAX_DURATION_SEC) || 300,
   voiceSttTimeoutSec: envToNumber(process.env.VOICE_STT_TIMEOUT_SEC) || 60,
+  // The per-user spending cap, and the only cap in this feature that bounds
+  // more than one request. Transcription is billed per audio minute, so it has
+  // both a request ceiling and an audio-seconds ceiling per window — see
+  // `utils/voice-rate-limit.js` for why one of the two is not enough.
+  //
+  // These three carry no default HERE, unlike everything above, because 0 is a
+  // meaningful value for them — it turns that dimension off, for a deployment
+  // that limits at its own reverse proxy — and `x || default` cannot say it.
+  // `api/helpers/voice/get-config.js` applies the defaults and refuses a
+  // negative.
+  voiceSttRateWindowSec: envToNumber(process.env.VOICE_STT_RATE_WINDOW_SEC),
+  voiceSttRateMaxRequests: envToNumber(process.env.VOICE_STT_RATE_MAX_REQUESTS),
+  voiceSttRateMaxSeconds: envToNumber(process.env.VOICE_STT_RATE_MAX_SECONDS),
 
   // Text-to-speech, gated the same way.
   cartesiaApiKey: process.env.CARTESIA_API_KEY,
@@ -168,6 +181,14 @@ module.exports.custom = {
   // audio is held in memory at once.
   voiceTtsMaxChars: envToNumber(process.env.VOICE_TTS_MAX_CHARS) || 2000,
   voiceTtsTimeoutSec: envToNumber(process.env.VOICE_TTS_TIMEOUT_SEC) || 60,
+  // The same cap for the other half, in the unit this one is billed in:
+  // characters of SYNTHESIZED speech. Note that is not the same as characters
+  // sent — narration expands a table, and the ceiling on that expansion is
+  // `PREPARED_TEXT_FACTOR` — so the budget is spent against what the provider
+  // actually read, which the controller settles up once it knows.
+  voiceTtsRateWindowSec: envToNumber(process.env.VOICE_TTS_RATE_WINDOW_SEC),
+  voiceTtsRateMaxRequests: envToNumber(process.env.VOICE_TTS_RATE_MAX_REQUESTS),
+  voiceTtsRateMaxChars: envToNumber(process.env.VOICE_TTS_RATE_MAX_CHARS),
 
   /* Internal */
 

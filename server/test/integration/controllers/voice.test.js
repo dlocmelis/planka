@@ -3,6 +3,7 @@ const { expect } = require('chai');
 const supertest = require('supertest');
 
 const endpoints = require('../../../utils/voice-endpoints');
+const { voiceRateLimiter } = require('../../../utils/voice-rate-limit');
 
 /**
  * The two voice endpoints, driven through the real router, the real policies
@@ -24,6 +25,7 @@ describe('Voice chat endpoints', function describeVoice() {
   let list;
   let card;
   let editor;
+  let otherEditor;
   let viewer;
   let outsider;
   let admin;
@@ -195,12 +197,26 @@ describe('Voice chat endpoints', function describeVoice() {
       ),
     );
 
-    await BoardMembership.create({
-      projectId: project.id,
-      boardId: board.id,
-      userId: editor.id,
-      role: BoardMembership.Roles.EDITOR,
+    // A second editor on the same board, for the one thing a single one cannot
+    // show: that the spending caps are per user rather than per instance.
+    otherEditor = await User.create({
+      id: '1925476504885136009',
+      email: 'voiceeditor2@example.com',
+      username: 'voiceeditor2',
+      role: User.Roles.BOARD_USER,
+      name: 'voiceeditor2',
     }).fetch();
+
+    await Promise.all(
+      [editor, otherEditor].map((user) =>
+        BoardMembership.create({
+          projectId: project.id,
+          boardId: board.id,
+          userId: user.id,
+          role: BoardMembership.Roles.EDITOR,
+        }).fetch(),
+      ),
+    );
 
     await BoardMembership.create({
       projectId: project.id,
@@ -221,6 +237,7 @@ describe('Voice chat endpoints', function describeVoice() {
     }).fetch();
 
     tokens.editor = await mintAccessToken(editor);
+    tokens.otherEditor = await mintAccessToken(otherEditor);
     tokens.viewer = await mintAccessToken(viewer);
     tokens.outsider = await mintAccessToken(outsider);
     tokens.admin = await mintAccessToken(admin);
@@ -237,6 +254,11 @@ describe('Voice chat endpoints', function describeVoice() {
   });
 
   beforeEach(() => {
+    // The spending caps are per user and outlive a request, so without this
+    // every test in this file would be spending the same editor's budget and
+    // the ones at the bottom would start seeing 429s from the ones at the top.
+    voiceRateLimiter.reset();
+
     providerCalls = [];
     providerResponses = {
       deepgram: {
@@ -389,6 +411,19 @@ describe('Voice chat endpoints', function describeVoice() {
         what: 'an upload limit that does not name a size',
         values: { voiceSttMaxBytes: null },
         half: 'stt',
+      },
+      {
+        // A negative cap would refuse every turn for ever and say nothing about
+        // why, which is the one direction a spending limit must not fail in
+        // quietly.
+        what: 'a negative transcription rate limit',
+        values: { voiceSttRateMaxRequests: -1 },
+        half: 'stt',
+      },
+      {
+        what: 'a negative synthesis rate window',
+        values: { voiceTtsRateWindowSec: -300 },
+        half: 'tts',
       },
     ];
 
@@ -732,6 +767,106 @@ describe('Voice chat endpoints', function describeVoice() {
       expect(res.body.code).to.equal('E_UNPROCESSABLE_ENTITY');
       expect(res.body.message).to.contain('too large');
       expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    describe('the per-user spending cap', () => {
+      it('stops paying for a caller who has had their turns for the window', async () => {
+        withVoice({ voiceSttRateMaxRequests: 2 });
+
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(200);
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(200);
+
+        const refused = await postTranscription(tokens.editor, audioBody());
+
+        // 429 and not 502 or 503: the client keeps the mode on for this one and
+        // waits, where those two make it stop the mode or withdraw the feature.
+        expect(refused.status).to.equal(429);
+        expect(refused.body.code).to.equal('E_TOO_MANY_REQUESTS');
+        expect(refused.body.retryAfterSec).to.be.above(0);
+        expect(refused.headers['retry-after']).to.equal(String(refused.body.retryAfterSec));
+
+        // The whole point: the provider was not dialled for the refused turn.
+        expect(providerCalls).to.have.lengthOf(2);
+      });
+
+      it('counts the budget against one user rather than the instance', async () => {
+        withVoice({ voiceSttRateMaxRequests: 1 });
+
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(200);
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(429);
+
+        // Somebody else's conversation is not held up by it.
+        expect((await postTranscription(tokens.otherEditor, audioBody())).status).to.equal(200);
+      });
+
+      it('refuses on audio spent even while turns are left', async () => {
+        // 8 seconds of audio a window, and each turn may be up to 5 — so what
+        // really gets counted is the 2.5 seconds the provider reports, and the
+        // third turn is the first that cannot be afforded (5 reserved, 3 left).
+        withVoice({ voiceSttMaxDurationSec: 5, voiceSttRateMaxSeconds: 8 });
+
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(200);
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(200);
+
+        const refused = await postTranscription(tokens.editor, audioBody());
+
+        expect(refused.status).to.equal(429);
+        expect(providerCalls).to.have.lengthOf(2);
+      });
+
+      it('does not charge a short turn for the long one it might have been', async () => {
+        // The regression the reserve/settle split exists to prevent. Each turn
+        // has to reserve the DURATION CEILING before the call, because nothing
+        // before the provider answers knows how long the audio is — so with a
+        // budget of two ceilings, a third ordinary turn would be refused if the
+        // reservation were never settled back down to the 2.5 seconds it really
+        // cost.
+        withVoice({ voiceSttMaxDurationSec: 300, voiceSttRateMaxSeconds: 600 });
+
+        for (let index = 0; index < 5; index += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          const res = await postTranscription(tokens.editor, audioBody());
+
+          expect(res.status, `turn ${index}`).to.equal(200);
+        }
+      });
+
+      it('does not hand the budget back to a turn that failed', async () => {
+        // Otherwise the cap is one an abusive caller can farm by failing on
+        // purpose — and this server cannot tell a provider that charged for the
+        // call from one that did not. Two failures reserve 5 seconds each and
+        // give neither back, so the third turn has nothing left to reserve.
+        withVoice({ voiceSttMaxDurationSec: 5, voiceSttRateMaxSeconds: 10 });
+
+        providerResponses.deepgram = { status: 500, headers: {}, body: 'boom' };
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(502);
+
+        providerResponses.deepgram = { status: 500, headers: {}, body: 'boom' };
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(502);
+
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(429);
+      });
+
+      it('spends nothing on a caller who may not comment anyway', async () => {
+        // The order the gates run in: rights before budget, so being refused
+        // does not use up a turn the user could have spent on a card they can
+        // actually write to.
+        withVoice({ voiceSttRateMaxRequests: 1 });
+
+        expect((await postTranscription(tokens.viewer, audioBody())).status).to.equal(403);
+        expect((await postTranscription(tokens.viewer, audioBody())).status).to.equal(403);
+      });
+
+      it('is off when the deployment says so', async () => {
+        withVoice({ voiceSttRateWindowSec: 0 });
+
+        for (let index = 0; index < 6; index += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          const res = await postTranscription(tokens.editor, audioBody());
+
+          expect(res.status, `turn ${index}`).to.equal(200);
+        }
+      });
     });
   });
 
@@ -1080,6 +1215,86 @@ describe('Voice chat endpoints', function describeVoice() {
 
       expect(res.status).to.equal(502);
       expect(res.body.code).to.equal('E_BAD_GATEWAY');
+    });
+
+    describe('the per-user spending cap', () => {
+      it('stops paying for a caller who has had their messages read for now', async () => {
+        withVoice({ voiceTtsRateMaxRequests: 2 });
+
+        expect((await postSpeech(tokens.editor, { text: 'one' })).status).to.equal(200);
+        expect((await postSpeech(tokens.editor, { text: 'two' })).status).to.equal(200);
+
+        const refused = await postSpeech(tokens.editor, { text: 'three' });
+
+        expect(refused.status).to.equal(429);
+        expect(refused.body.code).to.equal('E_TOO_MANY_REQUESTS');
+        expect(refused.body.retryAfterSec).to.be.above(0);
+        expect(refused.headers['retry-after']).to.equal(String(refused.body.retryAfterSec));
+
+        expect(providerCalls).to.have.lengthOf(2);
+      });
+
+      it('refuses on characters spent even while turns are left', async () => {
+        // 45 characters a window. Each turn reserves 3x the 11 characters of
+        // "hello there" — the ceiling on what narration can expand them to —
+        // and settles back to the 11 that were really spoken, so the first two
+        // fit (45 → 34 → 23) and the third has no room to reserve its 33.
+        withVoice({ voiceTtsRateMaxChars: 45 });
+
+        expect((await postSpeech(tokens.editor, { text: 'hello there' })).status).to.equal(200);
+        expect((await postSpeech(tokens.editor, { text: 'hello there' })).status).to.equal(200);
+
+        const refused = await postSpeech(tokens.editor, { text: 'hello there' });
+
+        expect(refused.status).to.equal(429);
+        expect(refused.body.code).to.equal('E_TOO_MANY_REQUESTS');
+        expect(providerCalls).to.have.lengthOf(2);
+      });
+
+      it('charges what was spoken rather than three times what was sent', async () => {
+        // The settle half of the same rule: a message that did not expand under
+        // narration must not be billed against the budget as though it had.
+        // Ten turns of 11 characters is 110 spoken and 330 reserved, so this
+        // fails outright if the reservation is never corrected.
+        withVoice({ voiceTtsRateMaxChars: 200 });
+
+        for (let index = 0; index < 10; index += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          const res = await postSpeech(tokens.editor, { text: 'hello there' });
+
+          expect(res.status, `message ${index}`).to.equal(200);
+        }
+      });
+
+      it('counts the budget against one user rather than the instance', async () => {
+        withVoice({ voiceTtsRateMaxRequests: 1 });
+
+        expect((await postSpeech(tokens.editor, { text: 'one' })).status).to.equal(200);
+        expect((await postSpeech(tokens.editor, { text: 'two' })).status).to.equal(429);
+        expect((await postSpeech(tokens.admin, { text: 'three' })).status).to.equal(200);
+      });
+
+      it('keeps the two halves of the feature on separate budgets', async () => {
+        // They are separate vendors with separate keys and separate units. A
+        // conversation that has had its turns transcribed must still be able to
+        // hear the answer.
+        withVoice({ voiceSttRateMaxRequests: 1, voiceTtsRateMaxRequests: 1 });
+
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(200);
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(429);
+        expect((await postSpeech(tokens.editor, { text: 'the answer' })).status).to.equal(200);
+      });
+
+      it('is off when the deployment says so', async () => {
+        withVoice({ voiceTtsRateMaxRequests: 0, voiceTtsRateMaxChars: 0 });
+
+        for (let index = 0; index < 6; index += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          const res = await postSpeech(tokens.editor, { text: 'hello there' });
+
+          expect(res.status, `message ${index}`).to.equal(200);
+        }
+      });
     });
   });
 });

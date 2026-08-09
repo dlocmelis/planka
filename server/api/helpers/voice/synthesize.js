@@ -36,6 +36,7 @@ const endpoints = require('../../../utils/voice-endpoints');
 const {
   CARTESIA_VERSION,
   MAX_PROVIDER_ERROR_BYTES,
+  PREPARED_TEXT_FACTOR,
   VoiceProviderError,
   VoiceRequestError,
   isLanguageCode,
@@ -50,12 +51,6 @@ const {
   hasSpeakableContent,
   stripMarkdown,
 } = require('../../../utils/voice-speech-text');
-
-/** How much longer the PREPARED text may be than the accepted input before it
- * is cut. Narration turns a table into prose, so the prepared text is longer
- * than the markdown the ceiling measured — three times is setl's own headroom,
- * and the cut speaks "…the rest is on screen…" rather than stopping dead. */
-const PREPARED_TEXT_FACTOR = 3;
 
 /** Nobody reads aloud slower than this, and it is deliberately an under-estimate
  * — it is the denominator of a ceiling, so being wrong on the low side makes

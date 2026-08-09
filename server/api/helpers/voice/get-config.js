@@ -31,6 +31,62 @@ const SUPPORTED_STT_PROVIDERS = ['deepgram'];
 const SUPPORTED_TTS_PROVIDERS = ['cartesia'];
 const SUPPORTED_TTS_CONTAINERS = ['mp3', 'wav'];
 
+/**
+ * The per-user spending caps, when the deployment has not said otherwise.
+ *
+ * Both windows are five minutes, and both sets of numbers are chosen to sit
+ * well above what a person can physically do and well below what a script can:
+ *
+ *  - 20 turns per five minutes is a turn every fifteen seconds sustained. A
+ *    real turn is a sentence, a second of hangover, an upload, and then a whole
+ *    planka_bot session before there is anything to answer.
+ *  - 600 seconds of audio per five minutes is twice as much speech as there is
+ *    time to speak in the window, so it cannot bind on a conversation — but it
+ *    does stop twenty five-minute recordings, which is the same 20 requests
+ *    costing thirty times as much.
+ *  - 30000 synthesized characters per five minutes is around half an hour of
+ *    speech, so likewise: nobody can listen to their way into it, and it caps
+ *    twenty maximum-length answers (which may each prepare to
+ *    `PREPARED_TEXT_FACTOR` times the 2000-character input ceiling) at five.
+ */
+const RATE_LIMIT_DEFAULTS = {
+  stt: { windowSec: 300, maxRequests: 20, maxUnits: 600 },
+  tts: { windowSec: 300, maxRequests: 20, maxUnits: 30000 },
+};
+
+/**
+ * One half's spending cap, or an error naming the knob that does not make
+ * sense.
+ *
+ * An unset knob and an unparseable one both arrive here as null and both mean
+ * "use the default", which is the safe direction: unlike `VOICE_STT_MAX_BYTES`,
+ * where a typo REMOVED the limit, a typo here leaves the deployment on numbers
+ * somebody chose. A NEGATIVE value is different — it would refuse every turn
+ * for ever, silently, so it is refused loudly instead.
+ */
+const buildRateLimit = (values, defaults, names) => {
+  // Anything that is not a finite number — unset, unparseable, or a key a test
+  // left off the config object altogether — is "not stated" and takes the
+  // default. Only a number that IS stated can be wrong.
+  const stated = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  const invalid = Object.keys(names).find((key) => stated(values[key]) < 0);
+
+  if (invalid) {
+    return { config: null, error: `${names[invalid]} cannot be negative` };
+  }
+
+  const orDefault = (key) => (stated(values[key]) === null ? defaults[key] : values[key]);
+
+  return {
+    error: null,
+    config: {
+      windowMs: orDefault('windowSec') * 1000,
+      maxRequests: orDefault('maxRequests'),
+      maxUnits: orDefault('maxUnits'),
+    },
+  };
+};
+
 /** Resolved config, or null before the first call. Rebuilt when the underlying
  * `sails.config.custom` object changes identity, which is what lets a test
  * re-point the knobs without reaching into module state. */
@@ -69,6 +125,24 @@ const buildSttConfig = (custom) => {
     };
   }
 
+  const rateLimit = buildRateLimit(
+    {
+      windowSec: custom.voiceSttRateWindowSec,
+      maxRequests: custom.voiceSttRateMaxRequests,
+      maxUnits: custom.voiceSttRateMaxSeconds,
+    },
+    RATE_LIMIT_DEFAULTS.stt,
+    {
+      windowSec: 'VOICE_STT_RATE_WINDOW_SEC',
+      maxRequests: 'VOICE_STT_RATE_MAX_REQUESTS',
+      maxUnits: 'VOICE_STT_RATE_MAX_SECONDS',
+    },
+  );
+
+  if (rateLimit.error) {
+    return { config: null, error: rateLimit.error };
+  }
+
   return {
     error: null,
     config: {
@@ -80,6 +154,7 @@ const buildSttConfig = (custom) => {
       maxBytes: custom.voiceSttMaxBytes,
       maxDurationSec: custom.voiceSttMaxDurationSec || 0,
       timeoutSec: custom.voiceSttTimeoutSec || 60,
+      rateLimit: rateLimit.config,
     },
   };
 };
@@ -130,6 +205,24 @@ const buildTtsConfig = (custom) => {
     return { config: null, error: `text-to-speech ${error.message}` };
   }
 
+  const rateLimit = buildRateLimit(
+    {
+      windowSec: custom.voiceTtsRateWindowSec,
+      maxRequests: custom.voiceTtsRateMaxRequests,
+      maxUnits: custom.voiceTtsRateMaxChars,
+    },
+    RATE_LIMIT_DEFAULTS.tts,
+    {
+      windowSec: 'VOICE_TTS_RATE_WINDOW_SEC',
+      maxRequests: 'VOICE_TTS_RATE_MAX_REQUESTS',
+      maxUnits: 'VOICE_TTS_RATE_MAX_CHARS',
+    },
+  );
+
+  if (rateLimit.error) {
+    return { config: null, error: rateLimit.error };
+  }
+
   return {
     error: null,
     config: {
@@ -149,6 +242,7 @@ const buildTtsConfig = (custom) => {
       bitRate: custom.voiceTtsBitRate || 128000,
       maxChars: custom.voiceTtsMaxChars || 0,
       timeoutSec: custom.voiceTtsTimeoutSec || 60,
+      rateLimit: rateLimit.config,
     },
   };
 };
