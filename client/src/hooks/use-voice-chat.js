@@ -43,12 +43,14 @@ import {
   formatBytes,
   formatSeconds,
   frameLevelDb,
+  isRateLimited,
   isRecordingSupported,
   isRefusal,
   isSendableTranscript,
   microphoneStopReason,
   newVadState,
   pickRecorderMimeType,
+  rateLimitCooldownMs,
   recordingAvailability,
   recordingLimitMs,
   requestStopReason,
@@ -219,6 +221,12 @@ export default function useVoiceChat({
   const voicePinRef = useRef(null);
   // The language the last utterance was transcribed as. See `transcribe`.
   const heardLanguageRef = useRef(null);
+  // When the server will next accept a recording from this user, after it has
+  // said they have had their share of the deployment's transcription budget for
+  // now. Deliberately NOT cleared when the mode is toggled or the conversation
+  // moves: the budget belongs to the user and the server, not to this loop, and
+  // forgetting it would just mean uploading a megabyte to be told again.
+  const rateLimitedUntilRef = useRef(0);
 
   const onTranscriptRef = useRef(onTranscript);
   const onSpokenRef = useRef(onSpoken);
@@ -484,6 +492,21 @@ export default function useVoiceChat({
         return;
       }
 
+      // The server has already refused a turn from this user and said when it
+      // would take the next one. Uploading before then is a megabyte of audio
+      // sent for a 429 this loop could have predicted, so the turn is dropped
+      // here — and SAID, because a turn that vanished in silence is worse than
+      // one that was refused out loud.
+      const waitMs = rateLimitedUntilRef.current - Date.now();
+
+      if (waitMs > 0) {
+        onNoticeRef.current('common.voiceChatTooManyTurns', {
+          seconds: Math.ceil(waitMs / 1000),
+        });
+
+        return;
+      }
+
       const abortController = new AbortController();
 
       isUploadingRef.current = true;
@@ -550,6 +573,26 @@ export default function useVoiceChat({
         // user press the button again for something that was never broken.
         if (isRefusal(error)) {
           onNoticeRef.current('common.voiceChatTurnRefused');
+          return;
+        }
+
+        // A 429 is this user having had their share of what the deployment pays
+        // for. Nothing is broken and nothing was wrong with the recording, so
+        // the mode stays on — turning it off here would punish somebody for
+        // speaking twice quickly, which is worse than having no cap at all —
+        // and the microphone simply waits out the window the server named.
+        if (isRateLimited(error)) {
+          const cooldownMs = rateLimitCooldownMs(error);
+
+          rateLimitedUntilRef.current = Date.now() + cooldownMs;
+
+          // A server that refused without saying when to come back gets copy
+          // that does not invent a number — "in 0s" is worse than "in a moment".
+          onNoticeRef.current(
+            cooldownMs > 0 ? 'common.voiceChatTooManyTurns' : 'common.voiceChatTooManyTurnsSoon',
+            { seconds: Math.ceil(cooldownMs / 1000) },
+          );
+
           return;
         }
 
@@ -1024,6 +1067,12 @@ export default function useVoiceChat({
         // marks it spoken so nothing retries it.
         if (isRefusal(error)) {
           onNoticeRef.current('common.voiceChatAnswerRefused');
+        } else if (isRateLimited(error)) {
+          // The synthesis budget is spent, which is one answer nobody hears
+          // rather than a mode that is broken. No cooldown is kept for this
+          // half: nothing is uploaded to save, the answer is already on screen,
+          // and `finally` marks it spoken so it is not retried for ever.
+          onNoticeRef.current('common.voiceChatAnswerNotRead');
         } else {
           onStopRef.current(requestStopReason(error, VoiceChatStopReasons.NO_VOICE));
         }

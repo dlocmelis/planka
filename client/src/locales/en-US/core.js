@@ -404,6 +404,8 @@ export default {
       viewer: 'Viewer',
       viewers: 'Viewers',
       visualTaskManagementWithLists: 'Visual task management with lists.',
+      voiceChatAnswerNotRead:
+        'This server has read a lot aloud just now, so that answer was not; it is on screen.',
       voiceChatAnswerRefused: 'That answer could not be read aloud; it is on screen.',
       voiceChatAnswerTooLong: 'That answer was too long to read aloud; it is on screen.',
       voiceChatAudioBlocked:
@@ -426,6 +428,10 @@ export default {
         'That recording was {{duration}}, over the {{limit}} limit this server accepts, so it was not sent. Try shorter turns.',
       voiceChatSessionExpired: 'Voice chat is off: your session has expired. Sign in again.',
       voiceChatSpeaking: 'Reading the answer aloud…',
+      voiceChatTooManyTurns:
+        'That is a lot of talking at once for this server — say it again in {{seconds}}s.',
+      voiceChatTooManyTurnsSoon:
+        'That is a lot of talking at once for this server — try saying it again in a moment.',
       voiceChatTranscribing: 'Sending what you said…',
       voiceChatTurnRefused: 'That turn was not accepted; try saying it again.',
       voiceChatWaitingForBot: 'Waiting for an answer…',

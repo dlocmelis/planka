@@ -124,8 +124,13 @@ export const VoiceChatStopReasons = {
  * provider behind it. Anything else, including a request that never left the
  * browser, is the generic failure.
  *
- * A 422 is DELIBERATELY not here: it means one recording or one message was
- * refused, not that the mode is broken, and it is handled where it happens.
+ * A 422 and a 429 are DELIBERATELY not here: they mean one recording or one
+ * message was refused, not that the mode is broken, and both are handled where
+ * they happen — `isRefusal` and `isRateLimited` below are what the two call
+ * sites ask before they ever get this far. A 429 reaching this would read as
+ * `FAILED` and turn the whole mode off for somebody who simply spoke twice in
+ * quick succession, which is the one answer that would make a spending cap
+ * worse than no spending cap.
  */
 export const requestStopReason = (error, unavailableReason) => {
   const code = error && error.code;
@@ -149,6 +154,43 @@ export const requestStopReason = (error, unavailableReason) => {
  * message, rather than a fault in the feature. The loop says so and keeps
  * listening. */
 export const isRefusal = (error) => !!error && error.code === ErrorCodes.UNPROCESSABLE_ENTITY;
+
+/**
+ * Whether the server has said this user has had their share of a metered
+ * endpoint for the moment (429).
+ *
+ * Nothing is broken and nothing was wrong with the recording: the deployment
+ * pays a speech provider per turn and caps how much of that one account may
+ * spend in a window. So the mode stays on, the turn is lost, and the microphone
+ * waits — see `rateLimitCooldownMs`.
+ */
+export const isRateLimited = (error) => !!error && error.code === ErrorCodes.TOO_MANY_REQUESTS;
+
+/** The longest a rate limit is allowed to hold the microphone shut. Past this
+ * the loop stops waiting and lets the user try again: a `retryAfterSec` of an
+ * hour, from a deployment with a very long window, would otherwise look
+ * indistinguishable from voice chat having quietly died. */
+export const MAX_RATE_LIMIT_COOLDOWN_MS = 120 * 1000;
+
+/**
+ * How long to keep the microphone from uploading after a 429, in ms.
+ *
+ * The server answers `retryAfterSec` with the refusal, and honouring it is what
+ * turns "your turn was refused" into "your turn was refused, and the next one
+ * will be too until then" — without it the loop uploads a megabyte of audio
+ * every time the user speaks, for a refusal it could have predicted. Zero when
+ * the server said nothing, which is a server that does not want to be waited
+ * for.
+ */
+export const rateLimitCooldownMs = (error) => {
+  const seconds = error && error.retryAfterSec;
+
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) {
+    return 0;
+  }
+
+  return Math.min(seconds * 1000, MAX_RATE_LIMIT_COOLDOWN_MS);
+};
 
 /* The tuning */
 

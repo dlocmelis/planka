@@ -4,6 +4,7 @@
  */
 
 import {
+  MAX_RATE_LIMIT_COOLDOWN_MS,
   RECORDER_MIME_CANDIDATES,
   RecordingAvailabilities,
   SILENCE_DBFS,
@@ -15,12 +16,14 @@ import {
   formatBytes,
   formatSeconds,
   frameLevelDb,
+  isRateLimited,
   isRecordingSupported,
   isSendableTranscript,
   microphoneStopReason,
   newVadState,
   pickRecorderMimeType,
   isRefusal,
+  rateLimitCooldownMs,
   readVoiceChatEnabled,
   recordingAvailability,
   recordingLimitMs,
@@ -624,6 +627,41 @@ describe('voice-chat', () => {
       expect(requestStopReason({ code: 'E_UNPROCESSABLE_ENTITY' }, null)).toBe(
         VoiceChatStopReasons.FAILED,
       );
+    });
+  });
+
+  describe('isRateLimited(error) / rateLimitCooldownMs(error)', () => {
+    it('tells a spent budget apart from every other failure', () => {
+      // 429 is the deployment's per-user spending cap, not a fault. It is kept
+      // out of the stop reasons for the same reason a 422 is: the loop says so
+      // and keeps listening.
+      expect(isRateLimited({ code: 'E_TOO_MANY_REQUESTS' })).toBe(true);
+      expect(isRateLimited({ code: 'E_UNPROCESSABLE_ENTITY' })).toBe(false);
+      expect(isRateLimited({ code: 'E_BAD_GATEWAY' })).toBe(false);
+      expect(isRateLimited(undefined)).toBe(false);
+      expect(isRefusal({ code: 'E_TOO_MANY_REQUESTS' })).toBe(false);
+    });
+
+    it('waits as long as the server asked for', () => {
+      expect(rateLimitCooldownMs({ code: 'E_TOO_MANY_REQUESTS', retryAfterSec: 12 })).toBe(12000);
+    });
+
+    it('waits for nothing when the server named no time', () => {
+      // A refusal with no `Retry-After` is a server that does not want to be
+      // waited for; inventing a number would keep the microphone shut on a
+      // guess.
+      expect(rateLimitCooldownMs({ code: 'E_TOO_MANY_REQUESTS' })).toBe(0);
+      expect(rateLimitCooldownMs({ retryAfterSec: 0 })).toBe(0);
+      expect(rateLimitCooldownMs({ retryAfterSec: -5 })).toBe(0);
+      expect(rateLimitCooldownMs({ retryAfterSec: 'soon' })).toBe(0);
+      expect(rateLimitCooldownMs(undefined)).toBe(0);
+    });
+
+    it('stops waiting long before the mode looks dead', () => {
+      // A deployment with an hour-long window would otherwise hold the
+      // microphone shut for an hour, which is indistinguishable from voice chat
+      // having quietly stopped working.
+      expect(rateLimitCooldownMs({ retryAfterSec: 3600 })).toBe(MAX_RATE_LIMIT_COOLDOWN_MS);
     });
   });
 

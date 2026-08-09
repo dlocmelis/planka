@@ -1046,6 +1046,96 @@ test('a broken speech provider turns the mode off, and says whose fault it is', 
   expect(status().textContent).toContain('common.voiceChatProviderFailed');
 });
 
+test('a turn the server will not pay for costs one turn, not the mode', async () => {
+  // 429 is the deployment's per-user spending cap. Turning voice chat off for
+  // it would punish somebody for speaking twice quickly — worse than having no
+  // cap at all — so the mode stays on and the loop says when to come back.
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  mockTranscribe.mockRejectedValue({
+    code: 'E_TOO_MANY_REQUESTS',
+    message: 'Too many voice turns just now',
+    retryAfterSec: 12,
+  });
+
+  await saySomething();
+
+  expect(voiceToggle().getAttribute('aria-pressed')).toBe('true');
+  expect(status().textContent).toContain('common.voiceChatTooManyTurns');
+  expect(actionsOfType(EntryActionTypes.COMMENT_FOR_CARD_CREATE)).toHaveLength(0);
+});
+
+test('the microphone waits out a rate limit rather than uploading into it', async () => {
+  // The upload is ~a megabyte of audio. Once the server has said when it will
+  // take the next one, sending before then buys a refusal this loop could have
+  // predicted.
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  mockTranscribe.mockRejectedValue({
+    code: 'E_TOO_MANY_REQUESTS',
+    message: 'Too many voice turns just now',
+    retryAfterSec: 12,
+  });
+
+  await saySomething();
+  expect(mockTranscribe).toHaveBeenCalledTimes(1);
+
+  // Still inside the window the server named: heard, and not sent.
+  await saySomething();
+  expect(mockTranscribe).toHaveBeenCalledTimes(1);
+  expect(status().textContent).toContain('common.voiceChatTooManyTurns');
+
+  await act(async () => {
+    jest.advanceTimersByTime(12 * 1000);
+    await Promise.resolve();
+  });
+
+  mockTranscribe.mockResolvedValue({
+    item: { text: 'what is blocking this', languages: ['en'], durationSec: 2.5 },
+  });
+
+  await saySomething();
+
+  expect(mockTranscribe).toHaveBeenCalledTimes(2);
+  expect(actionsOfType(EntryActionTypes.COMMENT_FOR_CARD_CREATE)).toHaveLength(1);
+});
+
+test('an answer the server will not pay to read is said so, and is not retried', async () => {
+  mockSpeak.mockRejectedValue({
+    code: 'E_TOO_MANY_REQUESTS',
+    message: 'Too many messages read aloud just now',
+    retryAfterSec: 30,
+  });
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  receiveMessage('card-1', {
+    id: 'comment-1',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'First answer.',
+    createdAt: new Date(Date.now() + 1000),
+    isPersisted: true,
+  });
+  await settle();
+
+  expect(voiceToggle().getAttribute('aria-pressed')).toBe('true');
+  expect(status().textContent).toContain('common.voiceChatAnswerNotRead');
+
+  // Marked spoken all the same, so it is not asked for again on every render.
+  await settle();
+  expect(mockSpeak).toHaveBeenCalledTimes(1);
+});
+
 test('a refused microphone turns the mode off with instructions', async () => {
   window.navigator.mediaDevices.getUserMedia.mockRejectedValue({ name: 'NotAllowedError' });
 
