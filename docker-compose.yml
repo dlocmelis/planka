@@ -123,7 +123,8 @@ services:
       # Voice chat with planka_bot (see docs/bot-chat-voice.md). Both keys are
       # optional and each turns on one half; the mode needs both. Recordings go
       # to Deepgram and replies to Cartesia, so leave them unset on a deployment
-      # that may not send either to a third party.
+      # that may not send either to a third party. If OUTGOING_ALLOWED_HOSTS
+      # below is in use, both hostnames have to be on it (see that section).
       # - DEEPGRAM_API_KEY=
       # - CARTESIA_API_KEY=
       # - VOICE_STT_LANGUAGE=multi
@@ -140,7 +141,10 @@ services:
       # - OUTGOING_BLOCKED_IPS=
       # - OUTGOING_BLOCKED_HOSTS=localhost,postgres
 
-      # Only these IPs/hostnames will be reachable
+      # Only these IPs/hostnames will be reachable. Setting either of these at
+      # all — an empty value included — makes the proxy deny everything else, so
+      # a deployment that turns voice chat on above must add api.deepgram.com
+      # and api.cartesia.ai here.
       # - OUTGOING_ALLOWED_IPS=
       # - OUTGOING_ALLOWED_HOSTS=
     depends_on:

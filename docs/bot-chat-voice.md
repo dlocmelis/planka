@@ -113,6 +113,23 @@ No migration, no new host, no firewall rule beyond outbound HTTPS to
 `api.deepgram.com` and `api.cartesia.ai` (which honours `OUTGOING_PROXY` like
 every other outbound call this server makes).
 
+**On a deployment that uses the outgoing allowlist, add both hostnames to it.**
+`server/start.sh` writes `http_access deny all` at the end of the Squid config
+as soon as `OUTGOING_ALLOWED_HOSTS` or `OUTGOING_ALLOWED_IPS` is *set at all* —
+the test is `${VAR+x}`, so even an empty value switches the proxy to
+deny-by-default — and then exports `OUTGOING_PROXY=http://127.0.0.1:3128`, which
+these two calls honour along with every other outbound call. A deployment that
+turns the keys on and leaves the allowlist alone gets a feature that looks
+configured and answers 502 on every turn:
+
+```
+OUTGOING_ALLOWED_HOSTS=...,api.deepgram.com,api.cartesia.ai
+```
+
+Both are the API hostnames rather than the vendors' websites, and
+`api.cartesia.ai` serves the voice catalogue (`GET /voices/`) as well as the
+synthesis, so one entry covers both of that half's calls.
+
 ### The rest of the knobs
 
 Every one of these has a working default; a deployment that sets only the two
@@ -139,10 +156,13 @@ keys above gets a sensible configuration.
 | `VOICE_TTS_TIMEOUT_SEC` | `60` | |
 
 A misconfigured knob is loud and leaves its half off, rather than fatal: an
-invalid provider, output format or voice map logs an error at boot and disables
-that half. A typo in one optional value must not stop PLANKA from booting, and
-silently serving the default instead would be the "nobody chose this" failure
-the validation exists to prevent.
+invalid provider, output format, voice map or fallback voice id logs an error at
+boot and disables that half. A typo in one optional value must not stop PLANKA
+from booting, and silently serving the default instead would be the "nobody
+chose this" failure the validation exists to prevent. `VOICE_TTS_VOICE` is held
+to the same bar as an entry of the map because it is the id that reads every
+message no language was resolved for — a typo there is not one wrong accent, it
+is a provider 400 on every message.
 
 ### Which voice reads the answer
 

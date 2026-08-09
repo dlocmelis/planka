@@ -322,6 +322,89 @@ describe('Voice chat endpoints', function describeVoice() {
     });
   });
 
+  /**
+   * A typo in an optional knob must not stop PLANKA from booting, and must not
+   * silently serve the default instead — it leaves that ONE half off and says
+   * so (see `api/helpers/voice/get-config.js`). Driven through the bootstrap
+   * and the routes rather than through the helper, because "that half stays
+   * disabled" only means anything if the endpoint really answers 503 and the
+   * client is really told the mode is unavailable.
+   */
+  describe('when a knob is misconfigured', () => {
+    const cases = [
+      {
+        what: 'a speech-to-text provider nobody implements',
+        values: { voiceSttProvider: 'whisper' },
+        half: 'stt',
+      },
+      {
+        what: 'a text-to-speech provider nobody implements',
+        values: { voiceTtsProvider: 'elevenlabs' },
+        half: 'tts',
+      },
+      {
+        what: 'an output format the request builder has no shape for',
+        values: { voiceTtsOutputFormat: 'flac' },
+        half: 'tts',
+      },
+      {
+        what: 'a voice map that is not <language>=<voice id>',
+        values: { voiceTtsVoices: 'russian' },
+        half: 'tts',
+      },
+      {
+        what: 'a voice map naming one language twice, differently',
+        values: { voiceTtsVoices: 'ru=voice-one,ru-RU=voice-two' },
+        half: 'tts',
+      },
+      {
+        // The one that is not one wrong accent but a provider 400 on every
+        // message: this voice reads everything no language was resolved for.
+        what: 'a fallback voice that is not a voice id',
+        values: { voiceTtsVoice: 'the nice sounding one' },
+        half: 'tts',
+      },
+      {
+        what: 'a fallback voice set to nothing at all',
+        values: { voiceTtsVoice: '   ' },
+        half: 'tts',
+      },
+    ];
+
+    cases.forEach(({ what, values, half }) => {
+      it(`leaves only the affected half off for ${what}`, async () => {
+        withVoice(values);
+
+        const bootstrap = await request.get('/api/bootstrap');
+
+        expect(bootstrap.status).to.equal(200);
+        expect(bootstrap.body.item.voiceChat.sttEnabled).to.equal(half !== 'stt');
+        expect(bootstrap.body.item.voiceChat.ttsEnabled).to.equal(half !== 'tts');
+
+        const broken =
+          half === 'stt'
+            ? await postTranscription(tokens.editor, audioBody())
+            : await postSpeech(tokens.editor, { text: 'hello' });
+
+        expect(broken.status).to.equal(503);
+        expect(broken.body.code).to.equal('E_SERVICE_UNAVAILABLE');
+
+        // Nothing was dialled for the broken half — a misconfigured deployment
+        // must not be spending on a provider it cannot ask properly.
+        expect(providerCalls).to.have.lengthOf(0);
+
+        // ...and the other half is untouched, which is the whole point of
+        // failing one at a time.
+        const working =
+          half === 'stt'
+            ? await postSpeech(tokens.editor, { text: 'hello' })
+            : await postTranscription(tokens.editor, audioBody());
+
+        expect(working.status).to.equal(200);
+      });
+    });
+  });
+
   describe('POST /cards/:cardId/voice/transcription', () => {
     it('refuses an anonymous caller', async () => {
       const res = await postTranscription(null, audioBody());

@@ -19,7 +19,7 @@
  * be exactly the "nobody chose this" failure the validation exists to prevent.
  */
 
-const { parseKeyterms, parseVoiceMap } = require('../../../utils/voice');
+const { isVoiceId, parseKeyterms, parseVoiceMap } = require('../../../utils/voice');
 
 const SUPPORTED_STT_PROVIDERS = ['deepgram'];
 const SUPPORTED_TTS_PROVIDERS = ['cartesia'];
@@ -87,6 +87,20 @@ const buildTtsConfig = (custom) => {
     };
   }
 
+  // The fallback voice, held to the same bar as every entry of the map below —
+  // it is the id that reads every message no language was resolved for, so a
+  // typo in it is not one wrong accent but a 400 from the provider on EVERY
+  // synthesis. Empty is refused too: `VOICE_TTS_VOICE=` with nothing after it
+  // would otherwise ask Cartesia to speak in voice ''.
+  const voice = (custom.voiceTtsVoice || '').trim();
+
+  if (!isVoiceId(voice)) {
+    return {
+      config: null,
+      error: `text-to-speech voice '${voice}' does not name a voice id`,
+    };
+  }
+
   let voiceByLanguage;
   try {
     voiceByLanguage = parseVoiceMap(custom.voiceTtsVoices);
@@ -100,7 +114,7 @@ const buildTtsConfig = (custom) => {
       provider,
       apiKey,
       model: (custom.voiceTtsModel || 'sonic-3.5').trim(),
-      voice: (custom.voiceTtsVoice || '').trim(),
+      voice,
       voiceByLanguage,
       // The automatic switch: a language with no pin of its own is looked up in
       // the provider's catalogue. On by default, as it is in setl — leaving it
