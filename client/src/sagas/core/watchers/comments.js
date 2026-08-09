@@ -16,6 +16,12 @@ export default function* commentsWatchers() {
     takeEvery(EntryActionTypes.COMMENT_IN_CURRENT_CARD_CREATE, ({ payload: { data } }) =>
       services.createCommentInCurrentCard(data),
     ),
+    takeEvery(EntryActionTypes.COMMENTS_FOR_CARD_FETCH, ({ payload: { cardId } }) =>
+      services.fetchComments(cardId),
+    ),
+    takeEvery(EntryActionTypes.COMMENT_FOR_CARD_CREATE, ({ payload: { cardId, data } }) =>
+      services.createComment(cardId, data),
+    ),
     takeEvery(EntryActionTypes.COMMENT_CREATE_HANDLE, ({ payload: { comment, users } }) =>
       services.handleCommentCreate(comment, users),
     ),

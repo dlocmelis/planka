@@ -1,0 +1,68 @@
+/*!
+ * Copyright (c) 2024 PLANKA Software GmbH
+ * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
+ */
+
+:global(#app) {
+  .badge {
+    background: #eb5a46;
+    border: 2px solid #fff;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 11px;
+    font-weight: bold;
+    line-height: 16px;
+    min-width: 20px;
+    padding: 0 4px;
+    position: absolute;
+    right: -2px;
+    text-align: center;
+    top: -2px;
+  }
+
+  .launcher {
+    align-items: center;
+    background: #fff;
+    border: none;
+    border-radius: 50%;
+    box-shadow: 0 6px 16px rgba(9, 30, 66, 0.35);
+    cursor: pointer;
+    display: flex;
+    // Width and height are set inline from LAUNCHER_SIZE (utils/bot-chat.js),
+    // which is also what the drag clamps against — one number, one place.
+    justify-content: center;
+    outline: none;
+    padding: 0;
+    position: fixed;
+    // Above the semantic-ui modal (1000/1001) the card is opened in: the whole
+    // point of a floating launcher is that it is reachable from wherever the
+    // user is, and the card modal is where most of the questions get asked.
+    // Still below the app's connection banner (10001), which must never be
+    // covered.
+    z-index: 1003;
+    // Keeps pointermove streaming to the button for the whole drag instead of
+    // the browser claiming it for a scroll.
+    touch-action: none;
+    // ...and stops the long press that starts the drag from being read as a
+    // text selection or a link callout instead.
+    user-select: none;
+    -webkit-touch-callout: none;
+    transition:
+      transform 150ms ease,
+      box-shadow 150ms ease;
+
+    &:hover {
+      box-shadow: 0 8px 20px rgba(9, 30, 66, 0.45);
+    }
+
+    &:focus-visible {
+      box-shadow: 0 0 0 3px #a5c4e2;
+    }
+  }
+
+  .launcherDragging {
+    box-shadow: 0 12px 28px rgba(9, 30, 66, 0.5);
+    cursor: grabbing;
+    transform: scale(1.12);
+  }
+}

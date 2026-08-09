@@ -17,6 +17,21 @@ const createCommentInCurrentCard = (data) => ({
   },
 });
 
+const fetchCommentsForCard = (cardId) => ({
+  type: EntryActionTypes.COMMENTS_FOR_CARD_FETCH,
+  payload: {
+    cardId,
+  },
+});
+
+const createCommentForCard = (cardId, data) => ({
+  type: EntryActionTypes.COMMENT_FOR_CARD_CREATE,
+  payload: {
+    cardId,
+    data,
+  },
+});
+
 const handleCommentCreate = (comment, users) => ({
   type: EntryActionTypes.COMMENT_CREATE_HANDLE,
   payload: {
@@ -57,6 +72,8 @@ const handleCommentDelete = (comment) => ({
 export default {
   fetchCommentsInCurrentCard,
   createCommentInCurrentCard,
+  fetchCommentsForCard,
+  createCommentForCard,
   handleCommentCreate,
   updateComment,
   handleCommentUpdate,
