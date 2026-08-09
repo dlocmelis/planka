@@ -33,6 +33,7 @@ let mockMembership;
 let mockMemberships;
 let mockMessagesByCardId;
 let mockChatCards;
+let mockGeneralChatCard;
 const mockNoMessages = [];
 
 jest.mock('react-i18next', () => ({
@@ -45,6 +46,7 @@ jest.mock('../../../selectors', () => ({
     selectPath: () => mockPath,
     selectBotUserForCurrentBoard: () => mockBot,
     selectChatCardsForCurrentBoard: () => mockChatCards,
+    selectGeneralChatCardForCurrentBoard: () => mockGeneralChatCard,
     selectMembershipsForCurrentBoard: () => mockMemberships,
     selectCurrentUserMembershipForCurrentBoard: () => mockMembership,
     makeSelectCardById: () => (_, id) => mockCards.find((card) => card.id === id) || null,
@@ -180,6 +182,11 @@ beforeEach(() => {
 
   mockMessagesByCardId = {};
   mockChatCards = [{ id: 'card-1', name: 'Introduce chat with planka_bot', hasBotComment: true }];
+  // The board's general chat: a real card in the orchestrator's "Chat"
+  // service column, which is why it is a card here too — under the widget it
+  // is an ordinary card conversation, and only its NAME and the fact that
+  // nothing drags the user out of it differ.
+  mockGeneralChatCard = { id: 'card-chat', name: '💬 General chat' };
 
   dispatchedActions = [];
   // A fresh state object per action, because react-redux 9 memoizes a
@@ -489,7 +496,7 @@ test('with no card in context the panel asks which one to chat on, and picking o
   render();
   click(launcher());
 
-  expect(container.textContent).toContain('common.chooseACardToChatOn');
+  expect(container.textContent).toContain('common.chooseAConversation');
 
   click(container.querySelector('[data-id="card-1"]'));
 
@@ -512,7 +519,7 @@ test("a card of another board is not shown as this board's conversation", () => 
   click(launcher());
 
   expect(container.textContent).not.toContain('Some other board');
-  expect(container.textContent).toContain('common.chooseACardToChatOn');
+  expect(container.textContent).toContain('common.chooseAConversation');
 });
 
 test('the launcher badges what arrived while the panel was closed', () => {
@@ -672,7 +679,7 @@ test('switching conversation starts the new thread at its latest message', () =>
   // Away to the picker and into the other card. The panel itself stays
   // mounted across that, so without a reset it would carry card-1's "the user
   // is reading history" into a conversation they have not scrolled at all.
-  click(findByLabel('common.chooseACardToChatOn'));
+  click(findByLabel('common.chooseAConversation'));
   click(container.querySelector('[data-id="card-2"]'));
 
   const nextThread = container.querySelector('.thread');
@@ -788,7 +795,7 @@ test('the conversation from the last visit is resumed, and stays remembered', ()
   click(launcher());
 
   expect(container.textContent).toContain('Introduce chat with planka_bot');
-  expect(container.textContent).not.toContain('common.chooseACardToChatOn');
+  expect(container.textContent).not.toContain('common.chooseAConversation');
   // Mounting must not erase what it just read.
   expect(window.localStorage.getItem('planka-bot-chat-card-id')).toBe('card-1');
 });
@@ -886,4 +893,172 @@ test('a card in the archive says so instead of blaming your board membership', (
   expect(container.querySelector('textarea').disabled).toBe(true);
   expect(container.textContent).toContain('common.youCannotCommentOnACardInTheArchiveOrTrash');
   expect(container.textContent).not.toContain('common.youCannotCommentOnThisBoard');
+});
+
+/* The general chat: a conversation with the bot that is not about a ticket.
+ *
+ * Under this widget it is an ordinary card conversation — the transport is
+ * still a card's comment thread, because that is the only channel the
+ * orchestrator hears — so what is worth testing here is exactly what differs:
+ * it is offered, it is named for what it is, and it is not taken away from the
+ * user the moment they open a card. */
+
+/** The picker's general-chat entry. The SCSS module mock maps
+ * `styles.generalItem` to the literal class name, so this finds exactly that
+ * button and nothing else. */
+const generalChatEntry = () => container.querySelector('button.generalItem');
+
+const generalChatCard = () => {
+  // Add the chat card to the store the way the board fetch does, so the panel
+  // can resolve it once it is chosen.
+  mockCards.push({
+    id: 'card-chat',
+    boardId: 'board-1',
+    listId: 'list-chat',
+    name: '💬 General chat',
+    isCommentsFetching: false,
+    isAllCommentsFetched: true,
+  });
+  mockLists.push({ id: 'list-chat', type: ListTypes.ACTIVE, name: 'Chat' });
+};
+
+test('the picker offers a general chat, and choosing it opens a conversation that is not a card', () => {
+  generalChatCard();
+  render();
+  click(launcher());
+
+  expect(container.textContent).toContain('common.generalChat');
+  expect(container.textContent).toContain('common.notAboutAnyCard');
+
+  expect(generalChatEntry()).not.toBeNull();
+  click(generalChatEntry());
+
+  // Named for what it is, not for the card that carries it: reading "💬
+  // General chat" here would suggest the conversation is ABOUT that card.
+  expect(container.textContent).toContain('common.generalChat');
+  expect(container.textContent).not.toContain('💬 General chat');
+  // ...and it is a real conversation: the composer is there.
+  expect(container.querySelector('textarea')).not.toBeNull();
+});
+
+test('a message in the general chat is posted on the chat card', () => {
+  generalChatCard();
+  render();
+  click(launcher());
+  click(generalChatEntry());
+
+  const field = container.querySelector('textarea');
+  type(field, 'what is in development right now?');
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  });
+
+  const created = actionsOfType(EntryActionTypes.COMMENT_FOR_CARD_CREATE);
+  expect(created).toHaveLength(1);
+  expect(created[0].payload.cardId).toBe('card-chat');
+  // The mention is what makes the intent legible on the card and what the
+  // orchestrator's mention-only bootstrap path looks for.
+  expect(created[0].payload.data.text).toContain('@[planka_bot](user-bot)');
+  expect(created[0].payload.data.text).toContain('what is in development right now?');
+});
+
+test('opening a card does not drag the user out of the general chat', () => {
+  generalChatCard();
+  render();
+  click(launcher());
+  click(generalChatEntry());
+
+  // The user opens a card to look something up while asking about the board,
+  // which is most of what you do in a conversation like this.
+  act(() => {
+    mockPath = { boardId: 'board-1', cardId: 'card-1' };
+    store.dispatch({ type: 'CARD_OPENED' });
+  });
+
+  expect(container.textContent).toContain('common.generalChat');
+  expect(container.textContent).not.toContain('Introduce chat with planka_bot');
+});
+
+test('opening a card still switches a CARD conversation, as it always did', () => {
+  generalChatCard();
+  mockCards.push({
+    id: 'card-2',
+    boardId: 'board-1',
+    listId: 'list-1',
+    name: 'Another conversation',
+    isCommentsFetching: false,
+    isAllCommentsFetched: true,
+  });
+
+  render();
+  click(launcher());
+  click(container.querySelector('[data-id="card-1"]'));
+
+  act(() => {
+    mockPath = { boardId: 'board-1', cardId: 'card-2' };
+    store.dispatch({ type: 'CARD_OPENED' });
+  });
+
+  expect(container.textContent).toContain('Another conversation');
+});
+
+test('the switch button leaves the general chat for a card', () => {
+  generalChatCard();
+  render();
+  click(launcher());
+  click(generalChatEntry());
+  expect(container.textContent).toContain('common.generalChat');
+
+  click(findByLabel('common.chooseAConversation'));
+  click(container.querySelector('[data-id="card-1"]'));
+
+  expect(container.textContent).toContain('Introduce chat with planka_bot');
+});
+
+test('the general chat is resumed from the last visit like any other conversation', () => {
+  generalChatCard();
+  window.localStorage.setItem('planka-bot-chat-card-id', 'card-chat');
+
+  render();
+  click(launcher());
+
+  expect(container.textContent).toContain('common.generalChat');
+  expect(container.textContent).not.toContain('common.chooseAConversation');
+});
+
+test('a board with no general chat offers none — the entry would open a conversation nobody hears', () => {
+  mockGeneralChatCard = null;
+  render();
+  click(launcher());
+
+  expect(container.textContent).not.toContain('common.generalChat');
+  expect(container.textContent).not.toContain('common.notAboutAnyCard');
+  // The card conversations are untouched.
+  expect(container.querySelector('[data-id="card-1"]')).not.toBeNull();
+});
+
+test('the general chat says what it is for when it is empty, not what a card chat says', () => {
+  generalChatCard();
+  render();
+  click(launcher());
+  click(generalChatEntry());
+
+  expect(container.textContent).toContain('common.chatWithBotGeneralIntro');
+  expect(container.textContent).not.toContain('common.chatWithBotIntro');
+});
+
+test('a remembered general chat survives a reload with a card already open', () => {
+  // The hard ordering case: the effect that restores the remembered
+  // conversation and the effect that follows the opened card both run on the
+  // same mount. Without the general-chat guard the second overwrites the
+  // first, and the conversation the user was in is gone on every reload.
+  generalChatCard();
+  window.localStorage.setItem('planka-bot-chat-card-id', 'card-chat');
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+
+  render();
+  click(launcher());
+
+  expect(container.textContent).toContain('common.generalChat');
+  expect(container.textContent).not.toContain('Introduce chat with planka_bot');
 });

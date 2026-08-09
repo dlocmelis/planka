@@ -127,10 +127,12 @@ export default {
       cardsOnThisListAreReadyToBeWorkedOn: 'Cards on this list are ready to be worked on.',
       cardsSelected: '{{count}} cards selected',
       chatWithBot: 'Chat with {{username}}',
+      chatWithBotGeneralIntro:
+        'Ask {{username}} anything that is not about one card — what the team is working on, what is queued or stuck, or a ticket you want filed. This conversation is not attached to any ticket.',
       chatWithBotIntro:
         'Ask {{username}} about this card. Your message is posted as a comment on it and the answer comes back here.',
       chatWithBotWithUnread: 'Chat with {{username}} ({{count}} new)',
-      chooseACardToChatOn: 'Choose a card to chat on',
+      chooseAConversation: 'Choose a conversation',
       clickHereOrRefreshPageToUpdate: '<0>Click here</0> or refresh the page to update.',
       clientHostnameInEhlo: 'Client hostname in EHLO',
       closed: 'Closed',
@@ -234,6 +236,7 @@ export default {
       fullKeyIsHiddenForSecurityReasons:
         'The full key is hidden for security reasons. Regenerate it to create a new one.',
       general: 'General',
+      generalChat: 'General chat',
       gradients: 'Gradients',
       grid: 'Grid',
       hideAll: 'Hide all',
@@ -283,6 +286,7 @@ export default {
       noLists: 'No lists',
       noProjects: 'No projects',
       noUnreadNotifications: 'No unread notifications.',
+      notAboutAnyCard: 'Not about any card',
       notifications: 'Notifications',
       of: 'of',
       oldestFirst: 'Oldest first',

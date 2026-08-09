@@ -11,6 +11,61 @@
     text-align: center;
   }
 
+  // The general chat sits above the search box, separated from the card list
+  // by a rule: it is not one of the cards, and putting it in the searchable
+  // list would ask the user to search for something that is not a card by a
+  // name no card has.
+  .general {
+    border-bottom: 1px solid rgba(9, 30, 66, 0.13);
+    flex: 0 0 auto;
+    padding: 8px;
+  }
+
+  .generalHint {
+    color: #6b808c;
+    display: block;
+    font-size: 12px;
+  }
+
+  .generalIcon {
+    color: #6b808c;
+    flex: 0 0 auto;
+    margin: 2px 0 0;
+  }
+
+  .generalItem {
+    align-items: flex-start;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: #17394d;
+    cursor: pointer;
+    display: flex;
+    font-size: 14px;
+    gap: 8px;
+    outline: none;
+    padding: 8px 10px;
+    text-align: left;
+    width: 100%;
+
+    &:hover,
+    &:focus-visible {
+      background: rgba(9, 30, 66, 0.06);
+    }
+  }
+
+  .generalName {
+    display: block;
+    font-weight: bold;
+  }
+
+  // Same `min-width: 0` as `.itemName` below, and for the same reason: the
+  // hint line is the one that can outgrow a narrow panel.
+  .generalText {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
   .item {
     background: transparent;
     border: none;

@@ -40,6 +40,8 @@ const Panel = React.memo(
     bot,
     cardId,
     cardName,
+    isGeneralChat,
+    hasGeneralChat,
     messages,
     replyState,
     isCommentsFetching,
@@ -52,6 +54,7 @@ const Panel = React.memo(
     onWidthChange,
     onSubmit,
     onSelectCard,
+    onSelectGeneralChat,
     onClearCard,
     onLoadEarlier,
     onClose,
@@ -207,7 +210,13 @@ const Panel = React.memo(
 
     let bodyNode;
     if (!cardId) {
-      bodyNode = <CardPicker onSelect={onSelectCard} />;
+      bodyNode = (
+        <CardPicker
+          hasGeneralChat={hasGeneralChat}
+          onSelect={onSelectCard}
+          onSelectGeneralChat={onSelectGeneralChat}
+        />
+      );
     } else {
       bodyNode = (
         <div ref={threadRef} className={styles.thread} onScroll={handleThreadScroll}>
@@ -234,7 +243,9 @@ const Panel = React.memo(
               <Loader active inline="centered" size="small" />
             ) : (
               <div className={styles.empty}>
-                {t('common.chatWithBotIntro', { username: bot.username })}
+                {t(isGeneralChat ? 'common.chatWithBotGeneralIntro' : 'common.chatWithBotIntro', {
+                  username: bot.username,
+                })}
               </div>
             ))}
           {messages.map((message) => (
@@ -297,11 +308,18 @@ const Panel = React.memo(
             <button
               type="button"
               disabled={!cardId}
-              title={cardName || undefined}
+              title={isGeneralChat ? undefined : cardName || undefined}
               className={styles.headerSubtitle}
               onClick={onClearCard}
             >
-              {cardId ? cardName || t('common.card') : t('common.chooseACardToChatOn')}
+              {/* The general chat is named for what it IS, not for the card it
+                  happens to be carried on: "💬 General chat" is an
+                  implementation detail of the transport, and reading the
+                  card's title here would suggest the conversation is about
+                  that card — which is the whole thing this is not. */}
+              {isGeneralChat && t('common.generalChat')}
+              {!isGeneralChat && cardId && (cardName || t('common.card'))}
+              {!isGeneralChat && !cardId && t('common.chooseAConversation')}
             </button>
           </div>
           {cardId && (
@@ -309,8 +327,8 @@ const Panel = React.memo(
               type="button"
               icon
               basic
-              aria-label={t('common.chooseACardToChatOn')}
-              title={t('common.chooseACardToChatOn')}
+              aria-label={t('common.chooseAConversation')}
+              title={t('common.chooseAConversation')}
               className={styles.headerButton}
               onClick={onClearCard}
             >
@@ -349,6 +367,8 @@ Panel.propTypes = {
   /* eslint-enable react/forbid-prop-types */
   cardId: PropTypes.string,
   cardName: PropTypes.string,
+  isGeneralChat: PropTypes.bool.isRequired,
+  hasGeneralChat: PropTypes.bool.isRequired,
   replyState: PropTypes.string.isRequired,
   isCommentsFetching: PropTypes.bool.isRequired,
   hasEarlierMessages: PropTypes.bool.isRequired,
@@ -360,6 +380,7 @@ Panel.propTypes = {
   onWidthChange: PropTypes.func.isRequired,
   onSubmit: PropTypes.func.isRequired,
   onSelectCard: PropTypes.func.isRequired,
+  onSelectGeneralChat: PropTypes.func.isRequired,
   onClearCard: PropTypes.func.isRequired,
   onLoadEarlier: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,

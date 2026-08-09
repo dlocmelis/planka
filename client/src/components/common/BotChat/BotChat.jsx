@@ -56,6 +56,16 @@ const CLOCK_TICK_MS = 30 * 1000;
  * the context from, and the conversation stays visible to the rest of the
  * board afterwards instead of living in a side channel. It arrives live over
  * the socket the board is already subscribed to, so nothing polls.
+ *
+ * One of those conversations is not a ticket: the board's **general chat**
+ * (`selectGeneralChatCardForCurrentBoard`), a card the orchestrator keeps in
+ * a service column of its own. Under this widget it is an ordinary card
+ * conversation — same comments, same socket, same permissions — and that is
+ * the whole reason it costs so little here. What differs is on the other
+ * side: the orchestrator answers it as a conversation instead of triaging it
+ * as a request about a ticket. So this component only has to name it
+ * differently, offer it, and stop dragging the user out of it every time they
+ * open a card.
  */
 const BotChat = React.memo(() => {
   const selectCardById = useMemo(() => selectors.makeSelectCardById(), []);
@@ -65,6 +75,7 @@ const BotChat = React.memo(() => {
   const boardId = useSelector((state) => selectors.selectPath(state).boardId);
   const openedCardId = useSelector((state) => selectors.selectPath(state).cardId);
   const bot = useSelector(selectors.selectBotUserForCurrentBoard);
+  const generalChatCard = useSelector(selectors.selectGeneralChatCardForCurrentBoard);
 
   const dispatch = useDispatch();
 
@@ -122,13 +133,26 @@ const BotChat = React.memo(() => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const generalChatCardId = generalChatCard ? generalChatCard.id : null;
+  const isGeneralChat = !!generalChatCardId && cardId === generalChatCardId;
+
   // Follow the user: opening a card makes that card the conversation, the way
   // the Setlfi assistant follows the page you are on.
+  //
+  // Except in the general chat, which the user chose deliberately and which is
+  // about nothing on the board. Following there would end the conversation the
+  // moment they opened a card to look something up — and looking something up
+  // is most of what you do while asking about the board. The switch button in
+  // the panel header is how they come back to a card's thread.
   useEffect(() => {
-    if (openedCardId) {
-      setCardId(openedCardId);
+    if (!openedCardId) {
+      return;
     }
-  }, [openedCardId]);
+
+    setCardId((current) =>
+      generalChatCardId && current === generalChatCardId ? current : openedCardId,
+    );
+  }, [openedCardId, generalChatCardId]);
 
   // Only once the conversation actually CHANGES: the first run of a plain
   // effect happens before the hydrating one above has applied the stored card,
@@ -270,6 +294,10 @@ const BotChat = React.memo(() => {
     setCardId(nextCardId);
   }, []);
 
+  const handleSelectGeneralChat = useCallback(() => {
+    setCardId(generalChatCardId);
+  }, [generalChatCardId]);
+
   const handleClearCard = useCallback(() => {
     setCardId(null);
   }, []);
@@ -342,6 +370,8 @@ const BotChat = React.memo(() => {
             bot={bot}
             cardId={activeCardId || undefined}
             cardName={activeCardId && card ? card.name : undefined}
+            isGeneralChat={isGeneralChat && !!activeCardId}
+            hasGeneralChat={!!generalChatCardId}
             messages={messages}
             replyState={replyState}
             isCommentsFetching={!!(card && card.isCommentsFetching)}
@@ -354,6 +384,7 @@ const BotChat = React.memo(() => {
             onWidthChange={handleWidthChange}
             onSubmit={handleSubmit}
             onSelectCard={handleSelectCard}
+            onSelectGeneralChat={handleSelectGeneralChat}
             onClearCard={handleClearCard}
             onLoadEarlier={handleLoadEarlier}
             onClose={handleClose}

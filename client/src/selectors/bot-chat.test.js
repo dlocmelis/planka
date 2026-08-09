@@ -12,19 +12,40 @@ import {
   selectBotUserForCurrentBoard,
   selectChatCardsForCurrentBoard,
   selectChatMessagesForCard,
+  selectGeneralChatCardForCurrentBoard,
 } from './bot-chat';
 
 // The state these selectors run against in the app — the store as a board that
 // has been opened leaves it. Nothing here is a stand-in: the widget's whole
 // contract with Planka is that the bot is a board member and the conversation
 // is a card's comments, and that is what this fixture is.
-const buildOrmState = ({ withBotMembership = true } = {}) => {
+const buildOrmState = ({ withBotMembership = true, withGeneralChat = true } = {}) => {
   const session = orm.session(orm.getEmptyState());
 
   session.Project.create({ id: 'project-1', name: 'Project 1' });
   session.Board.create({ id: 'board-1', projectId: 'project-1' });
   session.Board.create({ id: 'board-2', projectId: 'project-1' });
   session.List.create({ id: 'list-1', boardId: 'board-1', type: ListTypes.ACTIVE, position: 1 });
+
+  // The orchestrator's general-chat column and its one card. This is the whole
+  // contract between the two sides: the LIST NAME, and a card in it.
+  if (withGeneralChat) {
+    session.List.create({
+      id: 'list-chat',
+      boardId: 'board-1',
+      type: ListTypes.ACTIVE,
+      position: 99,
+      name: 'Chat',
+    });
+    session.Card.create({
+      id: 'card-chat',
+      boardId: 'board-1',
+      listId: 'list-chat',
+      position: 1,
+      name: '\u{1F4AC} General chat',
+      isAllCommentsFetched: true,
+    });
+  }
 
   session.User.create({ id: 'user-me', username: 'deniss', role: UserRoles.ADMIN });
   session.User.create({ id: 'user-bot', username: 'planka_bot', name: 'Orchestrator Bot' });
@@ -149,12 +170,60 @@ describe('selectChatMessagesForCard', () => {
   });
 });
 
+describe('selectGeneralChatCardForCurrentBoard', () => {
+  test('finds the chat card by its column, not by its name', () => {
+    expect(selectGeneralChatCardForCurrentBoard(buildState())).toMatchObject({ id: 'card-chat' });
+  });
+
+  test('a renamed card in the chat column is still the general chat', () => {
+    const state = buildState();
+    const cards = state.orm.Card.itemsById;
+    const renamed = {
+      ...state.orm,
+      Card: {
+        ...state.orm.Card,
+        itemsById: {
+          ...cards,
+          'card-chat': { ...cards['card-chat'], name: 'Ask me anything' },
+        },
+      },
+    };
+
+    expect(selectGeneralChatCardForCurrentBoard({ ...state, orm: renamed })).toMatchObject({
+      id: 'card-chat',
+      name: 'Ask me anything',
+    });
+  });
+
+  test('answers null on a board with no chat column, so the panel offers none', () => {
+    expect(selectGeneralChatCardForCurrentBoard(buildState({ withGeneralChat: false }))).toBeNull();
+  });
+
+  test('answers null off a board', () => {
+    const state = {
+      ...buildState(),
+      router: { location: { pathname: Paths.ROOT } },
+    };
+
+    expect(selectGeneralChatCardForCurrentBoard(state)).toBeNull();
+  });
+});
+
 describe('selectChatCardsForCurrentBoard', () => {
   test("offers the board's cards with the ones the bot has spoken on first", () => {
     const cards = selectChatCardsForCurrentBoard(buildState());
 
     expect(cards[0]).toMatchObject({ id: 'card-1', name: 'Alpha card', hasBotComment: true });
     expect(cards.map((card) => card.id)).toEqual(['card-1', 'card-3', 'card-2']);
+  });
+
+  // The panel offers the general chat as its own entry above the list; leaving
+  // it here too would give one conversation two names in one picker — and the
+  // card's own name ("💬 General chat") says nothing about what it is for.
+  test('does not offer the general-chat card among the ticket conversations', () => {
+    const cards = selectChatCardsForCurrentBoard(buildState());
+
+    expect(cards.map((card) => card.id)).not.toContain('card-chat');
   });
 
   test('is empty off a board', () => {
@@ -174,6 +243,7 @@ describe('selectChatCardsForCurrentBoard', () => {
 test('the chat selectors are reachable from the selectors barrel', () => {
   expect(typeof selectors.selectBotUserForCurrentBoard).toBe('function');
   expect(typeof selectors.selectChatCardsForCurrentBoard).toBe('function');
+  expect(typeof selectors.selectGeneralChatCardForCurrentBoard).toBe('function');
   expect(typeof selectors.makeSelectChatMessagesForCard).toBe('function');
   expect(selectors.selectBotUserForCurrentBoard(buildState())).toMatchObject({
     id: 'user-bot',

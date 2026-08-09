@@ -23,13 +23,21 @@ const VISIBLE_LIMIT = 50;
 /**
  * Which conversation the panel is on.
  *
- * The bot answers on a card — that is where it reads the ticket from and where
- * its reply is recorded for everyone else — so a chat needs one chosen. Cards
- * the bot has already spoken on come first: those are the threads that are
- * already conversations, and they are what the user is nearly always coming
- * back to.
+ * Two kinds. The **general chat** is first and outside the search box: it is
+ * about nothing on the board, so a list of card titles is not where it
+ * belongs and there is nothing to search for it by. Everything under it is a
+ * card — the bot answers there, that is where it reads the ticket from and
+ * where its reply is recorded for everyone else — with the cards the bot has
+ * already spoken on first, because those are the threads that are already
+ * conversations and what the user is nearly always coming back to.
+ *
+ * The general-chat entry is absent when the board has none (`hasGeneralChat`),
+ * for the same reason the launcher is absent on a board the bot is not a
+ * member of: it would open a conversation nobody is listening to. The column
+ * and its card are created by devteam-orchestrator at startup, so on a board
+ * the orchestrator drives it is always there.
  */
-const CardPicker = React.memo(({ onSelect }) => {
+const CardPicker = React.memo(({ hasGeneralChat, onSelect, onSelectGeneralChat }) => {
   const cards = useSelector(selectors.selectChatCardsForCurrentBoard);
 
   const [t] = useTranslation();
@@ -69,6 +77,17 @@ const CardPicker = React.memo(({ onSelect }) => {
 
   return (
     <div className={styles.wrapper}>
+      {hasGeneralChat && (
+        <div className={styles.general}>
+          <button type="button" className={styles.generalItem} onClick={onSelectGeneralChat}>
+            <Icon name="comment outline" className={styles.generalIcon} />
+            <span className={styles.generalText}>
+              <span className={styles.generalName}>{t('common.generalChat')}</span>
+              <span className={styles.generalHint}>{t('common.notAboutAnyCard')}</span>
+            </span>
+          </button>
+        </div>
+      )}
       <div className={styles.searchWrapper}>
         <Input
           fluid
@@ -111,7 +130,9 @@ const CardPicker = React.memo(({ onSelect }) => {
 });
 
 CardPicker.propTypes = {
+  hasGeneralChat: PropTypes.bool.isRequired,
   onSelect: PropTypes.func.isRequired,
+  onSelectGeneralChat: PropTypes.func.isRequired,
 };
 
 export default CardPicker;

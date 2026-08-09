@@ -29,6 +29,39 @@ follows the card you have open; with none open it offers the board's cards to
 pick from, the ones the bot has already spoken on first, and remembers the last
 one you chose.
 
+## The general chat — a conversation that is not about a ticket
+
+The picker's first entry is **General chat**, above the cards and outside the
+search box. It is for everything a ticket's thread is the wrong place for:
+what the team is working on, what is queued or stuck, how a column works, what
+the bot can do, a ticket you want filed. Ask it there and no ticket's history
+is left carrying the answer.
+
+Under this widget it is an ordinary card conversation, because it has to be —
+a card's comments are the only channel the orchestrator hears. The board
+carries a **Chat** service column with one card in it, and that card is what
+the panel talks on. What differs is on the other side: the orchestrator treats
+every card in that column as a conversation rather than a ticket, so a message
+there is **answered** instead of being triaged as a request about a card. It
+moves nothing, re-prioritises nothing and re-plans nothing; the one thing it
+will DO is file new tickets, and it posts the links back into the chat.
+
+Two consequences worth knowing:
+
+- **Opening a card does not take you out of it.** Every other conversation
+  follows the card you have open — looking something up mid-question would
+  otherwise end the conversation. Use the switch button in the panel header to
+  go back to a card's thread.
+- **A request about a specific card still belongs on that card.** "Move this
+  back to development", "this is urgent", "retry the deploy" are answered by
+  the triage that can actually do them, and it needs the card. The general
+  chat says so rather than pretending.
+
+The entry is absent on a board that has no chat column or whose chat column is
+empty — the same rule as the launcher itself: an entry that opens a
+conversation nobody is listening to is worse than no entry. Every board the
+orchestrator drives has one, created at startup (see *Setup*).
+
 Comments arrive one page at a time (`Config.COMMENTS_LIMIT`, 50), so a long
 conversation opens on its newest page with **Load earlier messages** above it —
 the same backwards pagination the card's own comment list uses. Loading a page
@@ -57,7 +90,15 @@ The one thing to keep true is the membership: **planka_bot must be a member of
 each board the chat should be available on**, which it already is on any board
 the orchestrator drives.
 
-### Optional: a differently named bot
+The general chat's **Chat** column and its card are created by
+devteam-orchestrator's own idempotent board setup, on every startup
+(`internal/setup`, `EnsureBoardSetup` → `ensureChatCard`) — so nothing has to
+be created by hand there either, and a column somebody deletes comes back on
+the next restart. Until an orchestrator that has that code has started against
+the board, the picker simply shows no general-chat entry and the card
+conversations work exactly as before.
+
+### Optional: a differently named bot, or a differently named chat column
 
 The username is read from `window.PLANKA_BOT_USERNAME` and falls back to
 `planka_bot` (`client/src/constants/BotChat.js`), the same escape hatch
@@ -67,8 +108,14 @@ bot user, set it before the app bundle loads:
 ```html
 <script>
   window.PLANKA_BOT_USERNAME = 'my_bot';
+  window.PLANKA_BOT_CHAT_LIST = 'Ask the bot';
 </script>
 ```
+
+`window.PLANKA_BOT_CHAT_LIST` is the same escape hatch for the general chat's
+column (default `Chat`). It has to name the column the ORCHESTRATOR keeps that
+conversation in — `fsm.ListChat` — or the panel will offer a chat the
+orchestrator does not answer.
 
 In development that goes in `client/index.html`. There is no checked-in
 production template to edit: `client/vite.config.js` (`createEjsTemplate`)
@@ -79,7 +126,7 @@ server's `public/`. So an override for a packaged install belongs in
 `client/index.html` before the image is built, not in a file on the running
 host.
 
-Leave it unset for `planka_bot`.
+Leave both unset for `planka_bot` and `Chat`.
 
 ## What a message costs
 
@@ -98,7 +145,8 @@ one. It does make it much easier to spend, which is worth knowing.
 | Piece | File |
 | --- | --- |
 | Launcher position and panel width arithmetic, mention handling, comments → thread | `client/src/utils/bot-chat.js` |
-| The bot as a board member, a card's thread, the cards offered as conversations | `client/src/selectors/bot-chat.js` |
+| The bot as a board member, a card's thread, the cards offered as conversations, the general-chat card | `client/src/selectors/bot-chat.js` |
+| The bot's username and the general chat's column name (both overridable on `window`) | `client/src/constants/BotChat.js` |
 | Launcher, panel, thread, composer, card picker | `client/src/components/common/BotChat/` |
 | Mounted app-wide | `client/src/components/common/Core/Core.jsx` |
 | Fetch/post comments for a card that is not the open one | `COMMENTS_FOR_CARD_FETCH` / `COMMENT_FOR_CARD_CREATE` (`client/src/entry-actions/comments.js`, `client/src/sagas/core/watchers/comments.js`) |
