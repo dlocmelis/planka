@@ -637,6 +637,29 @@ export const speakAvailability = (text, capability) => {
   return SpeakAvailabilities.READY;
 };
 
+/**
+ * Whether two language tags name the same language.
+ *
+ * Compared on the PRIMARY SUBTAG, lowercased, which is the same reduction the
+ * server makes (`server/utils/voice.js` `normalizeLanguage`) — `ru-RU` and `ru`
+ * are one language, and a comparison that said otherwise would drop a pinned
+ * voice on every turn a provider happened to spell with a region.
+ *
+ * Two values that are not language tags at all are never "the same": there is
+ * nothing to be sure about.
+ */
+export const sameLanguage = (one, other) => {
+  const primary = (value) =>
+    String(value || '')
+      .trim()
+      .split(/[-_]/)[0]
+      .toLowerCase();
+
+  const left = primary(one);
+
+  return /^[a-z]{2,3}$/.test(left) && left === primary(other);
+};
+
 /* The phase */
 
 /**

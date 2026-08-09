@@ -149,7 +149,10 @@ reach without configuring anything.
 
 Three steps, in order, which is setl's own (`data/core/tts/cartesia.go`):
 
-1. **The voice the client sent back**, so a conversation keeps one voice.
+1. **The voice the client sent back**, so a conversation keeps one voice. The
+   client gives that pin up when the user is heard in a DIFFERENT language, and
+   when the panel closes or moves to another card — a voice chosen for the last
+   language reading the next one is the same fault as never choosing one.
 2. **`VOICE_TTS_VOICES`**, the deployment's own pin for that language. Checked
    before the network, so a deployment that has chosen its voices never pays for
    a lookup.

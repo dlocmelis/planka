@@ -47,6 +47,7 @@ import {
   microphoneStopReason,
   newVadState,
   pickRecorderMimeType,
+  sameLanguage,
   speakAvailability,
   uploadContentType,
   vadStep,
@@ -317,10 +318,21 @@ export default function useVoiceChat({
 
         // The language the user was actually heard in. It is what the answer is
         // read back in — and it is the ONLY thing that ever reaches the server's
-        // per-language voice map, which would otherwise be a configuration knob
-        // no request could reach.
+        // per-language voice resolution, which would otherwise be a whole
+        // subsystem no request could reach.
         if (item.languages && item.languages.length > 0) {
-          [heardLanguageRef.current] = item.languages;
+          const [heard] = item.languages;
+          heardLanguageRef.current = heard;
+
+          // Somebody who has switched language mid-conversation has left the
+          // pinned voice behind: it was chosen FOR the language before, and
+          // sending it back would have a Russian voice read every English
+          // answer from here on. Dropping it asks the server to resolve again.
+          const pin = voicePinRef.current;
+
+          if (pin && pin.language && !sameLanguage(pin.language, heard)) {
+            voicePinRef.current = null;
+          }
         }
 
         // A provider answers a burst of noise with "" or ".", and a turn made of
@@ -433,6 +445,13 @@ export default function useVoiceChat({
     vadRef.current = null;
     isUploadingRef.current = false;
     isCapturingRef.current = false;
+
+    // Both belong to the conversation that has just ended — the card changed,
+    // the mode went off, the panel closed. A voice chosen for the last thread's
+    // language reading the next one's is the same bug as never resolving one at
+    // all, and re-resolving costs nothing the server has not already cached.
+    voicePinRef.current = null;
+    heardLanguageRef.current = null;
 
     setIsMicReady(false);
     setIsCapturing(false);

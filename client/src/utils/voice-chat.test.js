@@ -19,6 +19,7 @@ import {
   newVadState,
   pickRecorderMimeType,
   readVoiceChatEnabled,
+  sameLanguage,
   speakAvailability,
   speechTextLength,
   uploadContentType,
@@ -482,6 +483,28 @@ describe('voice-chat', () => {
       expect(formatBytes(512)).toBe('512 bytes');
       expect(formatBytes(2048)).toBe('2 KB');
       expect(formatBytes(3 * 1024 * 1024)).toBe('3.0 MB');
+    });
+  });
+
+  describe('sameLanguage(one, other)', () => {
+    it('compares on the primary subtag, the reduction the server makes', () => {
+      // A pinned voice must not be given up on every turn a provider happened
+      // to spell with a region.
+      expect(sameLanguage('ru', 'ru-RU')).toBe(true);
+      expect(sameLanguage('ru-RU', 'ru')).toBe(true);
+      expect(sameLanguage('EN', 'en_US')).toBe(true);
+    });
+
+    it('tells two languages apart, which is what drops a stale voice', () => {
+      expect(sameLanguage('en', 'ru')).toBe(false);
+      expect(sameLanguage('de', 'nl')).toBe(false);
+    });
+
+    it('is never sure about something that is not a language tag', () => {
+      expect(sameLanguage('', '')).toBe(false);
+      expect(sameLanguage(null, null)).toBe(false);
+      expect(sameLanguage('english', 'english')).toBe(false);
+      expect(sameLanguage('multi', 'multi')).toBe(false);
     });
   });
 });

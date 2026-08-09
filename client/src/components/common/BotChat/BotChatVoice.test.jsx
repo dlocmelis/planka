@@ -249,7 +249,10 @@ const click = (element) => {
 };
 
 const findByLabel = (label) => container.querySelector(`[aria-label="${label}"]`);
-const launcher = () => findByLabel('common.chatWithBot');
+// The label carries the unread count once there is one, so both spellings are
+// the same button.
+const launcher = () =>
+  findByLabel('common.chatWithBot') || findByLabel('common.chatWithBotWithUnread');
 const voiceToggle = () =>
   findByLabel('action.turnOnVoiceChat') || findByLabel('action.turnOffVoiceChat');
 const status = () => container.querySelector('[role="status"]');
@@ -276,10 +279,30 @@ const hold = async (db, ms) => {
   });
 };
 
-/** A whole turn: enough voice to open one, then enough silence to send it. */
+/**
+ * A whole turn: enough voice to open one, then enough silence to send it.
+ *
+ * The voice is held for two frames longer than `minSpeechMs` asks, because the
+ * first tick after an answer has been read aloud goes on putting a fresh
+ * recorder in (the old one was dropped so it would not hold the answer) and
+ * credits no speech. A turn on the exact boundary would open on the first turn
+ * of a conversation and not on the second.
+ */
 const saySomething = async () => {
-  await hold(VOICE_DB, VOICE_CHAT_TUNING.minSpeechMs + VOICE_CHAT_TUNING.frameIntervalMs);
+  await hold(VOICE_DB, VOICE_CHAT_TUNING.minSpeechMs + 2 * VOICE_CHAT_TUNING.frameIntervalMs);
   await hold(QUIET_DB, VOICE_CHAT_TUNING.silenceHangoverMs + VOICE_CHAT_TUNING.frameIntervalMs);
+  await settle();
+};
+
+/** The clip that is playing reaches its end. Until it does the loop stays
+ * half-duplex — nothing the microphone hears can open a turn — so a test that
+ * wants a SECOND turn has to let the first answer finish. */
+const finishSpeaking = async () => {
+  await act(async () => {
+    players[players.length - 1].finish();
+    await Promise.resolve();
+  });
+
   await settle();
 };
 
@@ -759,6 +782,152 @@ test('a conversation keeps one voice once the server has decided on one', async 
     voice: 'voice-en',
     language: 'en',
   });
+});
+
+test('switching language mid-conversation gives up the voice pinned for the last one', async () => {
+  // The pin exists so one conversation keeps one voice. It is NOT a decision
+  // about the speaker: somebody who has started talking Russian has left the
+  // English voice behind, and sending it back would have that voice read every
+  // answer from here on — which is the same failure as never resolving a voice
+  // at all, arrived at from the other side.
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  await saySomething();
+
+  receiveMessage('card-1', {
+    id: 'comment-1',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'First answer.',
+    createdAt: new Date(Date.now() + 1000),
+    isPersisted: true,
+  });
+  await settle();
+
+  expect(mockSpeak.mock.calls[0][1]).toEqual({ text: 'First answer.', language: 'en' });
+
+  await finishSpeaking();
+
+  mockTranscribe.mockResolvedValue({
+    item: { text: 'что происходит', languages: ['ru-RU'], durationSec: 1.2, confidence: 0.9 },
+  });
+
+  await saySomething();
+
+  // The second turn has to have actually been heard, or the assertion below
+  // would pass for the wrong reason.
+  expect(mockTranscribe).toHaveBeenCalledTimes(2);
+
+  receiveMessage('card-1', {
+    id: 'comment-2',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'Ждём ревью.',
+    createdAt: new Date(Date.now() + 2000),
+    isPersisted: true,
+  });
+  await settle();
+
+  // The new language, and no voice — so the server resolves one for it.
+  expect(mockSpeak.mock.calls[1][1]).toEqual({ text: 'Ждём ревью.', language: 'ru-RU' });
+});
+
+test('a regional spelling of the same language keeps the voice it pinned', async () => {
+  // `ru` and `ru-RU` are one language — the reduction the server makes — so a
+  // provider that spells the second must not cost the conversation its voice on
+  // every turn.
+  mockTranscribe.mockResolvedValue({
+    item: { text: 'что происходит', languages: ['ru'], durationSec: 1.2, confidence: 0.9 },
+  });
+  mockSpeak.mockResolvedValue({
+    item: { data: 'QUJD', mimeType: 'audio/mpeg', voice: 'voice-ru', language: 'ru' },
+  });
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  await saySomething();
+
+  receiveMessage('card-1', {
+    id: 'comment-1',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'Ждём ревью.',
+    createdAt: new Date(Date.now() + 1000),
+    isPersisted: true,
+  });
+  await settle();
+
+  await finishSpeaking();
+
+  mockTranscribe.mockResolvedValue({
+    item: { text: 'а что дальше', languages: ['ru-RU'], durationSec: 1.2, confidence: 0.9 },
+  });
+
+  await saySomething();
+
+  expect(mockTranscribe).toHaveBeenCalledTimes(2);
+
+  receiveMessage('card-1', {
+    id: 'comment-2',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'Сейчас посмотрю.',
+    createdAt: new Date(Date.now() + 2000),
+    isPersisted: true,
+  });
+  await settle();
+
+  expect(mockSpeak.mock.calls[1][1]).toEqual({
+    text: 'Сейчас посмотрю.',
+    voice: 'voice-ru',
+    language: 'ru',
+  });
+});
+
+test('closing the panel forgets the voice, so the next conversation resolves its own', async () => {
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  receiveMessage('card-1', {
+    id: 'comment-1',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'First answer.',
+    createdAt: new Date(Date.now() + 1000),
+    isPersisted: true,
+  });
+  await settle();
+  await finishSpeaking();
+
+  // Let the clock past the first answer, so reopening does not read it again —
+  // only a reply that arrived AFTER the mode started is spoken.
+  await hold(QUIET_DB, 3000);
+
+  // Closing stops the loop; the preference survives, so reopening resumes.
+  click(launcher());
+  await settle();
+  click(launcher());
+  await settle();
+
+  receiveMessage('card-1', {
+    id: 'comment-2',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'Second answer.',
+    createdAt: new Date(Date.now() + 2000),
+    isPersisted: true,
+  });
+  await settle();
+
+  expect(mockSpeak.mock.calls[1][1]).toEqual({ text: 'Second answer.' });
 });
 
 test('a voice the server reported with no language is not pinned onto the rest', async () => {
