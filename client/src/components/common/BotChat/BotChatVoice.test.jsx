@@ -843,12 +843,10 @@ test('a browser that will not leave the audio context suspended stops the mode a
       this.state = 'suspended';
     }
 
-    // eslint-disable-next-line class-methods-use-this
     resume() {
       return Promise.resolve();
     }
 
-    // eslint-disable-next-line class-methods-use-this
     close() {
       return Promise.resolve();
     }

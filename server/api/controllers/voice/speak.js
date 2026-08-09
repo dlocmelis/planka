@@ -10,11 +10,12 @@
  *     summary: Read a message aloud
  *     description: >
  *       Synthesizes speech for one message of the planka_bot conversation on a
- *       card and answers with the audio, base64-encoded. Requires membership of
- *       the card's board — the same bar as reading the thread. The text comes
- *       from the CLIENT rather than from stored history: the panel already
- *       holds the markdown it rendered, and the card only ties the spend to a
- *       conversation the caller can actually see.
+ *       card and answers with the audio, base64-encoded. Requires whatever it
+ *       takes to READ the thread — admin, or manager of the project, or member
+ *       of the board — which is the bar GET /cards/{cardId}/comments applies.
+ *       The text comes from the CLIENT rather than from stored history: the
+ *       panel already holds the markdown it rendered, and the card only ties
+ *       the spend to a conversation the caller can actually see.
  *     tags:
  *       - Voice
  *     operationId: speakMessage

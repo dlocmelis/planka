@@ -117,6 +117,16 @@ What does leave the server is the recording (to Deepgram) and the reply's text
 (to Cartesia). A deployment that cannot send either to a third party should
 leave the two keys unset, which is the default.
 
+**Each endpoint is gated by the act it performs, not by the feature.**
+Transcription is gated on COMMENTING — editor, or a membership with
+`canComment` — because the transcript is about to be posted as a comment and
+someone who could not send that message has no business spending a
+transcription on it. Reading a message aloud is gated on READING, which in this
+app is admin *or* manager of the project *or* member of the board: the same
+three the card and its comments are served to. Neither endpoint is
+rate-limited, which is worth knowing before either key is given to a large
+instance — both are metered per audio minute and per character.
+
 ## Setup
 
 **Two credentials, both optional, and each turns on one half.** With neither
@@ -314,6 +324,12 @@ what came across:
   (`builtinVoiceByLanguage`, Russian) did not come across: it exists because
   somebody chose that voice for that product by name, and everything setl says
   about a checked-in id rotting applies to a copy of it here.
+- **Playback, and stopping it aborting the request** — from setl-web's
+  `lib/assistant/useServerSpeaker.ts`, which holds the reading's
+  `AbortController` in a ref, bumps a generation on every stop and every new
+  reading, and revokes its object URL on both. `newSpeechTurn` here is the same
+  idea with the queue left out: a planka_bot reply arrives complete, so there
+  is one turn at a time rather than a stream of parts to supersede.
 - **Markdown → speech** — the strip and the table narration, verbatim, from
   setl's `data/core/tts/markdown.go` and `table.go`. The cases in
   `server/test/utils/voice-speech-text.test.js` are the same inputs and the same
