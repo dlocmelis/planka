@@ -897,6 +897,56 @@ test('a stored preference for a mode this deployment cannot run is forgotten', a
   expect(window.navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
 });
 
+test('a recorder that fails mid-utterance stops the mode rather than losing turns quietly', async () => {
+  // Its audio is gone and no `onstop` is coming, so the VAD would go on
+  // crediting speech into a recording that no longer exists — every turn from
+  // there on silently lost, with the row still saying "listening".
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  expect(recorders).toHaveLength(1);
+
+  await act(async () => {
+    recorders[0].onerror(new Error('device went away'));
+    await Promise.resolve();
+  });
+
+  await settle();
+
+  expect(voiceToggle().getAttribute('aria-pressed')).toBe('false');
+  expect(status().textContent).toContain('common.voiceChatFailed');
+});
+
+test('turning the mode off mid-upload stops paying for the recording', async () => {
+  // The transcript would be discarded by the generation guard either way; what
+  // this is about is the provider, which bills per audio minute whether or not
+  // anybody reads the answer.
+  let uploadSignal;
+  mockTranscribe.mockImplementationOnce(
+    (cardId, data, headers, signal) =>
+      new Promise(() => {
+        uploadSignal = signal;
+      }),
+  );
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  await saySomething();
+
+  expect(mockTranscribe).toHaveBeenCalledTimes(1);
+  expect(uploadSignal.aborted).toBe(false);
+
+  click(voiceToggle());
+  await settle();
+
+  expect(uploadSignal.aborted).toBe(true);
+});
+
 test('a server that has lost its speech-to-text turns the mode off and says so', async () => {
   render();
   click(launcher());
