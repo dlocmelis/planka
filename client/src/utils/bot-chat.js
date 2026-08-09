@@ -283,9 +283,31 @@ export const shouldFollowThread = ({ stuckToBottom }) => stuckToBottom;
 
 /* The conversation the panel is on */
 
-/** localStorage key for the card the panel last talked on, so re-opening the
- * launcher resumes the conversation instead of asking again. */
+/** localStorage key for the conversation the panel was last on, so re-opening
+ * the launcher resumes it instead of asking again. */
 export const LAST_CARD_KEY = 'planka-bot-chat-card-id';
+
+/**
+ * The conversation id standing for the board's GENERAL chat — the one that is
+ * not about a ticket.
+ *
+ * The general chat is carried on a card like every other conversation, but it
+ * is not identified by that card's id here, and the difference is
+ * load-bearing. The panel knows which conversation it is on before it knows
+ * anything about the board: a page load renders the widget, reads this value
+ * out of storage and reacts to the card in the URL all before the board's
+ * lists and cards arrive. Storing the CARD's id would mean the panel could not
+ * tell "the general chat" from "some card I cannot resolve yet", and the
+ * remembered conversation would be replaced by whichever card the URL had
+ * open — on every reload.
+ *
+ * Planka ids are numeric strings, so this can never collide with one.
+ */
+export const GENERAL_CHAT_CONVERSATION = 'general';
+
+/** Whether a conversation id is the general chat's rather than a card's. */
+export const isGeneralChatConversation = (conversationId) =>
+  conversationId === GENERAL_CHAT_CONVERSATION;
 
 export const readLastCardId = (storage) => {
   try {

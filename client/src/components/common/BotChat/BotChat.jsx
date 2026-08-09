@@ -14,10 +14,12 @@ import { isListArchiveOrTrash } from '../../../utils/record-helpers';
 import {
   DEFAULT_LAUNCHER_POSITION,
   DEFAULT_PANEL_WIDTH,
+  GENERAL_CHAT_CONVERSATION,
   PANEL_VIEWPORT_MARGIN,
   botReplyState,
   clampLauncherPosition,
   clampPanelWidth,
+  isGeneralChatConversation,
   panelAnchor,
   readLastCardId,
   readLauncherPosition,
@@ -66,6 +68,14 @@ const CLOCK_TICK_MS = 30 * 1000;
  * as a request about a ticket. So this component only has to name it
  * differently, offer it, and stop dragging the user out of it every time they
  * open a card.
+ *
+ * Which is why the panel tracks a CONVERSATION rather than a card id: the
+ * general chat is `GENERAL_CHAT_CONVERSATION`, resolved to whichever card the
+ * board keeps it on. Everything below happens before the board's cards are in
+ * the store — the remembered conversation is read out of storage, the card in
+ * the URL is followed — so a general chat identified by its card's id would be
+ * indistinguishable from a card that has not loaded yet, and would lose to the
+ * URL on every reload.
  */
 const BotChat = React.memo(() => {
   const selectCardById = useMemo(() => selectors.makeSelectCardById(), []);
@@ -82,7 +92,8 @@ const BotChat = React.memo(() => {
   const launcherRef = useRef(null);
 
   const [isOpened, setIsOpened] = useState(false);
-  const [cardId, setCardId] = useState(null);
+  // A card id, GENERAL_CHAT_CONVERSATION, or null for "none chosen".
+  const [conversationId, setConversationId] = useState(null);
   const [position, setPosition] = useState(DEFAULT_LAUNCHER_POSITION);
   const [width, setWidth] = useState(DEFAULT_PANEL_WIDTH);
   const [viewport, setViewport] = useState(viewportSize);
@@ -110,7 +121,7 @@ const BotChat = React.memo(() => {
     }
 
     if (storedCardId) {
-      setCardId(storedCardId);
+      setConversationId(storedCardId);
     }
   }, []);
 
@@ -134,7 +145,13 @@ const BotChat = React.memo(() => {
   }, []);
 
   const generalChatCardId = generalChatCard ? generalChatCard.id : null;
-  const isGeneralChat = !!generalChatCardId && cardId === generalChatCardId;
+  const isGeneralChat = isGeneralChatConversation(conversationId);
+
+  // The card the conversation is actually carried on: itself for a card
+  // conversation, and the board's chat card for the general one — null while
+  // the board has not loaded, or on a board that has no general chat, which
+  // the panel reads as "nothing chosen" and answers with the picker.
+  const cardId = isGeneralChat ? generalChatCardId : conversationId;
 
   // Follow the user: opening a card makes that card the conversation, the way
   // the Setlfi assistant follows the page you are on.
@@ -149,17 +166,15 @@ const BotChat = React.memo(() => {
       return;
     }
 
-    setCardId((current) =>
-      generalChatCardId && current === generalChatCardId ? current : openedCardId,
-    );
-  }, [openedCardId, generalChatCardId]);
+    setConversationId((current) => (isGeneralChatConversation(current) ? current : openedCardId));
+  }, [openedCardId]);
 
   // Only once the conversation actually CHANGES: the first run of a plain
   // effect happens before the hydrating one above has applied the stored card,
   // and would erase it with the initial null.
   useDidUpdate(() => {
-    writeLastCardId(window.localStorage, cardId);
-  }, [cardId]);
+    writeLastCardId(window.localStorage, conversationId);
+  }, [conversationId]);
 
   // Give the keyboard back to the button that opened the panel, which is the
   // last piece of making Escape actually worth pressing. Everything focusable
@@ -291,15 +306,15 @@ const BotChat = React.memo(() => {
   }, []);
 
   const handleSelectCard = useCallback((nextCardId) => {
-    setCardId(nextCardId);
+    setConversationId(nextCardId);
   }, []);
 
   const handleSelectGeneralChat = useCallback(() => {
-    setCardId(generalChatCardId);
-  }, [generalChatCardId]);
+    setConversationId(GENERAL_CHAT_CONVERSATION);
+  }, []);
 
   const handleClearCard = useCallback(() => {
-    setCardId(null);
+    setConversationId(null);
   }, []);
 
   // The rest of a long conversation, one page at a time. The service is the

@@ -75,6 +75,14 @@ is the same rule the server enforces on `POST /cards/:id/comments`. A card in
 the archive or the trash is read-only everywhere in Planka, so the panel will
 show its thread and say that rather than blaming your membership.
 
+The panel remembers which CONVERSATION you were on rather than which card:
+the general chat is stored as `general`, not as the id of the card carrying
+it. That is not cosmetic. The widget renders, reads that value and reacts to
+the card in the URL before the board's lists and cards are in the store, so a
+general chat remembered by its card's id would be indistinguishable from a
+card that has not loaded yet — and the card in the URL would take the
+conversation on every reload.
+
 The button can be picked up (press and hold, then drag) and parked anywhere in
 the window, up to 8px from any edge; the panel grows up and to the left out of
 wherever it was left, sliding back down only as far as it must to stay a panel

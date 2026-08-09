@@ -1017,13 +1017,24 @@ test('the switch button leaves the general chat for a card', () => {
 
 test('the general chat is resumed from the last visit like any other conversation', () => {
   generalChatCard();
-  window.localStorage.setItem('planka-bot-chat-card-id', 'card-chat');
+  // Remembered as the CONVERSATION, not as the card that carries it — see the
+  // reload test below for why that distinction is load-bearing.
+  window.localStorage.setItem('planka-bot-chat-card-id', 'general');
 
   render();
   click(launcher());
 
   expect(container.textContent).toContain('common.generalChat');
   expect(container.textContent).not.toContain('common.chooseAConversation');
+});
+
+test('choosing the general chat remembers it as a conversation, not as a card id', () => {
+  generalChatCard();
+  render();
+  click(launcher());
+  click(generalChatEntry());
+
+  expect(window.localStorage.getItem('planka-bot-chat-card-id')).toBe('general');
 });
 
 test('a board with no general chat offers none — the entry would open a conversation nobody hears', () => {
@@ -1053,10 +1064,35 @@ test('a remembered general chat survives a reload with a card already open', () 
   // same mount. Without the general-chat guard the second overwrites the
   // first, and the conversation the user was in is gone on every reload.
   generalChatCard();
-  window.localStorage.setItem('planka-bot-chat-card-id', 'card-chat');
+  window.localStorage.setItem('planka-bot-chat-card-id', 'general');
   mockPath = { boardId: 'board-1', cardId: 'card-1' };
 
   render();
+  click(launcher());
+
+  expect(container.textContent).toContain('common.generalChat');
+  expect(container.textContent).not.toContain('Introduce chat with planka_bot');
+});
+
+test('a remembered general chat survives a reload that renders before the board loads', () => {
+  // The same reload, one step earlier: the widget's effects run on the very
+  // first render, and on a real page load that happens before the board's
+  // lists and cards are in the store. If the remembered conversation were the
+  // chat CARD's id, this render could not tell it from a card that has not
+  // arrived yet — and the card in the URL would take the conversation, on
+  // every single reload.
+  window.localStorage.setItem('planka-bot-chat-card-id', 'general');
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+  mockGeneralChatCard = null;
+
+  render();
+
+  // ...the board arrives.
+  act(() => {
+    generalChatCard();
+    mockGeneralChatCard = { id: 'card-chat', name: '💬 General chat' };
+    store.dispatch({ type: 'BOARD_FETCHED' });
+  });
   click(launcher());
 
   expect(container.textContent).toContain('common.generalChat');
