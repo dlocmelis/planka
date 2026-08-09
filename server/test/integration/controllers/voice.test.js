@@ -548,6 +548,25 @@ describe('Voice chat endpoints', function describeVoice() {
       expect(call.body).to.have.lengthOf(64);
     });
 
+    it('lets one request override the language mode, and labels the transcript with it', async () => {
+      // The endpoint takes a per-request `language` so a caller that already
+      // knows what is about to be said is not held to the deployment's
+      // code-switching default. The panel does not send one — `multi` is what a
+      // hands-free conversation wants — but the parameter is documented, so it
+      // is pinned rather than left to be discovered by whoever first needs it.
+      const res = await postTranscription(tokens.editor, { ...audioBody(), language: 'lv' });
+
+      expect(res.status).to.equal(200);
+
+      const [call] = providerCalls;
+
+      expect(new URL(`${providerUrl}${call.url}`).searchParams.get('language')).to.equal('lv');
+      // A monolingual request reports no language of its own, so the mode that
+      // was asked for is what labels the transcript — otherwise the voice that
+      // reads the answer would be resolved against nothing.
+      expect(res.body.item.languages).to.deep.equal(['en']);
+    });
+
     it('refuses a container that is not on the allowlist, before calling anyone', async () => {
       const res = await postTranscription(tokens.editor, {
         ...audioBody(),

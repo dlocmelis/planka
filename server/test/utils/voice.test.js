@@ -1,3 +1,6 @@
+const fs = require('fs');
+const path = require('path');
+
 const { expect } = require('chai');
 
 const {
@@ -243,6 +246,23 @@ describe('voice', () => {
           OUTGOING_ALLOWED_HOSTS: '',
         }),
       ).to.equal(false);
+    });
+  });
+
+  describe('INTERNAL_OUTGOING_PROXY', () => {
+    it('should be the address start.sh actually exports, character for character', () => {
+      // A TWIN, and the only one this feature has. `isOutgoingHostAllowed`
+      // tells the proxy start.sh starts itself from one a deployment named,
+      // and it does that by string equality: if start.sh moved to another port
+      // this constant would stop recognising it, every deployment using the
+      // internal proxy would be read as "named its own", and the boot warning
+      // that exists to stop voice chat 502ing on every turn would go silent
+      // exactly where it is needed. Nothing else would fail.
+      const startScript = fs.readFileSync(path.join(__dirname, '../../start.sh'), 'utf8');
+      const match = startScript.match(/export OUTGOING_PROXY="([^"]+)"/);
+
+      expect(match, 'start.sh no longer exports OUTGOING_PROXY').to.not.equal(null);
+      expect(match[1]).to.equal(INTERNAL_OUTGOING_PROXY);
     });
   });
 
