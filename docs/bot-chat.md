@@ -28,6 +28,12 @@ follows the card you have open; with none open it offers the board's cards to
 pick from, the ones the bot has already spoken on first, and remembers the last
 one you chose.
 
+Comments arrive one page at a time (`Config.COMMENTS_LIMIT`, 50), so a long
+conversation opens on its newest page with **Load earlier messages** above it —
+the same backwards pagination the card's own comment list uses. Loading a page
+keeps you looking at the message you were reading rather than dropping you at
+the top of the new one.
+
 The launcher only appears on a board that planka_bot is a **member** of — a
 chat nobody is listening to is worse than no launcher — and only comments if
 the current user's board membership allows it (editor, or `canComment`), which

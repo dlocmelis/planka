@@ -509,6 +509,7 @@ export default {
       leave: 'Leave',
       leaveBoard: 'Leave board',
       leaveProject: 'Leave project',
+      loadEarlierMessages: 'Load earlier messages',
       logOut_title: 'Log Out',
       makeCover_title: 'Make Cover',
       makeProjectPrivate: 'Make project private',

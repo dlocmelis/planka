@@ -42,6 +42,10 @@
     // Keeps pointermove streaming to the button for the whole drag instead of
     // the browser claiming it for a scroll.
     touch-action: none;
+    // ...and stops the long press that starts the drag from being read as a
+    // text selection or a link callout instead.
+    user-select: none;
+    -webkit-touch-callout: none;
     transition:
       transform 150ms ease,
       box-shadow 150ms ease;

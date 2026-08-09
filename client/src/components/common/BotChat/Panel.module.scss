@@ -4,6 +4,11 @@
  */
 
 :global(#app) {
+  .earlier {
+    padding-bottom: 12px;
+    text-align: center;
+  }
+
   .empty {
     color: #6b808c;
     font-size: 13px;

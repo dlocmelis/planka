@@ -123,6 +123,8 @@ const Launcher = React.memo(({ bot, position, unreadCount, isOpened, onToggle, o
 
   const handlePointerEnd = useCallback(() => {
     cancelHoldTimer();
+
+    const start = dragStartRef.current;
     dragStartRef.current = null;
 
     if (!draggingRef.current) {
@@ -131,12 +133,39 @@ const Launcher = React.memo(({ bot, position, unreadCount, isOpened, onToggle, o
 
     draggingRef.current = false;
     setIsDragging(false);
-    suppressClickRef.current = true;
+
+    // A hold that never actually moved the button is still a press, and it
+    // opens the panel: only a drag that took the launcher somewhere swallows
+    // the click. Suppressing it either way would mean a deliberate, slow press
+    // did nothing at all — LAUNCHER_HOLD_MS is easy to sit past with a mouse,
+    // and setl-web never has to answer for that because its drag is
+    // touch-only (AssistantWidget's `if (!isMobile) return`).
+    const hasMoved =
+      !start ||
+      start.position.right !== position.right ||
+      start.position.bottom !== position.bottom;
+
+    suppressClickRef.current = hasMoved;
+
+    if (!hasMoved) {
+      return;
+    }
 
     // Persisted once per gesture rather than per frame: a drag is dozens of
     // pointermoves and localStorage is synchronous.
     onMove(position, true);
   }, [position, onMove, cancelHoldTimer]);
+
+  /** A long press is how the button is picked up on a touch screen, and a
+   * browser answers a long press with its context menu (and a selection
+   * callout) unless it is told not to — which cancels the drag mid-gesture.
+   * setl-web preventDefaults the same event. A right-click never starts the
+   * hold, so its menu is left alone. */
+  const handleContextMenu = useCallback((event) => {
+    if (holdTimerRef.current || draggingRef.current) {
+      event.preventDefault();
+    }
+  }, []);
 
   const handleClick = useCallback(() => {
     if (suppressClickRef.current) {
@@ -163,6 +192,7 @@ const Launcher = React.memo(({ bot, position, unreadCount, isOpened, onToggle, o
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerEnd}
       onPointerCancel={handlePointerEnd}
+      onContextMenu={handleContextMenu}
       onClick={handleClick}
     >
       <UserAvatar id={bot.id} size="large" />

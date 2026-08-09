@@ -3,13 +3,14 @@
  * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { Icon, Input } from 'semantic-ui-react';
 
 import selectors from '../../../selectors';
+import { useNestedRef } from '../../../hooks';
 
 import styles from './CardPicker.module.scss';
 
@@ -33,6 +34,16 @@ const CardPicker = React.memo(({ onSelect }) => {
 
   const [t] = useTranslation();
   const [search, setSearch] = useState('');
+  const [searchFieldRef, handleSearchFieldRef] = useNestedRef('inputRef');
+
+  // The picker is only mounted while the panel is open on no card, so this is
+  // "focus the search box when the chat opens with nothing chosen" — the same
+  // job the composer does once there IS a card, and for the same reason: the
+  // launcher that opened the panel is a SIBLING of the dialog, so until focus
+  // moves inside it the panel's own Escape handler can never fire.
+  useEffect(() => {
+    searchFieldRef.current.focus();
+  }, [searchFieldRef]);
 
   const { visibleCards, hiddenTotal } = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -61,6 +72,7 @@ const CardPicker = React.memo(({ onSelect }) => {
       <div className={styles.searchWrapper}>
         <Input
           fluid
+          ref={handleSearchFieldRef}
           size="small"
           icon="search"
           iconPosition="left"

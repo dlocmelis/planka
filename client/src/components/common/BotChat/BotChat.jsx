@@ -235,6 +235,17 @@ const BotChat = React.memo(() => {
     setCardId(null);
   }, []);
 
+  // The rest of a long conversation, one page at a time. The service is the
+  // same one the effect above calls once — it paginates backwards from
+  // `lastCommentId`, which is exactly what "earlier" means here.
+  const handleLoadEarlier = useCallback(() => {
+    if (!activeCardId || (card && card.isCommentsFetching)) {
+      return;
+    }
+
+    dispatch(entryActions.fetchCommentsForCard(activeCardId));
+  }, [activeCardId, card, dispatch]);
+
   const handleSubmit = useCallback(
     (text) => {
       if (!activeCardId) {
@@ -285,6 +296,7 @@ const BotChat = React.memo(() => {
             messages={messages}
             replyState={replyState}
             isCommentsFetching={!!(card && card.isCommentsFetching)}
+            hasEarlierMessages={!!(activeCardId && card && card.isAllCommentsFetched === false)}
             canComment={canComment}
             width={width}
             maxWidth={`calc(100vw - ${position.right + PANEL_VIEWPORT_MARGIN}px)`}
@@ -293,6 +305,7 @@ const BotChat = React.memo(() => {
             onSubmit={handleSubmit}
             onSelectCard={handleSelectCard}
             onClearCard={handleClearCard}
+            onLoadEarlier={handleLoadEarlier}
             onClose={handleClose}
           />
         </div>

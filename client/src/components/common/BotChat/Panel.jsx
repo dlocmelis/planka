@@ -43,6 +43,7 @@ const Panel = React.memo(
     messages,
     replyState,
     isCommentsFetching,
+    hasEarlierMessages,
     canComment,
     width,
     maxWidth,
@@ -51,6 +52,7 @@ const Panel = React.memo(
     onSubmit,
     onSelectCard,
     onClearCard,
+    onLoadEarlier,
     onClose,
   }) => {
     const [t] = useTranslation();
@@ -61,6 +63,10 @@ const Panel = React.memo(
     // Where the user's own scrolling has left the thread. Starts stuck: a panel
     // that has just opened is showing its latest message by definition.
     const stickToBottomRef = useRef(true);
+    const messagesCountRef = useRef(messages.length);
+    // How far the thread was from its BOTTOM when "load earlier" was pressed,
+    // held until the page it asked for arrives. Null when nothing is pending.
+    const earlierOffsetRef = useRef(null);
 
     widthRef.current = width;
 
@@ -69,6 +75,7 @@ const Panel = React.memo(
     // reset lands first when both fire on the same change.
     useEffect(() => {
       stickToBottomRef.current = true;
+      earlierOffsetRef.current = null;
 
       const element = threadRef.current;
 
@@ -83,17 +90,47 @@ const Panel = React.memo(
     // away from it is the bug.
     useEffect(() => {
       const element = threadRef.current;
+      const hasGrown = messages.length > messagesCountRef.current;
+      messagesCountRef.current = messages.length;
 
-      if (!element || !shouldFollowThread({ stuckToBottom: stickToBottomRef.current })) {
+      const earlierOffset = earlierOffsetRef.current;
+
+      // The marker belongs to one request: it is spent on the page it asked
+      // for, and dropped if that request came back with nothing to add.
+      if (earlierOffset !== null && (hasGrown || !isCommentsFetching)) {
+        earlierOffsetRef.current = null;
+      }
+
+      if (!element) {
+        return;
+      }
+
+      // Older messages are PREPENDED, so holding `scrollTop` still would leave
+      // the reader at the top of a page they have not read while what they were
+      // reading slid off the bottom. Holding the distance to the BOTTOM fixed
+      // keeps the message they were looking at where they were looking.
+      if (earlierOffset !== null && hasGrown) {
+        element.scrollTop = element.scrollHeight - earlierOffset;
+        return;
+      }
+
+      if (!shouldFollowThread({ stuckToBottom: stickToBottomRef.current })) {
         return;
       }
 
       element.scrollTop = element.scrollHeight;
-    }, [messages.length]);
+    }, [messages.length, isCommentsFetching]);
 
     const handleThreadScroll = useCallback((event) => {
       stickToBottomRef.current = isAtThreadBottom(event.currentTarget);
     }, []);
+
+    const handleLoadEarlierClick = useCallback(() => {
+      const element = threadRef.current;
+      earlierOffsetRef.current = element ? element.scrollHeight - element.scrollTop : 0;
+
+      onLoadEarlier();
+    }, [onLoadEarlier]);
 
     const handleHandlePointerDown = useCallback((event) => {
       // A right-click on the edge is a context menu, not a drag.
@@ -173,6 +210,24 @@ const Panel = React.memo(
     } else {
       bodyNode = (
         <div ref={threadRef} className={styles.thread} onScroll={handleThreadScroll}>
+          {/* A card's comments arrive one page at a time (COMMENTS_LIMIT), and
+              the panel opens on the newest page — without this the rest of a
+              long-running conversation is simply unreachable from here, while
+              the card's own comment list can still scroll back through it. */}
+          {hasEarlierMessages && (
+            <div className={styles.earlier}>
+              <Button
+                type="button"
+                basic
+                size="mini"
+                disabled={isCommentsFetching}
+                loading={isCommentsFetching}
+                onClick={handleLoadEarlierClick}
+              >
+                {t('action.loadEarlierMessages')}
+              </Button>
+            </div>
+          )}
           {messages.length === 0 &&
             (isCommentsFetching ? (
               <Loader active inline="centered" size="small" />
@@ -282,6 +337,7 @@ Panel.propTypes = {
   cardName: PropTypes.string,
   replyState: PropTypes.string.isRequired,
   isCommentsFetching: PropTypes.bool.isRequired,
+  hasEarlierMessages: PropTypes.bool.isRequired,
   canComment: PropTypes.bool.isRequired,
   width: PropTypes.number.isRequired,
   maxWidth: PropTypes.string.isRequired,
@@ -290,6 +346,7 @@ Panel.propTypes = {
   onSubmit: PropTypes.func.isRequired,
   onSelectCard: PropTypes.func.isRequired,
   onClearCard: PropTypes.func.isRequired,
+  onLoadEarlier: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
 };
 

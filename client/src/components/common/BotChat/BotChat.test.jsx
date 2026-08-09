@@ -108,8 +108,9 @@ const launcher = () => findByLabel('common.chatWithBot');
  */
 const stubScroller = (element, { scrollHeight, clientHeight, scrollTop }) => {
   let position = scrollTop;
+  let height = scrollHeight;
 
-  Object.defineProperty(element, 'scrollHeight', { configurable: true, get: () => scrollHeight });
+  Object.defineProperty(element, 'scrollHeight', { configurable: true, get: () => height });
   Object.defineProperty(element, 'clientHeight', { configurable: true, get: () => clientHeight });
   Object.defineProperty(element, 'scrollTop', {
     configurable: true,
@@ -117,6 +118,24 @@ const stubScroller = (element, { scrollHeight, clientHeight, scrollTop }) => {
     set: (value) => {
       position = value;
     },
+  });
+
+  // A page of older messages arriving makes the scroller taller, which is the
+  // whole of what the panel has to react to.
+  return {
+    grow: (by) => {
+      height += by;
+    },
+  };
+};
+
+/** A pointer event jsdom will carry: it has no `PointerEvent`, and React only
+ * ever reads the properties off whatever native event arrives. */
+const pointer = (element, type_, { clientX = 0, clientY = 0 } = {}) => {
+  act(() => {
+    element.dispatchEvent(
+      new MouseEvent(type_, { bubbles: true, cancelable: true, button: 0, clientX, clientY }),
+    );
   });
 };
 
@@ -220,6 +239,79 @@ test('the floating button is the toggle its aria-expanded says it is', () => {
 
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   expect(launcher().getAttribute('aria-expanded')).toBe('false');
+});
+
+test('a press held past the drag threshold that never moved still opens the panel', () => {
+  jest.useFakeTimers();
+
+  try {
+    render();
+
+    const button = launcher();
+    pointer(button, 'pointerdown', { clientX: 100, clientY: 100 });
+
+    // Long enough for the hold to arm the drag — which a deliberate, slow
+    // press with a mouse does all the time.
+    act(() => {
+      jest.advanceTimersByTime(600);
+    });
+
+    pointer(button, 'pointerup', { clientX: 100, clientY: 100 });
+    click(button);
+
+    expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+    // Nothing moved, so nothing was remembered either.
+    expect(window.localStorage.getItem('planka-bot-chat-launcher-position')).toBeNull();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('...and a hold that DID move the button repositions it instead of opening it', () => {
+  jest.useFakeTimers();
+
+  try {
+    render();
+
+    const button = launcher();
+    pointer(button, 'pointerdown', { clientX: 100, clientY: 100 });
+
+    act(() => {
+      jest.advanceTimersByTime(600);
+    });
+
+    // Up and to the left: the position is measured from the bottom-right
+    // corner, so both offsets grow.
+    pointer(button, 'pointermove', { clientX: 60, clientY: 70 });
+    pointer(button, 'pointerup', { clientX: 60, clientY: 70 });
+    click(button);
+
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(launcher().style.right).toBe('64px');
+    expect(launcher().style.bottom).toBe('54px');
+    expect(window.localStorage.getItem('planka-bot-chat-launcher-position')).toBe(
+      '{"right":64,"bottom":54}',
+    );
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('opening the chat with nothing chosen puts the keyboard in the card search', () => {
+  render();
+  click(launcher());
+
+  const field = container.querySelector('.searchWrapper input');
+  expect(field).not.toBeNull();
+  // Same reason the composer takes it once a card IS chosen: the launcher is a
+  // sibling of the dialog, so Escape reaches the panel from nowhere else.
+  expect(document.activeElement).toBe(field);
+
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
 });
 
 test('opening the chat puts the keyboard in the message box, and Escape closes it', () => {
@@ -528,6 +620,79 @@ test('switching conversation starts the new thread at its latest message', () =>
 
   expect(container.textContent).toContain('Over here now.');
   expect(nextThread.scrollTop).toBe(1000);
+});
+
+test('a conversation longer than one page can be walked back, keeping the read position', () => {
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+  // A full page came back, so there is more of this conversation behind it —
+  // which is what `isAllCommentsFetched === false` means in the store.
+  mockCards[0].isAllCommentsFetched = false;
+  mockMessagesByCardId['card-1'] = [
+    {
+      id: 'comment-50',
+      userId: BOT.id,
+      author: MessageAuthors.BOT,
+      text: 'The newest page.',
+      createdAt: new Date('2026-08-08T10:00:00Z'),
+      isPersisted: true,
+    },
+  ];
+
+  render();
+  click(launcher());
+
+  const thread = container.querySelector('.thread');
+  const scroller = stubScroller(thread, { scrollHeight: 1000, clientHeight: 300, scrollTop: 0 });
+
+  // At the top of what is loaded, which is where the button is and where
+  // somebody reaching for the older half of the thread is standing.
+  act(() => {
+    thread.dispatchEvent(new Event('scroll', { bubbles: true }));
+  });
+
+  const loadEarlier = [...container.querySelectorAll('button')].find((element) =>
+    element.textContent.includes('action.loadEarlierMessages'),
+  );
+  expect(loadEarlier).toBeDefined();
+
+  click(loadEarlier);
+
+  // The same service the panel opens with: it paginates backwards from
+  // `lastCommentId`, so asking again IS asking for the earlier page.
+  expect(actionsOfType(EntryActionTypes.COMMENTS_FOR_CARD_FETCH)).toEqual([
+    { type: EntryActionTypes.COMMENTS_FOR_CARD_FETCH, payload: { cardId: 'card-1' } },
+  ]);
+
+  // The page lands: older messages are PREPENDED and the scroller gets taller.
+  act(() => {
+    scroller.grow(800);
+    mockMessagesByCardId['card-1'] = [
+      {
+        id: 'comment-1',
+        userId: 'user-me',
+        author: MessageAuthors.SELF,
+        text: 'The older page.',
+        createdAt: new Date('2026-08-07T10:00:00Z'),
+        isPersisted: true,
+      },
+      ...mockMessagesByCardId['card-1'],
+    ];
+    store.dispatch({ type: 'EARLIER_PAGE_ARRIVED' });
+  });
+
+  expect(container.textContent).toContain('The older page.');
+  // 1000px above the bottom is where the reader was; 1800 - 1000 is where that
+  // same message now is. Leaving scrollTop at 0 would have buried it.
+  expect(thread.scrollTop).toBe(800);
+});
+
+test('there is nothing to walk back to once the whole conversation is loaded', () => {
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+
+  render();
+  click(launcher());
+
+  expect(container.textContent).not.toContain('action.loadEarlierMessages');
 });
 
 test('the panel width can be resized from the keyboard, and is remembered', () => {
