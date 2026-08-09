@@ -343,13 +343,20 @@ const BotChat = React.memo(() => {
   // arrives after the mode is switched on would do it a second time.
   const [voiceStartedAt, setVoiceStartedAt] = useState(null);
 
+  // The loop only runs while the panel is OPEN. The preference survives closing
+  // it — reopening resumes without another press — but holding a microphone
+  // open behind a panel nobody is looking at is not what "hands-free" means,
+  // and the browser's recording indicator would stay lit with nothing on screen
+  // to explain it.
+  const isVoiceRunning = isVoiceEnabled && isOpened;
+
   useEffect(() => {
     setSpokenMessageIds([]);
-    setVoiceStartedAt(isVoiceEnabled ? new Date() : null);
-  }, [isVoiceEnabled, activeCardId]);
+    setVoiceStartedAt(isVoiceRunning ? new Date() : null);
+  }, [isVoiceRunning, activeCardId]);
 
   const pendingSpeech = useMemo(() => {
-    if (!isVoiceEnabled || !voiceStartedAt) {
+    if (!isVoiceRunning || !voiceStartedAt) {
       return null;
     }
 
@@ -368,7 +375,7 @@ const BotChat = React.memo(() => {
     }
 
     return { id: last.id, text: last.text };
-  }, [isVoiceEnabled, voiceStartedAt, messages, spokenMessageIds]);
+  }, [isVoiceRunning, voiceStartedAt, messages, spokenMessageIds]);
 
   const handleVoiceTranscript = useCallback(
     (text) => {
@@ -418,7 +425,7 @@ const BotChat = React.memo(() => {
   );
 
   const voice = useVoiceChat({
-    isEnabled: isVoiceEnabled,
+    isEnabled: isVoiceRunning,
     cardId: activeCardId,
     capability: voiceCapability,
     canComment,

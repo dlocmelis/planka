@@ -56,6 +56,10 @@ loop only starts once the panel is open on a card you may comment on, and a
 browser that will not resume audio without a user gesture stops the mode with a
 sentence rather than listening at nothing.
 
+**Closing the panel closes the microphone.** The preference survives — reopening
+resumes without another press — but nothing holds a recording device open behind
+a panel nobody is looking at.
+
 ## What it costs
 
 Both endpoints are metered — transcription per audio minute, speech per

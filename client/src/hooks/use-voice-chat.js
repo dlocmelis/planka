@@ -645,6 +645,12 @@ export default function useVoiceChat({
   // a time rather than by the hook watching the thread: which message is new,
   // and whether it has been spoken already, is a question about the
   // conversation and belongs to the panel that owns it.
+  //
+  // The effect keys on the message's ID and not on the object: the panel builds
+  // that object fresh on every render, and this must run once per message
+  // rather than once per render.
+  const pendingSpeechId = pendingSpeech ? pendingSpeech.id : null;
+
   useEffect(() => {
     if (!isEnabled || !isAvailable || !pendingSpeech || !cardId) {
       return undefined;
@@ -744,11 +750,15 @@ export default function useVoiceChat({
 
     return () => {
       controller.isCancelled = true;
+      // Whatever is playing belongs to a message, a card or a mode that has
+      // just changed underneath it. Cancelling the request is not enough — the
+      // clip would go on talking.
+      stopSpeaking();
     };
-    // `pendingSpeech.id` rather than the object: the panel rebuilds it every
-    // render and the effect must run once per message, not once per render.
+    // `pendingSpeech` itself is read inside but deliberately not a dependency —
+    // see `pendingSpeechId` above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEnabled, isAvailable, cardId, pendingSpeech && pendingSpeech.id, capability, isCurrent]);
+  }, [isEnabled, isAvailable, cardId, pendingSpeechId, capability, isCurrent, stopSpeaking]);
 
   // Whatever was playing belongs to a conversation the user has left.
   useEffect(() => {

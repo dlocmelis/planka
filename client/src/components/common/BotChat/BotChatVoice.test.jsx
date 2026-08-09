@@ -852,3 +852,32 @@ test('a read-only card gets no status row and no microphone', async () => {
   expect(status()).toBeNull();
   expect(window.navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
 });
+
+test('closing the panel closes the microphone, and reopening resumes', async () => {
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  const [track] = (
+    await window.navigator.mediaDevices.getUserMedia.mock.results[0].value
+  ).getTracks();
+
+  expect(track.stop).not.toHaveBeenCalled();
+
+  // The launcher is a toggle, so a second press closes the panel.
+  click(launcher());
+  await settle();
+
+  // Holding a microphone open behind a closed panel is not what hands-free
+  // means, and the browser's recording indicator would stay lit with nothing on
+  // screen to explain it.
+  expect(track.stop).toHaveBeenCalled();
+
+  click(launcher());
+  await settle();
+
+  // The preference survived: no second press of the toggle was needed.
+  expect(window.navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(2);
+  expect(voiceToggle().getAttribute('aria-pressed')).toBe('true');
+});
