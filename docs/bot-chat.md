@@ -1,8 +1,9 @@
 # Chat with planka_bot (floating button)
 
-A floating button in the bottom-right corner of every board opens a chat panel
-with **planka_bot** — the devteam-orchestrator's board user. It mirrors the
-Setlfi web assistant's launcher and docked panel.
+A floating button in the bottom-right corner of every board **planka_bot is a
+member of** opens a chat panel with it — the devteam-orchestrator's board user.
+It mirrors the Setlfi web assistant's launcher and docked panel. On a board the
+bot is not a member of there is no button (see *Setup* below).
 
 Fork-specific: upstream PLANKA has no such widget.
 
@@ -41,10 +42,11 @@ is the same rule the server enforces on `POST /cards/:id/comments`. A card in
 the archive or the trash is read-only everywhere in Planka, so the panel will
 show its thread and say that rather than blaming your membership.
 
-The button can be picked up (press and hold, then drag) and parked anywhere
-along the edges of the window; the panel grows up and to the left out of
+The button can be picked up (press and hold, then drag) and parked anywhere in
+the window, up to 8px from any edge; the panel grows up and to the left out of
 wherever it was left, sliding back down only as far as it must to stay a panel
-worth reading on a small window.
+worth reading on a small window. Both the position and the panel's width are
+remembered per browser, and the panel keeps the conversation you were last on.
 
 ## Setup
 

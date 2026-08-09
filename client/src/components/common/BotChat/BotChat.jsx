@@ -306,6 +306,15 @@ const BotChat = React.memo(() => {
         <div
           role="dialog"
           aria-label={bot.name || bot.username}
+          // Focusable-but-not-tabbable, which is what keeps Escape working for
+          // the whole time the panel is open. The composer takes focus when it
+          // opens, but a click on a message bubble — text, not a control —
+          // takes it away again, and a browser hands it to the nearest
+          // focusable ANCESTOR. Without this that is nothing at all, so focus
+          // lands on the body, outside the React tree the synthetic keydown
+          // travels up, and the handler below stops being reachable from the
+          // keyboard the moment the user touches what they came to read.
+          tabIndex={-1}
           className={styles.panelAnchor}
           style={{ right: anchor.right, bottom: anchor.bottom }}
           onKeyDown={handleKeyDown}

@@ -337,6 +337,33 @@ test('opening the chat puts the keyboard in the message box, and Escape closes i
   expect(container.querySelector('[role="dialog"]')).toBeNull();
 });
 
+test('...and Escape still closes it after a click on the thread moves focus off the box', () => {
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+
+  render();
+  click(launcher());
+
+  const dialog = container.querySelector('[role="dialog"]');
+
+  // Clicking the text of a message takes focus off the composer, and a browser
+  // then gives it to the nearest focusable ANCESTOR — which has to be the
+  // panel itself, or focus goes to the body, outside the React tree the
+  // synthetic keydown travels up, and Escape is dead for the rest of the
+  // session. jsdom refuses to focus an element that is not a focusable area,
+  // so this fails outright on a panel without its tabIndex.
+  act(() => {
+    dialog.focus();
+  });
+
+  expect(document.activeElement).toBe(dialog);
+
+  act(() => {
+    dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+});
+
 test('the conversation follows the card that is open', () => {
   mockPath = { boardId: 'board-1', cardId: 'card-1' };
   mockMessagesByCardId['card-1'] = [
