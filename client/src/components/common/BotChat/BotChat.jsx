@@ -5,15 +5,19 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useTranslation } from 'react-i18next';
 import { useDidUpdate } from '../../../lib/hooks';
+import { useVoiceChat } from '../../../hooks';
 
 import selectors from '../../../selectors';
 import entryActions from '../../../entry-actions';
 import { BoardMembershipRoles } from '../../../constants/Enums';
 import { isListArchiveOrTrash } from '../../../utils/record-helpers';
 import {
+  BotReplyStates,
   DEFAULT_LAUNCHER_POSITION,
   DEFAULT_PANEL_WIDTH,
+  MessageAuthors,
   PANEL_VIEWPORT_MARGIN,
   botReplyState,
   clampLauncherPosition,
@@ -23,10 +27,18 @@ import {
   readLauncherPosition,
   readPanelWidth,
   unreadMessageCount,
+  withBotMention,
   writeLastCardId,
   writeLauncherPosition,
   writePanelWidth,
 } from '../../../utils/bot-chat';
+import {
+  VOICE_CHAT_STOP_REASON_KEYS,
+  VoiceChatPhases,
+  readVoiceChatEnabled,
+  voiceChatPhase,
+  writeVoiceChatEnabled,
+} from '../../../utils/voice-chat';
 import Launcher from './Launcher';
 import Panel from './Panel';
 
@@ -65,6 +77,7 @@ const BotChat = React.memo(() => {
   const boardId = useSelector((state) => selectors.selectPath(state).boardId);
   const openedCardId = useSelector((state) => selectors.selectPath(state).cardId);
   const bot = useSelector(selectors.selectBotUserForCurrentBoard);
+  const voiceCapability = useSelector(selectors.selectVoiceChatCapability);
 
   const dispatch = useDispatch();
 
@@ -72,6 +85,10 @@ const BotChat = React.memo(() => {
 
   const [isOpened, setIsOpened] = useState(false);
   const [cardId, setCardId] = useState(null);
+  const [isVoiceEnabled, setIsVoiceEnabled] = useState(false);
+  // The sentence a mode that stopped itself leaves behind. Cleared the moment
+  // the user switches it back on: it describes a state that no longer holds.
+  const [voiceNotice, setVoiceNotice] = useState(null);
   const [position, setPosition] = useState(DEFAULT_LAUNCHER_POSITION);
   const [width, setWidth] = useState(DEFAULT_PANEL_WIDTH);
   const [viewport, setViewport] = useState(viewportSize);
@@ -100,6 +117,16 @@ const BotChat = React.memo(() => {
 
     if (storedCardId) {
       setCardId(storedCardId);
+    }
+
+    // The mode is remembered per browser, like the panel's width — someone who
+    // talks to the bot talks to it every time. Nothing opens on the strength of
+    // this alone: the microphone is only reached once the panel is open, and a
+    // browser that will not resume its audio without a gesture stops the loop
+    // with a sentence rather than listening at nothing (see
+    // `VoiceChatStopReasons.AUDIO_SUSPENDED`).
+    if (readVoiceChatEnabled(window.localStorage)) {
+      setIsVoiceEnabled(true);
     }
   }, []);
 
@@ -296,6 +323,140 @@ const BotChat = React.memo(() => {
     [activeCardId, dispatch],
   );
 
+  /* Voice chat */
+
+  const [t] = useTranslation();
+
+  // Which bot replies have already been read aloud. Kept as ids rather than as
+  // a cursor because a reply is marked spoken whatever happened to it — a
+  // synthesis that failed must not be retried on the next render for ever — and
+  // because it is reset whenever the conversation or the mode changes, so it
+  // grows by one entry per answer heard.
+  const [spokenMessageIds, setSpokenMessageIds] = useState([]);
+  // The moment voice chat started listening to THIS conversation. It is what
+  // separates "the answer I am waiting for" from "the thread I just opened":
+  // without it, turning the mode on would read out whichever reply happened to
+  // be at the bottom of a conversation from last week, and a card whose history
+  // arrives after the mode is switched on would do it a second time.
+  const [voiceStartedAt, setVoiceStartedAt] = useState(null);
+
+  useEffect(() => {
+    setSpokenMessageIds([]);
+    setVoiceStartedAt(isVoiceEnabled ? new Date() : null);
+  }, [isVoiceEnabled, activeCardId]);
+
+  const pendingSpeech = useMemo(() => {
+    if (!isVoiceEnabled || !voiceStartedAt) {
+      return null;
+    }
+
+    const last = messages[messages.length - 1];
+
+    if (!last || last.author !== MessageAuthors.BOT || !last.isPersisted) {
+      return null;
+    }
+
+    if (!last.createdAt || new Date(last.createdAt) <= voiceStartedAt) {
+      return null;
+    }
+
+    if (spokenMessageIds.includes(last.id)) {
+      return null;
+    }
+
+    return { id: last.id, text: last.text };
+  }, [isVoiceEnabled, voiceStartedAt, messages, spokenMessageIds]);
+
+  const handleVoiceTranscript = useCallback(
+    (text) => {
+      if (!activeCardId || !bot) {
+        return;
+      }
+
+      // Straight out, without passing through the composer: that is the whole
+      // difference between voice chat and a dictation button — when enough
+      // silence has gone by, it sends. `withBotMention` is the same wrapper the
+      // typed path uses, so the comment reads on the card exactly as a typed
+      // one would; no mention markup pass is needed because nobody can type an
+      // @mention into a microphone.
+      dispatch(
+        entryActions.createCommentForCard(activeCardId, { text: withBotMention(text, bot) }),
+      );
+    },
+    [activeCardId, bot, dispatch],
+  );
+
+  const handleVoiceSpoken = useCallback((messageId) => {
+    setSpokenMessageIds((current) =>
+      current.includes(messageId) ? current : [...current, messageId],
+    );
+  }, []);
+
+  const handleVoiceStop = useCallback(
+    (reason) => {
+      setIsVoiceEnabled(false);
+      writeVoiceChatEnabled(window.localStorage, false);
+      setVoiceNotice(t(VOICE_CHAT_STOP_REASON_KEYS[reason] || VOICE_CHAT_STOP_REASON_KEYS.failed));
+    },
+    [t],
+  );
+
+  const voice = useVoiceChat({
+    isEnabled: isVoiceEnabled,
+    cardId: activeCardId,
+    capability: voiceCapability,
+    canComment,
+    pendingSpeech,
+    onTranscript: handleVoiceTranscript,
+    onSpoken: handleVoiceSpoken,
+    onStop: handleVoiceStop,
+  });
+
+  const handleVoiceToggle = useCallback(() => {
+    setIsVoiceEnabled((current) => {
+      const next = !current;
+
+      writeVoiceChatEnabled(window.localStorage, next);
+
+      return next;
+    });
+
+    // The notice described a mode that has just been switched again.
+    setVoiceNotice(null);
+  }, []);
+
+  const voicePhase = voiceChatPhase({
+    isEnabled: isVoiceEnabled,
+    isAvailable: voice.isAvailable,
+    isMicReady: voice.isMicReady,
+    isSpeaking: voice.isSpeaking,
+    isWaitingForReply: replyState === BotReplyStates.THINKING,
+    isTranscribing: voice.isTranscribing,
+    isCapturing: voice.isCapturing,
+  });
+
+  const voiceChat = useMemo(
+    () => ({
+      isAvailable: voice.isAvailable,
+      isEnabled: isVoiceEnabled,
+      // A mode that is on but cannot run says so where the loop's own status
+      // would be, rather than through a toggle that looks switched on and does
+      // nothing.
+      phase: isVoiceEnabled && !voice.isAvailable ? VoiceChatPhases.BLOCKED : voicePhase,
+      notice: voiceNotice || undefined,
+      onToggle: handleVoiceToggle,
+      onStopSpeaking: voice.stopSpeaking,
+    }),
+    [
+      voice.isAvailable,
+      voice.stopSpeaking,
+      isVoiceEnabled,
+      voicePhase,
+      voiceNotice,
+      handleVoiceToggle,
+    ],
+  );
+
   const handleKeyDown = useCallback((event) => {
     if (event.key === 'Escape') {
       // Only the panel's own Escape: the card modal behind it owns the key
@@ -348,6 +509,7 @@ const BotChat = React.memo(() => {
             hasEarlierMessages={!!(activeCardId && card && card.isAllCommentsFetched === false)}
             canComment={canComment}
             isCardArchivedOrTrashed={isCardArchivedOrTrashed}
+            voiceChat={voiceChat}
             width={width}
             maxWidth={`calc(100vw - ${anchor.right + PANEL_VIEWPORT_MARGIN}px)`}
             maxHeight={`calc(100dvh - ${anchor.bottom + PANEL_VIEWPORT_MARGIN}px)`}

@@ -57,6 +57,11 @@ The one thing to keep true is the membership: **planka_bot must be a member of
 each board the chat should be available on**, which it already is on any board
 the orchestrator drives.
 
+That is still true of the chat itself. The **voice** mode beside it is the one
+part of this panel that does need provisioning — two API keys, both optional,
+neither of which affects anything described above. See
+[bot-chat-voice.md](bot-chat-voice.md).
+
 ### Optional: a differently named bot
 
 The username is read from `window.PLANKA_BOT_USERNAME` and falls back to

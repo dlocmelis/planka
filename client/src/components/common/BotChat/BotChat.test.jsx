@@ -33,6 +33,7 @@ let mockMembership;
 let mockMemberships;
 let mockMessagesByCardId;
 let mockChatCards;
+let mockVoiceCapability;
 const mockNoMessages = [];
 
 jest.mock('react-i18next', () => ({
@@ -47,6 +48,7 @@ jest.mock('../../../selectors', () => ({
     selectChatCardsForCurrentBoard: () => mockChatCards,
     selectMembershipsForCurrentBoard: () => mockMemberships,
     selectCurrentUserMembershipForCurrentBoard: () => mockMembership,
+    selectVoiceChatCapability: () => mockVoiceCapability,
     makeSelectCardById: () => (_, id) => mockCards.find((card) => card.id === id) || null,
     makeSelectListById: () => (_, id) => mockLists.find((list) => list.id === id) || null,
     // A stable empty array, the way the memoized selector behind it answers an
@@ -180,6 +182,15 @@ beforeEach(() => {
 
   mockMessagesByCardId = {};
   mockChatCards = [{ id: 'card-1', name: 'Introduce chat with planka_bot', hasBotComment: true }];
+  // Off by default, which is what a deployment with no speech credentials
+  // reports — the voice tests below turn it on for themselves.
+  mockVoiceCapability = {
+    sttEnabled: false,
+    ttsEnabled: false,
+    sttMaxBytes: null,
+    sttMaxDurationSec: null,
+    ttsMaxChars: null,
+  };
 
   dispatchedActions = [];
   // A fresh state object per action, because react-redux 9 memoizes a

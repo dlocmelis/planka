@@ -67,6 +67,36 @@
  *                   type: string
  *                   description: Current version of the PLANKA application
  *                   example: 2.0.0
+ *                 voiceChat:
+ *                   type: object
+ *                   description: What the voice chat mode of the planka_bot panel may do here
+ *                   required:
+ *                     - sttEnabled
+ *                     - ttsEnabled
+ *                   properties:
+ *                     sttEnabled:
+ *                       type: boolean
+ *                       description: Whether speech-to-text is configured on this server
+ *                       example: true
+ *                     ttsEnabled:
+ *                       type: boolean
+ *                       description: Whether text-to-speech is configured on this server
+ *                       example: true
+ *                     sttMaxBytes:
+ *                       type: number
+ *                       nullable: true
+ *                       description: Largest recording the transcription endpoint accepts
+ *                       example: 716800
+ *                     sttMaxDurationSec:
+ *                       type: number
+ *                       nullable: true
+ *                       description: Longest recording the transcription endpoint accepts
+ *                       example: 300
+ *                     ttsMaxChars:
+ *                       type: number
+ *                       nullable: true
+ *                       description: Longest message the speech endpoint will read aloud
+ *                       example: 2000
  *     security: []
  */
 

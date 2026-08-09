@@ -120,6 +120,17 @@ services:
       # Use a proxy you control for privacy, or leave commented out or empty to disable.
       # - GRAVATAR_BASE_URL=https://www.gravatar.com/avatar/
 
+      # Voice chat with planka_bot (see docs/bot-chat-voice.md). Both keys are
+      # optional and each turns on one half; the mode needs both. Recordings go
+      # to Deepgram and replies to Cartesia, so leave them unset on a deployment
+      # that may not send either to a third party.
+      # - DEEPGRAM_API_KEY=
+      # - CARTESIA_API_KEY=
+      # - VOICE_STT_LANGUAGE=multi
+      # - VOICE_STT_KEYTERMS=PLANKA,planka_bot
+      # - VOICE_TTS_VOICE=
+      # - VOICE_TTS_VOICES=
+
       # --------------------------------------------------------------------
       # Outgoing traffic control (internal Squid proxy)
       # --------------------------------------------------------------------
