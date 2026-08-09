@@ -100,6 +100,36 @@ const findByLabel = (label) => container.querySelector(`[aria-label="${label}"]`
 
 const launcher = () => findByLabel('common.chatWithBot');
 
+/**
+ * A thread element that answers the three scroll numbers, since jsdom lays
+ * nothing out and reports zeroes for all of them. `scrollTop` is a real
+ * property here rather than jsdom's no-op setter, so what the panel writes to
+ * it can be read back.
+ */
+const stubScroller = (element, { scrollHeight, clientHeight, scrollTop }) => {
+  let position = scrollTop;
+
+  Object.defineProperty(element, 'scrollHeight', { configurable: true, get: () => scrollHeight });
+  Object.defineProperty(element, 'clientHeight', { configurable: true, get: () => clientHeight });
+  Object.defineProperty(element, 'scrollTop', {
+    configurable: true,
+    get: () => position,
+    set: (value) => {
+      position = value;
+    },
+  });
+};
+
+/** A message landing in an open panel, the way the bot's answer does: the
+ * selector starts returning a longer thread and the store wakes the
+ * subscription that re-reads it. */
+const receiveMessage = (cardId, message) => {
+  act(() => {
+    mockMessagesByCardId[cardId] = [...(mockMessagesByCardId[cardId] || []), message];
+    store.dispatch({ type: 'MESSAGE_ARRIVED' });
+  });
+};
+
 const actionsOfType = (type_) => dispatchedActions.filter((action) => action.type === type_);
 
 beforeEach(() => {
@@ -128,9 +158,13 @@ beforeEach(() => {
   mockChatCards = [{ id: 'card-1', name: 'Introduce chat with planka_bot', hasBotComment: true }];
 
   dispatchedActions = [];
+  // A fresh state object per action, because react-redux 9 memoizes a
+  // selection against the state REFERENCE: a reducer that answers the same
+  // object never re-runs the selectors, and the panel would never see the
+  // comment the socket just put in the store.
   store = createStore((state, action) => {
     dispatchedActions.push(action);
-    return state || {};
+    return { revision: (state ? state.revision : 0) + 1 };
   });
 
   container = document.createElement('div');
@@ -169,6 +203,41 @@ test('the floating button is there, and the panel is not until it is pressed', (
   click(launcher());
 
   expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+});
+
+test('the floating button is the toggle its aria-expanded says it is', () => {
+  render();
+
+  expect(launcher().getAttribute('aria-expanded')).toBe('false');
+
+  click(launcher());
+
+  expect(launcher().getAttribute('aria-expanded')).toBe('true');
+
+  // The launcher stays visible under the open panel, so a second press has to
+  // put it away again.
+  click(launcher());
+
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(launcher().getAttribute('aria-expanded')).toBe('false');
+});
+
+test('opening the chat puts the keyboard in the message box, and Escape closes it', () => {
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+
+  render();
+  click(launcher());
+
+  const field = container.querySelector('textarea');
+  expect(document.activeElement).toBe(field);
+
+  // Which is the whole reason it matters: the launcher is a sibling of the
+  // dialog, so nothing would deliver Escape to the panel otherwise.
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
 });
 
 test('the conversation follows the card that is open', () => {
@@ -338,6 +407,127 @@ test('the panel says the bot is thinking while your message is the last one', ()
   click(launcher());
 
   expect(container.textContent).toContain('common.botIsThinking');
+});
+
+test('an arriving message scrolls the thread down while it is parked at the bottom', () => {
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+  mockMessagesByCardId['card-1'] = [
+    {
+      id: 'comment-1',
+      userId: 'user-me',
+      author: MessageAuthors.SELF,
+      text: 'status?',
+      createdAt: new Date('2026-08-08T10:00:00Z'),
+      isPersisted: true,
+    },
+  ];
+
+  render();
+  click(launcher());
+
+  const thread = container.querySelector('.thread');
+  // 1000 - 700 - 300 = 0 away from the bottom: where a reader who has not
+  // scrolled anywhere sits.
+  stubScroller(thread, { scrollHeight: 1000, clientHeight: 300, scrollTop: 700 });
+
+  act(() => {
+    thread.dispatchEvent(new Event('scroll', { bubbles: true }));
+  });
+
+  receiveMessage('card-1', {
+    id: 'comment-2',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'In review.',
+    createdAt: new Date('2026-08-08T10:05:00Z'),
+    isPersisted: true,
+  });
+
+  expect(container.textContent).toContain('In review.');
+  expect(thread.scrollTop).toBe(1000);
+});
+
+test('...and leaves someone who has scrolled up to read where they put themselves', () => {
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+  mockMessagesByCardId['card-1'] = [
+    {
+      id: 'comment-1',
+      userId: 'user-me',
+      author: MessageAuthors.SELF,
+      text: 'status?',
+      createdAt: new Date('2026-08-08T10:00:00Z'),
+      isPersisted: true,
+    },
+  ];
+
+  render();
+  click(launcher());
+
+  const thread = container.querySelector('.thread');
+  // 1000 - 120 - 300 = 580px above the bottom, which is somebody reading back
+  // through the card's history — and a bot answer lands minutes later, so this
+  // is exactly when it arrives.
+  stubScroller(thread, { scrollHeight: 1000, clientHeight: 300, scrollTop: 120 });
+
+  act(() => {
+    thread.dispatchEvent(new Event('scroll', { bubbles: true }));
+  });
+
+  receiveMessage('card-1', {
+    id: 'comment-2',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'In review.',
+    createdAt: new Date('2026-08-08T10:05:00Z'),
+    isPersisted: true,
+  });
+
+  expect(container.textContent).toContain('In review.');
+  expect(thread.scrollTop).toBe(120);
+});
+
+test('switching conversation starts the new thread at its latest message', () => {
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+  mockCards.push({
+    id: 'card-2',
+    boardId: 'board-1',
+    listId: 'list-1',
+    name: 'Another conversation',
+    isCommentsFetching: false,
+    isAllCommentsFetched: true,
+  });
+  mockChatCards.push({ id: 'card-2', name: 'Another conversation', hasBotComment: false });
+
+  render();
+  click(launcher());
+
+  const thread = container.querySelector('.thread');
+  stubScroller(thread, { scrollHeight: 1000, clientHeight: 300, scrollTop: 120 });
+
+  act(() => {
+    thread.dispatchEvent(new Event('scroll', { bubbles: true }));
+  });
+
+  // Away to the picker and into the other card. The panel itself stays
+  // mounted across that, so without a reset it would carry card-1's "the user
+  // is reading history" into a conversation they have not scrolled at all.
+  click(findByLabel('common.chooseACardToChatOn'));
+  click(container.querySelector('[data-id="card-2"]'));
+
+  const nextThread = container.querySelector('.thread');
+  stubScroller(nextThread, { scrollHeight: 1000, clientHeight: 300, scrollTop: 120 });
+
+  receiveMessage('card-2', {
+    id: 'comment-9',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'Over here now.',
+    createdAt: new Date('2026-08-08T11:00:00Z'),
+    isPersisted: true,
+  });
+
+  expect(container.textContent).toContain('Over here now.');
+  expect(nextThread.scrollTop).toBe(1000);
 });
 
 test('the panel width can be resized from the keyboard, and is remembered', () => {

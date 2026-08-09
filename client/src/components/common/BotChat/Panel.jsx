@@ -13,8 +13,10 @@ import {
   MIN_PANEL_WIDTH,
   PANEL_WIDTH_STEP,
   clampPanelWidth,
+  isAtThreadBottom,
   maxPanelWidth,
   panelWidthAfterDrag,
+  shouldFollowThread,
 } from '../../../utils/bot-chat';
 import CardPicker from './CardPicker';
 import Composer from './Composer';
@@ -56,18 +58,42 @@ const Panel = React.memo(
     const threadRef = useRef(null);
     const widthRef = useRef(width);
     const dragRef = useRef(null);
+    // Where the user's own scrolling has left the thread. Starts stuck: a panel
+    // that has just opened is showing its latest message by definition.
+    const stickToBottomRef = useRef(true);
 
     widthRef.current = width;
 
-    // Follow the conversation: a new message, ours or the bot's, scrolls the
-    // thread to the bottom the way every chat does.
+    // A different conversation opens at its own latest message, whatever the
+    // last one was left scrolled to. Declared before the effect below so the
+    // reset lands first when both fire on the same change.
     useEffect(() => {
+      stickToBottomRef.current = true;
+
       const element = threadRef.current;
 
       if (element) {
         element.scrollTop = element.scrollHeight;
       }
-    }, [messages.length, cardId]);
+    }, [cardId]);
+
+    // Follow the conversation: a new message, ours or the bot's, scrolls the
+    // thread to the bottom the way every chat does — unless the user has
+    // scrolled up, in which case they are reading something and being yanked
+    // away from it is the bug.
+    useEffect(() => {
+      const element = threadRef.current;
+
+      if (!element || !shouldFollowThread({ stuckToBottom: stickToBottomRef.current })) {
+        return;
+      }
+
+      element.scrollTop = element.scrollHeight;
+    }, [messages.length]);
+
+    const handleThreadScroll = useCallback((event) => {
+      stickToBottomRef.current = isAtThreadBottom(event.currentTarget);
+    }, []);
 
     const handleHandlePointerDown = useCallback((event) => {
       // A right-click on the edge is a context menu, not a drag.
@@ -146,7 +172,7 @@ const Panel = React.memo(
       bodyNode = <CardPicker onSelect={onSelectCard} />;
     } else {
       bodyNode = (
-        <div ref={threadRef} className={styles.thread}>
+        <div ref={threadRef} className={styles.thread} onScroll={handleThreadScroll}>
           {messages.length === 0 &&
             (isCommentsFetching ? (
               <Loader active inline="centered" size="small" />

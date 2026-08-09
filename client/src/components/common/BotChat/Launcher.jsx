@@ -25,10 +25,14 @@ import styles from './Launcher.module.scss';
  * The gesture is the Setlfi assistant's, ported: press and hold for
  * LAUNCHER_HOLD_MS and the button follows the pointer; move before the hold
  * elapses and it was a tap or a scroll, so the drag never starts. That is what
- * lets one control both open a panel on click and be movable out of the way of
- * whatever it is covering, on a touch screen as well as with a mouse.
+ * lets one control both toggle the panel on click and be movable out of the
+ * way of whatever it is covering, on a touch screen as well as with a mouse.
+ *
+ * The accessible name does not change with `isOpened`: `aria-expanded` is what
+ * carries the state, and a disclosure button whose label flips under the
+ * user's cursor is the harder thing to follow.
  */
-const Launcher = React.memo(({ bot, position, unreadCount, isOpened, onOpen, onMove }) => {
+const Launcher = React.memo(({ bot, position, unreadCount, isOpened, onToggle, onMove }) => {
   const [t] = useTranslation();
   const [isDragging, setIsDragging] = useState(false);
 
@@ -139,8 +143,8 @@ const Launcher = React.memo(({ bot, position, unreadCount, isOpened, onOpen, onM
       return;
     }
 
-    onOpen();
-  }, [onOpen]);
+    onToggle();
+  }, [onToggle]);
 
   const badge = unreadBadgeLabel(unreadCount);
 
@@ -178,7 +182,7 @@ Launcher.propTypes = {
   /* eslint-enable react/forbid-prop-types */
   unreadCount: PropTypes.number.isRequired,
   isOpened: PropTypes.bool.isRequired,
-  onOpen: PropTypes.func.isRequired,
+  onToggle: PropTypes.func.isRequired,
   onMove: PropTypes.func.isRequired,
 };
 

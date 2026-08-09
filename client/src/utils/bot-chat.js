@@ -201,6 +201,43 @@ export const writePanelWidth = (storage, width) => {
   }
 };
 
+/* The thread's scroll position */
+
+/**
+ * How far above the bottom still counts as being AT the bottom, in px.
+ *
+ * A tolerance rather than an exact match because sub-pixel layout, a bounce at
+ * the end of a momentum scroll and the last line of a growing bubble all leave
+ * the scroller a hair short of its own height, and none of them is a user
+ * scrolling away. The number is the Setlfi assistant's
+ * (`lib/assistant/transcript_scroll.ts`), kept the same so the two panels feel
+ * alike.
+ */
+export const THREAD_BOTTOM_SLACK_PX = 60;
+
+/**
+ * Whether the thread is parked at its latest message.
+ *
+ * Takes the three numbers an `HTMLElement` scroller answers with rather than
+ * the element, so a test can hand it a plain object.
+ */
+export const isAtThreadBottom = (
+  { scrollTop, scrollHeight, clientHeight },
+  slack = THREAD_BOTTOM_SLACK_PX,
+) => scrollHeight - scrollTop - clientHeight < slack;
+
+/**
+ * Should the thread be scrolled to its latest message right now?
+ *
+ * The rule the Setlfi assistant's transcript follows: stick to the bottom
+ * until the user scrolls up, and then leave them where they put themselves.
+ * Jamming `scrollTop = scrollHeight` on every arrival instead would yank
+ * somebody reading back through the card's history down to the newest bubble —
+ * and a bot answer lands minutes after the question, which is exactly the gap
+ * in which they went looking.
+ */
+export const shouldFollowThread = ({ stuckToBottom }) => stuckToBottom;
+
 /* The conversation the panel is on */
 
 /** localStorage key for the card the panel last talked on, so re-opening the

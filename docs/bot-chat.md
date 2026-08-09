@@ -47,15 +47,22 @@ the orchestrator drives.
 The username is read from `window.PLANKA_BOT_USERNAME` and falls back to
 `planka_bot` (`client/src/constants/BotChat.js`), the same escape hatch
 `Config.js` uses for `BASE_PATH`. To point the widget at a differently named
-bot user, set it before the app bundle loads — in `index.html` (dev) or in the
-`index.ejs` template the server renders (production), beside the
-`window.BASE_PATH` line:
+bot user, set it before the app bundle loads:
 
 ```html
 <script>
   window.PLANKA_BOT_USERNAME = 'my_bot';
 </script>
 ```
+
+In development that goes in `client/index.html`. There is no checked-in
+production template to edit: `client/vite.config.js` (`createEjsTemplate`)
+GENERATES `client/dist/index.ejs` from the built `index.html` when the build
+runs with `INDEX_FORMAT=ejs`, and that is also what injects the
+`window.BASE_PATH` line; the `Dockerfile` copies `client/dist` into the
+server's `public/`. So an override for a packaged install belongs in
+`client/index.html` before the image is built, not in a file on the running
+host.
 
 Leave it unset for `planka_bot`.
 
@@ -83,6 +90,13 @@ one. It does make it much easier to spend, which is worth knowing.
 
 `client/src/utils/bot-chat.js` carries the parts ported from the Setlfi web
 repo — the panel-width bounds, drag arithmetic and storage rules from
-`lib/assistant/widget_width.ts`, and the hold-then-drag launcher reposition
-from `components/assistant/AssistantWidget.tsx`. The provenance is recorded in
-the file.
+`lib/assistant/widget_width.ts`, the hold-then-drag launcher reposition from
+`components/assistant/AssistantWidget.tsx`, and the transcript's
+stick-to-the-bottom rule from `lib/assistant/transcript_scroll.ts` (the thread
+follows new messages until you scroll up, and then leaves you where you put
+yourself — a bot answer arrives minutes later, which is exactly the gap in
+which you went back to read something). The provenance is recorded in the file.
+
+What could not come across is the rendering: setl-web is Next.js + MUI and
+planka's client is React 18 + redux-orm + semantic-ui + SCSS modules, so the
+components are rebuilt on this app's own primitives rather than imported.

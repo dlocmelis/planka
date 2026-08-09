@@ -19,17 +19,20 @@ import {
   MessageAuthors,
   PANEL_EDGE_MARGIN,
   PANEL_WIDTH_KEY,
+  THREAD_BOTTOM_SLACK_PX,
   botMentionMarkup,
   botReplyState,
   buildChatMessages,
   clampLauncherPosition,
   clampPanelWidth,
+  isAtThreadBottom,
   maxPanelWidth,
   mentionsBot,
   panelWidthAfterDrag,
   readLastCardId,
   readLauncherPosition,
   readPanelWidth,
+  shouldFollowThread,
   stripLeadingMention,
   unreadBadgeLabel,
   unreadMessageCount,
@@ -182,6 +185,41 @@ describe('panel width', () => {
     expect(readPanelWidth(createStorage(), 1400)).toBeNull();
     expect(readPanelWidth(createStorage({ [PANEL_WIDTH_KEY]: 'wide' }), 1400)).toBeNull();
     expect(readPanelWidth(createStorage({ [PANEL_WIDTH_KEY]: '0' }), 1400)).toBeNull();
+  });
+});
+
+describe('thread scroll position', () => {
+  test('a scroller parked at its end is at the bottom', () => {
+    expect(isAtThreadBottom({ scrollTop: 700, scrollHeight: 1000, clientHeight: 300 })).toBe(true);
+  });
+
+  test('a hair short of the end still counts — sub-pixel layout is not a user scrolling away', () => {
+    expect(
+      isAtThreadBottom({
+        scrollTop: 700 - (THREAD_BOTTOM_SLACK_PX - 1),
+        scrollHeight: 1000,
+        clientHeight: 300,
+      }),
+    ).toBe(true);
+  });
+
+  test('further than the slack is somebody reading back through the thread', () => {
+    expect(
+      isAtThreadBottom({
+        scrollTop: 700 - THREAD_BOTTOM_SLACK_PX,
+        scrollHeight: 1000,
+        clientHeight: 300,
+      }),
+    ).toBe(false);
+  });
+
+  test('a thread shorter than its window is always at the bottom', () => {
+    expect(isAtThreadBottom({ scrollTop: 0, scrollHeight: 120, clientHeight: 300 })).toBe(true);
+  });
+
+  test('new messages follow the conversation only while nobody has scrolled away', () => {
+    expect(shouldFollowThread({ stuckToBottom: true })).toBe(true);
+    expect(shouldFollowThread({ stuckToBottom: false })).toBe(false);
   });
 });
 

@@ -92,9 +92,6 @@ export default {
       attachment: 'Attachment',
       attachments: 'Attachments',
       authentication: 'Authentication',
-      botHasNotAnsweredYet:
-        '{{username}} has not answered yet — it may be busy. Your message is on the card and the reply will land here.',
-      botIsThinking: '{{username}} is thinking…',
       background: 'Background',
       baseCustomFields_title: 'Base Custom Fields',
       baseGroup: 'Base group',
@@ -103,6 +100,9 @@ export default {
       boardNotFound_title: 'Board Not Found',
       boardSubscribed: 'Board subscribed',
       boardUser: 'Board user',
+      botHasNotAnsweredYet:
+        '{{username}} has not answered yet — it may be busy. Your message is on the card and the reply will land here.',
+      botIsThinking: '{{username}} is thinking…',
       byCreationTime: 'By creation time',
       byDefault: 'By default',
       byDueDate: 'By due date',
@@ -407,8 +407,8 @@ export default {
       webhooks: 'Webhooks',
       whatsNew_title: "What's New",
       withoutBaseGroup: 'Without base group',
-      youCannotCommentOnThisBoard: 'You cannot comment on this board.',
       writeComment: 'Write a comment...',
+      youCannotCommentOnThisBoard: 'You cannot comment on this board.',
     },
 
     action: {

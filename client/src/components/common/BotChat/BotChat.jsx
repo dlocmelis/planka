@@ -199,8 +199,12 @@ const BotChat = React.memo(() => {
 
   const replyState = useMemo(() => botReplyState(messages, { now }), [messages, now]);
 
-  const handleOpen = useCallback(() => {
-    setIsOpened(true);
+  // The launcher stays visible under the open panel — unlike the Setlfi
+  // assistant, which hides its orb behind the panel — so it has to be the
+  // toggle its `aria-expanded` says it is. A second press on a button that
+  // announces itself as expanded doing nothing is the wart.
+  const handleToggle = useCallback(() => {
+    setIsOpened((current) => !current);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -298,7 +302,7 @@ const BotChat = React.memo(() => {
         position={position}
         unreadCount={unreadCount}
         isOpened={isOpened}
-        onOpen={handleOpen}
+        onToggle={handleToggle}
         onMove={handleMove}
       />
     </>

@@ -4,7 +4,7 @@
  */
 
 import keyBy from 'lodash/keyBy';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
@@ -45,6 +45,17 @@ const Composer = React.memo(({ bot, isDisabled, onSubmit }) => {
       ),
     [boardMemberships],
   );
+
+  // The panel is only mounted while it is open, so this is "focus the message
+  // box when the chat opens" — what every chat widget does, and the only thing
+  // that puts the keyboard INSIDE the panel: the launcher that opened it is a
+  // sibling of the dialog, so until focus moves here the panel's own Escape
+  // handler can never fire.
+  useEffect(() => {
+    if (fieldRef.current && !isDisabled) {
+      fieldRef.current.focus();
+    }
+  }, [isDisabled]);
 
   const submit = useCallback(() => {
     const text = value.trim();
