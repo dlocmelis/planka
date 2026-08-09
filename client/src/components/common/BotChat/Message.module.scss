@@ -17,7 +17,14 @@
       0 0 0 1px rgba(9, 30, 66, 0.08);
     box-sizing: border-box;
     max-width: calc(100% - 44px);
+    // `anywhere` breaks the long URLs and paths that make up most of what the
+    // bot says; this is for what cannot break at all — a markdown table, a
+    // wide image. Without it that overflows the bubble, and since `.thread`
+    // sets `overflow-y` the other axis computes to `auto` too, so ONE wide
+    // answer scrolls the whole conversation sideways and every bubble moves.
+    // Contained here it costs one scrollbar under one message instead.
     overflow-wrap: anywhere;
+    overflow-x: auto;
     padding: 8px 12px;
   }
 
