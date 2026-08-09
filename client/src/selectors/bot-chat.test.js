@@ -4,6 +4,7 @@
  */
 
 import orm from '../orm';
+import selectors from '.';
 import Paths from '../constants/Paths';
 import { ListTypes, UserRoles } from '../constants/Enums';
 import { MessageAuthors } from '../utils/bot-chat';
@@ -163,5 +164,19 @@ describe('selectChatCardsForCurrentBoard', () => {
     };
 
     expect(selectChatCardsForCurrentBoard(state)).toEqual([]);
+  });
+});
+
+// The widget reaches these through the barrel (`selectors.selectBotUserFor…`),
+// and its component test mocks that module wholesale — so nothing else in the
+// suite would notice the barrel losing them. A missing name there is a
+// component that renders nothing at runtime and a green test run.
+test('the chat selectors are reachable from the selectors barrel', () => {
+  expect(typeof selectors.selectBotUserForCurrentBoard).toBe('function');
+  expect(typeof selectors.selectChatCardsForCurrentBoard).toBe('function');
+  expect(typeof selectors.makeSelectChatMessagesForCard).toBe('function');
+  expect(selectors.selectBotUserForCurrentBoard(buildState())).toMatchObject({
+    id: 'user-bot',
+    username: 'planka_bot',
   });
 });
