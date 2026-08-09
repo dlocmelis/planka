@@ -190,6 +190,69 @@ const parseVoiceMap = (raw) => {
 };
 
 /**
+ * The address `server/start.sh` exports for the Squid it starts itself.
+ *
+ * It is here so `isOutgoingHostAllowed` can tell that proxy from one the
+ * deployment named, which is the difference between an allowlist that is in
+ * force and one that was never built. THIS IS A TWIN of the value in
+ * `start.sh`; changing it there changes it here.
+ */
+const INTERNAL_OUTGOING_PROXY = 'http://127.0.0.1:3128';
+
+/**
+ * Whether this deployment's outgoing allowlist would let a request out to
+ * `hostname`: true, false, or null when the check cannot say.
+ *
+ * `server/start.sh` writes `http_access deny all` at the end of the Squid
+ * config as soon as `OUTGOING_ALLOWED_HOSTS` or `OUTGOING_ALLOWED_IPS` is SET
+ * AT ALL — the test there is `${VAR+x}`, so even an empty value flips the proxy
+ * to deny-by-default — and each hostname it allows becomes a Squid `dstdomain`
+ * ACL, where a bare `api.deepgram.com` matches that host exactly and a leading
+ * dot (`.deepgram.com`) matches the domain and everything under it.
+ *
+ * Null, not false, wherever the answer would be a guess: no allowlist at all,
+ * an outgoing proxy the deployment named itself (start.sh returns before
+ * building any of these ACLs, and what that proxy permits is not ours to
+ * assume), or an IP allowlist, whose entries may well be this host's own
+ * addresses and cannot be resolved from here.
+ */
+const isOutgoingHostAllowed = (hostname, env) => {
+  const source = env || {};
+  const proxy = String(source.OUTGOING_PROXY || '').trim();
+
+  if (proxy !== '' && proxy !== INTERNAL_OUTGOING_PROXY) {
+    return null;
+  }
+
+  const hasHostAllowlist = source.OUTGOING_ALLOWED_HOSTS !== undefined;
+  const hasIpAllowlist = source.OUTGOING_ALLOWED_IPS !== undefined;
+
+  if (!hasHostAllowlist && !hasIpAllowlist) {
+    return null;
+  }
+
+  const wanted = String(hostname || '')
+    .trim()
+    .toLowerCase();
+
+  const isListed = String(source.OUTGOING_ALLOWED_HOSTS || '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry !== '')
+    .some((entry) =>
+      entry.startsWith('.')
+        ? wanted === entry.slice(1) || wanted.endsWith(entry)
+        : wanted === entry,
+    );
+
+  if (isListed) {
+    return true;
+  }
+
+  return String(source.OUTGOING_ALLOWED_IPS || '').trim() === '' ? false : null;
+};
+
+/**
  * The length a provider metered per character would measure, which is not
  * `text.length`.
  *
@@ -216,11 +279,13 @@ const formatBytes = (bytes) => {
 module.exports = {
   AUDIO_MIME_TYPES,
   CARTESIA_VERSION,
+  INTERNAL_OUTGOING_PROXY,
   VoiceProviderError,
   VoiceRequestError,
   allowedAudioMimeTypes,
   formatBytes,
   isLanguageCode,
+  isOutgoingHostAllowed,
   isVoiceId,
   normalizeAudioMimeType,
   normalizeLanguage,

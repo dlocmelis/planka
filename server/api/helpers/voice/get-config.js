@@ -19,7 +19,13 @@
  * be exactly the "nobody chose this" failure the validation exists to prevent.
  */
 
-const { isVoiceId, parseKeyterms, parseVoiceMap } = require('../../../utils/voice');
+const endpoints = require('../../../utils/voice-endpoints');
+const {
+  isOutgoingHostAllowed,
+  isVoiceId,
+  parseKeyterms,
+  parseVoiceMap,
+} = require('../../../utils/voice');
 
 const SUPPORTED_STT_PROVIDERS = ['deepgram'];
 const SUPPORTED_TTS_PROVIDERS = ['cartesia'];
@@ -131,6 +137,31 @@ const buildTtsConfig = (custom) => {
   };
 };
 
+/**
+ * The one prerequisite this feature has that nothing else in the app would
+ * notice: a deployment using the outgoing allowlist has to put the two provider
+ * hostnames on it.
+ *
+ * `server/start.sh` switches the internal proxy to deny-by-default as soon as
+ * `OUTGOING_ALLOWED_HOSTS`/`_IPS` is set at all, so a deployment that turns the
+ * keys on and leaves that list alone gets a feature that looks configured,
+ * reports itself available in the bootstrap, opens the user's microphone, and
+ * then answers 502 on every single turn. Said once, loudly, where an operator
+ * looks — and only where it is certainly wrong: `isOutgoingHostAllowed` answers
+ * null rather than false wherever it would be guessing.
+ */
+const warnIfUnreachable = (hostname, what) => {
+  if (isOutgoingHostAllowed(hostname, process.env) !== false) {
+    return;
+  }
+
+  sails.log.warn(
+    `Voice chat: ${what} is configured but '${hostname}' is not on OUTGOING_ALLOWED_HOSTS, ` +
+      'so the outgoing proxy denies every call to it and each turn fails with a 502. ' +
+      'Add it to that list (see docs/bot-chat-voice.md).',
+  );
+};
+
 module.exports = {
   sync: true,
 
@@ -147,6 +178,16 @@ module.exports = {
     [stt.error, tts.error].filter(Boolean).forEach((message) => {
       sails.log.error(`Voice chat: ${message}; that half stays disabled`);
     });
+
+    if (stt.config) {
+      warnIfUnreachable(new URL(endpoints.deepgramListenUrl).hostname, 'speech-to-text');
+    }
+
+    if (tts.config) {
+      // One hostname covers both of this half's calls — the synthesis and the
+      // voice catalogue are the same API root.
+      warnIfUnreachable(new URL(endpoints.cartesiaBaseUrl).hostname, 'text-to-speech');
+    }
 
     cached = {
       stt: stt.config,

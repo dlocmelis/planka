@@ -130,6 +130,22 @@ Both are the API hostnames rather than the vendors' websites, and
 `api.cartesia.ai` serves the voice catalogue (`GET /voices/`) as well as the
 synthesis, so one entry covers both of that half's calls.
 
+**The server says so itself rather than leaving it to be discovered.** Booting
+with a key set and the allowlist missing that half's hostname logs
+
+```
+Voice chat: text-to-speech is configured but 'api.cartesia.ai' is not on
+OUTGOING_ALLOWED_HOSTS, so the outgoing proxy denies every call to it and each
+turn fails with a 502. Add it to that list (see docs/bot-chat-voice.md).
+```
+
+It is a warning and not a refusal to start, because the check cannot be certain:
+it is silent where it would be guessing — an `OUTGOING_ALLOWED_IPS` entry it
+cannot resolve a hostname against, or an `OUTGOING_PROXY` the deployment named
+itself, where `start.sh` never builds these rules at all.
+`server/utils/voice.js` `isOutgoingHostAllowed` is the rule, and it reads a
+leading dot the way Squid's `dstdomain` does.
+
 ### The rest of the knobs
 
 Every one of these has a working default; a deployment that sets only the two
@@ -157,7 +173,10 @@ keys above gets a sensible configuration.
 
 A misconfigured knob is loud and leaves its half off, rather than fatal: an
 invalid provider, output format, voice map or fallback voice id logs an error at
-boot and disables that half. A typo in one optional value must not stop PLANKA
+boot and disables that half. Boot is where it is said because that is where an
+operator looks — `config/bootstrap.js` resolves the configuration on lift rather
+than leaving it to whichever request first needs it. A typo in one optional
+value must not stop PLANKA
 from booting, and silently serving the default instead would be the "nobody
 chose this" failure the validation exists to prevent. `VOICE_TTS_VOICE` is held
 to the same bar as an entry of the map because it is the id that reads every

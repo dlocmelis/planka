@@ -2,11 +2,13 @@ const { expect } = require('chai');
 
 const {
   AUDIO_MIME_TYPES,
+  INTERNAL_OUTGOING_PROXY,
   VoiceProviderError,
   VoiceRequestError,
   allowedAudioMimeTypes,
   formatBytes,
   isLanguageCode,
+  isOutgoingHostAllowed,
   isVoiceId,
   normalizeAudioMimeType,
   normalizeLanguage,
@@ -162,6 +164,85 @@ describe('voice', () => {
       expect('a😀b'.length).to.equal(4);
       expect(speechTextLength('')).to.equal(0);
       expect(speechTextLength(undefined)).to.equal(0);
+    });
+  });
+
+  describe('#isOutgoingHostAllowed(hostname, env)', () => {
+    it('should say nothing when no allowlist is in force', () => {
+      expect(isOutgoingHostAllowed('api.deepgram.com', {})).to.equal(null);
+      // Blocklists alone leave the proxy allow-by-default: start.sh only writes
+      // `http_access deny all` for an ALLOW list.
+      expect(
+        isOutgoingHostAllowed('api.deepgram.com', { OUTGOING_BLOCKED_HOSTS: 'localhost,postgres' }),
+      ).to.equal(null);
+    });
+
+    it('should refuse a host an allowlist leaves out', () => {
+      expect(
+        isOutgoingHostAllowed('api.deepgram.com', { OUTGOING_ALLOWED_HOSTS: 'api.cartesia.ai' }),
+      ).to.equal(false);
+    });
+
+    it('should refuse every host for an allowlist that is set but empty', () => {
+      // The trap the feature's own documentation is about: start.sh tests
+      // `${VAR+x}`, so an empty value still switches the proxy to
+      // deny-by-default and nothing at all gets out.
+      expect(isOutgoingHostAllowed('api.cartesia.ai', { OUTGOING_ALLOWED_HOSTS: '' })).to.equal(
+        false,
+      );
+      expect(isOutgoingHostAllowed('api.cartesia.ai', { OUTGOING_ALLOWED_IPS: '' })).to.equal(
+        false,
+      );
+    });
+
+    it('should accept an exact entry, whatever its spacing and casing', () => {
+      expect(
+        isOutgoingHostAllowed('api.deepgram.com', {
+          OUTGOING_ALLOWED_HOSTS: 'example.com, API.Deepgram.com ,api.cartesia.ai',
+        }),
+      ).to.equal(true);
+    });
+
+    it("should read a leading dot as Squid's dstdomain does", () => {
+      // `.deepgram.com` matches the domain and everything under it.
+      expect(
+        isOutgoingHostAllowed('api.deepgram.com', { OUTGOING_ALLOWED_HOSTS: '.deepgram.com' }),
+      ).to.equal(true);
+      expect(
+        isOutgoingHostAllowed('deepgram.com', { OUTGOING_ALLOWED_HOSTS: '.deepgram.com' }),
+      ).to.equal(true);
+      // ...and not a different domain that merely ends the same way.
+      expect(
+        isOutgoingHostAllowed('evildeepgram.com', { OUTGOING_ALLOWED_HOSTS: '.deepgram.com' }),
+      ).to.equal(false);
+    });
+
+    it('should not guess against an IP allowlist it cannot resolve', () => {
+      expect(
+        isOutgoingHostAllowed('api.deepgram.com', {
+          OUTGOING_ALLOWED_IPS: '104.16.0.1',
+          OUTGOING_ALLOWED_HOSTS: 'api.cartesia.ai',
+        }),
+      ).to.equal(null);
+    });
+
+    it('should say nothing when the deployment named an outgoing proxy of its own', () => {
+      // start.sh returns before writing any ACL there, so the allowlist below
+      // was never built and what that proxy permits is not ours to assume.
+      expect(
+        isOutgoingHostAllowed('api.deepgram.com', {
+          OUTGOING_PROXY: 'http://proxy.internal:8080',
+          OUTGOING_ALLOWED_HOSTS: '',
+        }),
+      ).to.equal(null);
+
+      // ...but the proxy start.sh starts ITSELF is the one enforcing that list.
+      expect(
+        isOutgoingHostAllowed('api.deepgram.com', {
+          OUTGOING_PROXY: INTERNAL_OUTGOING_PROXY,
+          OUTGOING_ALLOWED_HOSTS: '',
+        }),
+      ).to.equal(false);
     });
   });
 

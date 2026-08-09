@@ -405,6 +405,106 @@ describe('Voice chat endpoints', function describeVoice() {
     });
   });
 
+  describe('when the outgoing allowlist would deny the providers', () => {
+    /**
+     * Resolve the config with these env vars in place, collecting what it
+     * warned about.
+     *
+     * The provider endpoints are put back to the REAL ones for the duration:
+     * the warning names the host this server would actually dial, and every
+     * other test in this file has them pointed at a stub on 127.0.0.1, which is
+     * not the hostname an operator has to allowlist. The config is rebuilt
+     * because `withVoice` hands it a new object, and `GET /bootstrap` is the
+     * cheapest thing that asks for one.
+     */
+    const resolveWith = async (env) => {
+      const warnings = [];
+      const originalWarn = sails.log.warn;
+      const originalEnv = {};
+
+      Object.keys(env).forEach((key) => {
+        originalEnv[key] = process.env[key];
+
+        if (env[key] === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = env[key];
+        }
+      });
+
+      sails.log.warn = (message) => warnings.push(String(message));
+      endpoints.deepgramListenUrl = originalDeepgramUrl;
+      endpoints.cartesiaBaseUrl = originalCartesiaUrl;
+
+      try {
+        withVoice();
+        await request.get('/api/bootstrap');
+      } finally {
+        sails.log.warn = originalWarn;
+        endpoints.deepgramListenUrl = `${providerUrl}/v1/listen`;
+        endpoints.cartesiaBaseUrl = providerUrl;
+
+        Object.keys(originalEnv).forEach((key) => {
+          if (originalEnv[key] === undefined) {
+            delete process.env[key];
+          } else {
+            process.env[key] = originalEnv[key];
+          }
+        });
+      }
+
+      return warnings;
+    };
+
+    it('names each hostname an operator has to add, once', async () => {
+      // The failure this exists to stop: the keys are set, the bootstrap
+      // reports the mode available, the microphone opens — and every turn 502s
+      // because the proxy denied the call. Nothing else in the app would
+      // notice, so it is said here, where an operator reads the startup log.
+      const warnings = await resolveWith({
+        OUTGOING_ALLOWED_HOSTS: 'api.openai.com',
+        OUTGOING_PROXY: undefined,
+      });
+
+      expect(warnings.filter((message) => message.includes('api.deepgram.com'))).to.have.lengthOf(
+        1,
+      );
+      expect(warnings.filter((message) => message.includes('api.cartesia.ai'))).to.have.lengthOf(1);
+      expect(warnings.every((message) => message.includes('OUTGOING_ALLOWED_HOSTS'))).to.equal(
+        true,
+      );
+    });
+
+    it('says nothing when both hostnames are on it', async () => {
+      const warnings = await resolveWith({
+        OUTGOING_ALLOWED_HOSTS: 'api.deepgram.com,api.cartesia.ai',
+        OUTGOING_PROXY: undefined,
+      });
+
+      expect(warnings).to.have.lengthOf(0);
+    });
+
+    it('says nothing when no allowlist is in force', async () => {
+      const warnings = await resolveWith({
+        OUTGOING_ALLOWED_HOSTS: undefined,
+        OUTGOING_ALLOWED_IPS: undefined,
+        OUTGOING_PROXY: undefined,
+      });
+
+      expect(warnings).to.have.lengthOf(0);
+    });
+
+    it('names only the half that cannot get out', async () => {
+      const warnings = await resolveWith({
+        OUTGOING_ALLOWED_HOSTS: 'api.deepgram.com',
+        OUTGOING_PROXY: undefined,
+      });
+
+      expect(warnings).to.have.lengthOf(1);
+      expect(warnings[0]).to.include('api.cartesia.ai');
+    });
+  });
+
   describe('POST /cards/:cardId/voice/transcription', () => {
     it('refuses an anonymous caller', async () => {
       const res = await postTranscription(null, audioBody());
