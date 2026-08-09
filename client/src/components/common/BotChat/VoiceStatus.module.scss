@@ -4,6 +4,17 @@
  */
 
 :global(#app) {
+  .line {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+  }
+
+  .notice {
+    color: #9f6000;
+    padding-left: 20px;
+  }
+
   .pulse {
     animation: bot-chat-voice-pulse 1.2s ease-in-out infinite;
     color: #c0392b;
@@ -21,13 +32,13 @@
   }
 
   .wrapper {
-    align-items: center;
     border-top: 1px solid rgba(9, 30, 66, 0.08);
     color: #6b808c;
     display: flex;
     flex: 0 0 auto;
+    flex-direction: column;
     font-size: 12px;
-    gap: 8px;
+    gap: 4px;
     padding: 8px 12px;
   }
 }

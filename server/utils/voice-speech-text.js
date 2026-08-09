@@ -678,13 +678,16 @@ const cutSpeechText = (text, maxChars) => {
   return `${kept.trim()} ${CUT_NOTICE}`.trim();
 };
 
+// `narrateTable` is deliberately NOT exported, and neither is the row cap: the
+// narrator is only ever reached through `stripMarkdown`, and the block loop's
+// hand-off to it is half of what makes the narration correct — a test that
+// called the narrator directly would not see it. setl's own table_test.go says
+// the same thing about the same function.
 module.exports = {
   CODE_PLACEHOLDER,
   CUT_NOTICE,
-  MAX_NARRATED_ROWS,
   TABLE_PLACEHOLDER,
   cutSpeechText,
   hasSpeakableContent,
-  narrateTable,
   stripMarkdown,
 };

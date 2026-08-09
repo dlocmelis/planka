@@ -49,6 +49,7 @@ jest.mock('../../../selectors', () => ({
     selectMembershipsForCurrentBoard: () => mockMemberships,
     selectCurrentUserMembershipForCurrentBoard: () => mockMembership,
     selectVoiceChatCapability: () => mockVoiceCapability,
+    selectAccessToken: () => 'access-token',
     makeSelectCardById: () => (_, id) => mockCards.find((card) => card.id === id) || null,
     makeSelectListById: () => (_, id) => mockLists.find((list) => list.id === id) || null,
     // A stable empty array, the way the memoized selector behind it answers an

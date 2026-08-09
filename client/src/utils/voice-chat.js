@@ -720,14 +720,6 @@ export const writeVoiceChatEnabled = (storage, isEnabled) => {
 
 /* Copy */
 
-/** m:ss for the recording timer. Seconds are floored — a timer that rounds up
- * shows 0:01 the instant recording starts. */
-export const formatElapsed = (seconds) => {
-  const whole = Math.max(0, Math.floor(seconds));
-
-  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
-};
-
 /** MB/KB for a byte count, for user-facing copy only. Matches the server's own
  * `formatBytes`, so the two halves of an oversize message agree. */
 export const formatBytes = (bytes) => {

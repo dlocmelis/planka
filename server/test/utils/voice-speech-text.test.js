@@ -120,7 +120,9 @@ describe('voice-speech-text', () => {
     });
 
     it('should number the rows of a table that is nothing but figures', () => {
-      expect(stripMarkdown('| Q1 | Q2 | Q3 |\n|---|---|---|\n| 10 | 20 | 30 |\n| 11 | 21 | 31 |')).to.equal(
+      expect(
+        stripMarkdown('| Q1 | Q2 | Q3 |\n|---|---|---|\n| 10 | 20 | 30 |\n| 11 | 21 | 31 |'),
+      ).to.equal(
         'A table of 2 rows with columns Q1, Q2 and Q3. ' +
           'Row 1: Q1 10, Q2 20, Q3 30. Row 2: Q1 11, Q2 21, Q3 31.',
       );
@@ -128,7 +130,9 @@ describe('voice-speech-text', () => {
 
     it('should read a year or an ISO month column as a subject', () => {
       expect(
-        stripMarkdown('| Year | Revenue |\n|---|---|\n| 2023 | 100 |\n| 2024 | 120 |\n| Total | 220 |'),
+        stripMarkdown(
+          '| Year | Revenue |\n|---|---|\n| 2023 | 100 |\n| 2024 | 120 |\n| Total | 220 |',
+        ),
       ).to.equal('A table of 3 rows comparing Revenue by Year. 2023: 100. 2024: 120. Total: 220.');
 
       expect(
@@ -204,8 +208,12 @@ describe('voice-speech-text', () => {
 
     it('should number a row that has no subject of its own', () => {
       expect(
-        stripMarkdown('| Merchant | Volume |\n|---|---|\n| Acme | 10 |\n| Globex | 15 |\n|  | 20 |'),
-      ).to.equal('A table of 3 rows comparing Volume by Merchant. Acme: 10. Globex: 15. Row 3: 20.');
+        stripMarkdown(
+          '| Merchant | Volume |\n|---|---|\n| Acme | 10 |\n| Globex | 15 |\n|  | 20 |',
+        ),
+      ).to.equal(
+        'A table of 3 rows comparing Volume by Merchant. Acme: 10. Globex: 15. Row 3: 20.',
+      );
     });
 
     it('should handle a table whose measure columns are all unnamed', () => {

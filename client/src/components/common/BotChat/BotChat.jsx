@@ -34,7 +34,6 @@ import {
 } from '../../../utils/bot-chat';
 import {
   VOICE_CHAT_STOP_REASON_KEYS,
-  VoiceChatPhases,
   readVoiceChatEnabled,
   voiceChatPhase,
   writeVoiceChatEnabled,
@@ -78,6 +77,10 @@ const BotChat = React.memo(() => {
   const openedCardId = useSelector((state) => selectors.selectPath(state).cardId);
   const bot = useSelector(selectors.selectBotUserForCurrentBoard);
   const voiceCapability = useSelector(selectors.selectVoiceChatCapability);
+  // The voice endpoints are called straight from the hook rather than through a
+  // saga, so the bearer token the saga layer would have attached is read here
+  // and passed down. See `useVoiceChat`.
+  const accessToken = useSelector(selectors.selectAccessToken);
 
   const dispatch = useDispatch();
 
@@ -373,6 +376,10 @@ const BotChat = React.memo(() => {
         return;
       }
 
+      // A new turn: whatever the last one was told about is no longer what is
+      // happening.
+      setVoiceNotice(null);
+
       // Straight out, without passing through the composer: that is the whole
       // difference between voice chat and a dictation button — when enough
       // silence has gone by, it sends. `withBotMention` is the same wrapper the
@@ -392,6 +399,15 @@ const BotChat = React.memo(() => {
     );
   }, []);
 
+  // Something worth saying that did NOT stop the mode: a recording over the
+  // cap, an answer too long to read. The loop carries on listening.
+  const handleVoiceNotice = useCallback(
+    (key, params) => {
+      setVoiceNotice(t(key, params));
+    },
+    [t],
+  );
+
   const handleVoiceStop = useCallback(
     (reason) => {
       setIsVoiceEnabled(false);
@@ -406,9 +422,11 @@ const BotChat = React.memo(() => {
     cardId: activeCardId,
     capability: voiceCapability,
     canComment,
+    accessToken,
     pendingSpeech,
     onTranscript: handleVoiceTranscript,
     onSpoken: handleVoiceSpoken,
+    onNotice: handleVoiceNotice,
     onStop: handleVoiceStop,
   });
 
@@ -439,10 +457,7 @@ const BotChat = React.memo(() => {
     () => ({
       isAvailable: voice.isAvailable,
       isEnabled: isVoiceEnabled,
-      // A mode that is on but cannot run says so where the loop's own status
-      // would be, rather than through a toggle that looks switched on and does
-      // nothing.
-      phase: isVoiceEnabled && !voice.isAvailable ? VoiceChatPhases.BLOCKED : voicePhase,
+      phase: voicePhase,
       notice: voiceNotice || undefined,
       onToggle: handleVoiceToggle,
       onStopSpeaking: voice.stopSpeaking,

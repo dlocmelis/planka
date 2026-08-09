@@ -334,7 +334,11 @@ const Panel = React.memo(
         {cardId && (
           <Composer bot={bot} isDisabled={!canComment} voiceChat={voiceChat} onSubmit={onSubmit} />
         )}
-        {cardId && (
+        {/* Only where the loop could actually run. A read-only card or board
+            already explains itself in the row below, and a status line saying
+            "opening the microphone…" at a mode that will never open one is a
+            second, untrue answer to the same question. */}
+        {cardId && canComment && (
           <VoiceStatus
             phase={voiceChat.phase}
             notice={voiceChat.notice}

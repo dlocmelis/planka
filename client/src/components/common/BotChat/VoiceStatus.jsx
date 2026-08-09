@@ -45,23 +45,32 @@ const VoiceStatus = React.memo(({ phase, notice, onStopSpeaking }) => {
   }
 
   const key = PHASE_KEYS[phase];
+  const isRunning = phase !== VoiceChatPhases.OFF;
 
   return (
     <div role="status" className={styles.wrapper}>
-      {phase === VoiceChatPhases.CAPTURING && (
-        <span className={styles.pulse} aria-hidden="true">
-          <Icon fitted name="microphone" />
-        </span>
-      )}
-      {phase !== VoiceChatPhases.CAPTURING && phase !== VoiceChatPhases.OFF && (
-        <Icon fitted name={phase === VoiceChatPhases.BLOCKED ? 'ban' : 'circle notch'} />
-      )}
-      <span className={styles.text}>{notice || (key ? t(key) : null)}</span>
-      {phase === VoiceChatPhases.SPEAKING && (
-        <Button type="button" basic size="mini" className={styles.stop} onClick={onStopSpeaking}>
-          {t('action.stopSpeaking')}
-        </Button>
-      )}
+      <div className={styles.line}>
+        {phase === VoiceChatPhases.CAPTURING && (
+          <span className={styles.pulse} aria-hidden="true">
+            <Icon fitted name="microphone" />
+          </span>
+        )}
+        {phase !== VoiceChatPhases.CAPTURING && isRunning && (
+          <Icon fitted name={phase === VoiceChatPhases.BLOCKED ? 'ban' : 'circle notch'} />
+        )}
+        {/* The notice is a SECOND line while the loop is still running, not a
+            replacement for the first: "that recording was too long" is what
+            just happened, and "listening" is what is happening now. It only
+            stands alone when the mode itself is off, where there is no
+            "now". */}
+        <span className={styles.text}>{isRunning ? key && t(key) : notice}</span>
+        {phase === VoiceChatPhases.SPEAKING && (
+          <Button type="button" basic size="mini" className={styles.stop} onClick={onStopSpeaking}>
+            {t('action.stopSpeaking')}
+          </Button>
+        )}
+      </div>
+      {isRunning && notice && <div className={styles.notice}>{notice}</div>}
     </div>
   );
 });

@@ -96,6 +96,7 @@ const {
   VoiceProviderError,
   VoiceRequestError,
   allowedAudioMimeTypes,
+  formatBytes,
   normalizeAudioMimeType,
 } = require('../../../utils/voice');
 
@@ -199,7 +200,7 @@ module.exports = {
     // mid-sentence is worse than a refusal the user can act on.
     if (stt.maxBytes > 0 && audio.length > stt.maxBytes) {
       throw {
-        invalidRecording: `Recording is too large: ${audio.length} bytes exceeds the ${stt.maxBytes}-byte limit`,
+        invalidRecording: `Recording is too large: ${formatBytes(audio.length)} exceeds the ${formatBytes(stt.maxBytes)} limit`,
       };
     }
 

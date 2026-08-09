@@ -67,6 +67,7 @@ jest.mock('../../../selectors', () => ({
     selectMembershipsForCurrentBoard: () => mockMemberships,
     selectCurrentUserMembershipForCurrentBoard: () => mockMembership,
     selectVoiceChatCapability: () => mockVoiceCapability,
+    selectAccessToken: () => 'access-token',
     makeSelectCardById: () => (_, id) => mockCards.find((card) => card.id === id) || null,
     makeSelectListById: () => (_, id) => mockLists.find((list) => list.id === id) || null,
     makeSelectChatMessagesForCard: () => (_, id) => mockMessagesByCardId[id] || mockNoMessages,
@@ -430,10 +431,14 @@ test('talking and then stopping sends the recording and posts what was heard', a
 
   expect(mockTranscribe).toHaveBeenCalledTimes(1);
 
-  const [cardId, body] = mockTranscribe.mock.calls[0];
+  const [cardId, body, headers] = mockTranscribe.mock.calls[0];
   expect(cardId).toBe('card-1');
   expect(body.mimeType).toBe('audio/webm;codecs=opus');
   expect(body.data).toBe('AAAA');
+  // Nothing here goes through the saga layer, which is what normally attaches
+  // the bearer token. Without it the API answers 401 to every utterance — it
+  // reads the Authorization HEADER and never the access-token cookie.
+  expect(headers).toEqual({ Authorization: 'Bearer access-token' });
 
   // ...and the transcript goes straight out as a comment addressed to the bot,
   // without passing through the composer. That is the whole difference between
@@ -495,7 +500,13 @@ test("the bot's reply is read aloud, and the mode says so", async () => {
 
   await settle();
 
-  expect(mockSpeak).toHaveBeenCalledWith('card-1', { text: 'It is waiting on review.' });
+  expect(mockSpeak).toHaveBeenCalledWith(
+    'card-1',
+    { text: 'It is waiting on review.' },
+    {
+      Authorization: 'Bearer access-token',
+    },
+  );
   expect(players).toHaveLength(1);
   expect(players[0].src).toBe('blob:voice');
   expect(status().textContent).toContain('common.voiceChatSpeaking');
@@ -685,5 +696,159 @@ test('a member who may not comment never opens a microphone', async () => {
   click(launcher());
   await settle();
 
+  expect(window.navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+});
+
+test('the answer is read back in the language the user was heard in', async () => {
+  // The only thing that ever reaches the deployment's per-language voice map:
+  // the server resolves a pinned voice from the language a request names, and
+  // nothing else on the client names one.
+  mockTranscribe.mockResolvedValue({
+    item: { text: 'что происходит', languages: ['ru'], durationSec: 1.2, confidence: 0.9 },
+  });
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  await saySomething();
+
+  receiveMessage('card-1', {
+    id: 'comment-1',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'Ждём ревью.',
+    createdAt: new Date(Date.now() + 1000),
+    isPersisted: true,
+  });
+
+  await settle();
+
+  expect(mockSpeak.mock.calls[0][1]).toEqual({ text: 'Ждём ревью.', language: 'ru' });
+});
+
+test('a conversation keeps one voice once the server has decided on one', async () => {
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  receiveMessage('card-1', {
+    id: 'comment-1',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'First answer.',
+    createdAt: new Date(Date.now() + 1000),
+    isPersisted: true,
+  });
+  await settle();
+
+  receiveMessage('card-1', {
+    id: 'comment-2',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'Second answer.',
+    createdAt: new Date(Date.now() + 2000),
+    isPersisted: true,
+  });
+  await settle();
+
+  expect(mockSpeak.mock.calls[1][1]).toEqual({
+    text: 'Second answer.',
+    voice: 'voice-en',
+    language: 'en',
+  });
+});
+
+test('a voice the server reported with no language is not pinned onto the rest', async () => {
+  // A voice with no language beside it is the deployment's default answering
+  // "I could not tell". Pinning that would fix the wrong voice onto every
+  // answer after one undetectable reply.
+  mockSpeak.mockResolvedValue({
+    item: { data: 'QUJD', mimeType: 'audio/mpeg', voice: 'voice-default', language: null },
+  });
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  receiveMessage('card-1', {
+    id: 'comment-1',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'First answer.',
+    createdAt: new Date(Date.now() + 1000),
+    isPersisted: true,
+  });
+  await settle();
+
+  receiveMessage('card-1', {
+    id: 'comment-2',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'Second answer.',
+    createdAt: new Date(Date.now() + 2000),
+    isPersisted: true,
+  });
+  await settle();
+
+  expect(mockSpeak.mock.calls[1][1]).toEqual({ text: 'Second answer.' });
+});
+
+test('an answer too long to read is said so, and the loop keeps listening', async () => {
+  mockVoiceCapability = { ...mockVoiceCapability, ttsMaxChars: 10 };
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  receiveMessage('card-1', {
+    id: 'comment-1',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'An answer that is comfortably over the ceiling.',
+    createdAt: new Date(Date.now() + 1000),
+    isPersisted: true,
+  });
+
+  await settle();
+
+  // Not sent at all: the server would refuse it, and the only handler for that
+  // refusal turns the whole mode off.
+  expect(mockSpeak).not.toHaveBeenCalled();
+  expect(status().textContent).toContain('common.voiceChatAnswerTooLong');
+  expect(status().textContent).toContain('common.voiceChatListening');
+  expect(voiceToggle().getAttribute('aria-pressed')).toBe('true');
+});
+
+test('a recording over the cap is refused with a sentence rather than vanishing', async () => {
+  mockVoiceCapability = { ...mockVoiceCapability, sttMaxBytes: 1 };
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  await saySomething();
+
+  expect(mockTranscribe).not.toHaveBeenCalled();
+  expect(status().textContent).toContain('common.voiceChatRecordingTooLarge');
+  expect(voiceToggle().getAttribute('aria-pressed')).toBe('true');
+});
+
+test('a read-only card gets no status row and no microphone', async () => {
+  mockMembership = { id: 'membership-1', role: BoardMembershipRoles.VIEWER, canComment: false };
+  window.localStorage.setItem('planka-bot-chat-voice', 'true');
+
+  render();
+  click(launcher());
+  await settle();
+
+  // The row below already says why commenting is not possible; a second line
+  // promising a microphone that will never open is a contradiction.
+  expect(status()).toBeNull();
   expect(window.navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
 });

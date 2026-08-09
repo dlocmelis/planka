@@ -12,7 +12,6 @@ import {
   VoiceChatPhases,
   VoiceChatStopReasons,
   formatBytes,
-  formatElapsed,
   frameLevelDb,
   isRecordingSupported,
   isSendableTranscript,
@@ -478,14 +477,7 @@ describe('voice-chat', () => {
     });
   });
 
-  describe('formatElapsed(seconds) / formatBytes(bytes)', () => {
-    it('floors the timer rather than rounding it up', () => {
-      // A timer that rounds up shows 0:01 the instant recording starts.
-      expect(formatElapsed(0.9)).toBe('0:00');
-      expect(formatElapsed(61)).toBe('1:01');
-      expect(formatElapsed(-5)).toBe('0:00');
-    });
-
+  describe('formatBytes(bytes)', () => {
     it('renders a size the way copy needs it, matching the server', () => {
       expect(formatBytes(512)).toBe('512 bytes');
       expect(formatBytes(2048)).toBe('2 KB');

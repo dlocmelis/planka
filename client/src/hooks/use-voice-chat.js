@@ -37,14 +37,17 @@ import {
   RECORDER_AUDIO_BITS_PER_SECOND,
   VOICE_CHAT_AUDIO_CONSTRAINTS,
   VOICE_FRAME_INTERVAL_MS,
+  SpeakAvailabilities,
   VadEvents,
   VoiceChatStopReasons,
+  formatBytes,
   frameLevelDb,
   isRecordingSupported,
   isSendableTranscript,
   microphoneStopReason,
   newVadState,
   pickRecorderMimeType,
+  speakAvailability,
   uploadContentType,
   vadStep,
 } from '../utils/voice-chat';
@@ -75,9 +78,11 @@ export default function useVoiceChat({
   cardId,
   capability,
   canComment,
+  accessToken,
   pendingSpeech,
   onTranscript,
   onSpoken,
+  onNotice,
   onStop,
 }) {
   const [isMicReady, setIsMicReady] = useState(false);
@@ -111,18 +116,29 @@ export default function useVoiceChat({
   // tell", and pinning that is how one undetectable reply fixes the wrong voice
   // onto everything after it.
   const voicePinRef = useRef(null);
+  // The language the last utterance was transcribed as. See `transcribe`.
+  const heardLanguageRef = useRef(null);
 
   const onTranscriptRef = useRef(onTranscript);
   const onSpokenRef = useRef(onSpoken);
+  const onNoticeRef = useRef(onNotice);
   const onStopRef = useRef(onStop);
   const capabilityRef = useRef(capability);
   const cardIdRef = useRef(cardId);
+  // Nothing in this hook goes through the saga layer, which is what normally
+  // attaches the bearer token — so it is attached here, from the same place the
+  // sagas read it. Without it every request is anonymous and the API answers
+  // 401: the `/api/*` middleware reads the Authorization HEADER and never the
+  // access-token cookie (that path exists only for /attachments/*).
+  const authHeadersRef = useRef(null);
 
   onTranscriptRef.current = onTranscript;
   onSpokenRef.current = onSpoken;
+  onNoticeRef.current = onNotice;
   onStopRef.current = onStop;
   capabilityRef.current = capability;
   cardIdRef.current = cardId;
+  authHeadersRef.current = accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined;
 
   useEffect(
     () => () => {
@@ -260,13 +276,19 @@ export default function useVoiceChat({
 
       // Checked here rather than discovered as a 422: the server's cap is
       // published in the bootstrap precisely so an oversized recording costs
-      // nothing to refuse.
+      // nothing to refuse. It is SAID, not dropped in silence — a turn that
+      // vanished with no explanation is the worst outcome of the three.
       if (
         capabilityNow &&
         typeof capabilityNow.sttMaxBytes === 'number' &&
         capabilityNow.sttMaxBytes > 0 &&
         blob.size > capabilityNow.sttMaxBytes
       ) {
+        onNoticeRef.current('common.voiceChatRecordingTooLarge', {
+          size: formatBytes(blob.size),
+          limit: formatBytes(capabilityNow.sttMaxBytes),
+        });
+
         return;
       }
 
@@ -280,22 +302,32 @@ export default function useVoiceChat({
           return;
         }
 
-        const { item } = await voiceApi.transcribeVoiceRecording(targetCardId, {
-          data: bytesToBase64(bytes),
-          mimeType,
-        });
+        const { item } = await voiceApi.transcribeVoiceRecording(
+          targetCardId,
+          {
+            data: bytesToBase64(bytes),
+            mimeType,
+          },
+          authHeadersRef.current,
+        );
 
         if (!isCurrent(generation)) {
           return;
+        }
+
+        // The language the user was actually heard in. It is what the answer is
+        // read back in — and it is the ONLY thing that ever reaches the server's
+        // per-language voice map, which would otherwise be a configuration knob
+        // no request could reach.
+        if (item.languages && item.languages.length > 0) {
+          [heardLanguageRef.current] = item.languages;
         }
 
         // A provider answers a burst of noise with "" or ".", and a turn made of
         // that would be a comment nobody wrote and a whole agent session spent
         // answering it.
         if (isSendableTranscript(item.text)) {
-          // The language the user was heard in, so the reply is read back in a
-          // voice for that language rather than the deployment's default.
-          onTranscriptRef.current(item.text, item.languages && item.languages[0]);
+          onTranscriptRef.current(item.text);
         }
       } catch (error) {
         if (!isCurrent(generation)) {
@@ -618,6 +650,16 @@ export default function useVoiceChat({
       return undefined;
     }
 
+    // A reply the server would refuse for length is not sent at all: the mode
+    // says so and carries on listening, rather than spending a round trip on a
+    // 422 whose only handler turns the whole loop off.
+    if (speakAvailability(pendingSpeech.text, capability) === SpeakAvailabilities.TOO_LONG) {
+      onNoticeRef.current('common.voiceChatAnswerTooLong');
+      onSpokenRef.current(pendingSpeech.id);
+
+      return undefined;
+    }
+
     const generation = generationRef.current;
     const controller = { isCancelled: false };
 
@@ -628,10 +670,19 @@ export default function useVoiceChat({
       try {
         const pin = voicePinRef.current;
 
-        const { item } = await voiceApi.speakMessage(cardId, {
-          text: pendingSpeech.text,
-          ...(pin ? { voice: pin.voice, language: pin.language } : {}),
-        });
+        const { item } = await voiceApi.speakMessage(
+          cardId,
+          {
+            text: pendingSpeech.text,
+            // The pin once the server has decided; until then the language the
+            // user was last heard in, which is what makes the deployment's
+            // per-language voice map reachable at all.
+            ...(pin
+              ? { voice: pin.voice, language: pin.language }
+              : (heardLanguageRef.current && { language: heardLanguageRef.current }) || {}),
+          },
+          authHeadersRef.current,
+        );
 
         if (controller.isCancelled || !isCurrent(generation)) {
           return;
@@ -697,7 +748,7 @@ export default function useVoiceChat({
     // `pendingSpeech.id` rather than the object: the panel rebuilds it every
     // render and the effect must run once per message, not once per render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEnabled, isAvailable, cardId, pendingSpeech && pendingSpeech.id, isCurrent]);
+  }, [isEnabled, isAvailable, cardId, pendingSpeech && pendingSpeech.id, capability, isCurrent]);
 
   // Whatever was playing belongs to a conversation the user has left.
   useEffect(() => {
