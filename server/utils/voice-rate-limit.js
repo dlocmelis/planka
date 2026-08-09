@@ -107,6 +107,23 @@ const refilled = (bucket, limits, now) => {
  * makes it safe to forget. */
 const isForgettable = (bucket, now) => now - bucket.updatedAt >= bucket.limits.windowMs;
 
+/**
+ * Whether a figure is one the buckets can do arithmetic with.
+ *
+ * NaN or Infinity reaching a bucket would not throw — it would make every later
+ * comparison against that bucket false, which reads as "there is room" and
+ * silently removes the cap. The figures come from a provider's own JSON (an
+ * audio duration) and from a caller's payload length, so neither should ever be
+ * one; a limit that fails open is worth two lines of not finding out.
+ */
+const isCountable = (value) => typeof value === 'number' && Number.isFinite(value);
+
+/** What a turn takes out of the bucket. An unknown cost is charged the whole
+ * budget rather than nothing — the conservative direction, since the caller
+ * asking for it is the one that could not say what it would cost. */
+const reservationFor = (units, capacity) =>
+  isCountable(units) ? Math.min(Math.max(0, units), capacity) : capacity;
+
 /** How long until `missing` more tokens have refilled, in whole seconds and
  * never zero — a `Retry-After` of 0 is an invitation to retry immediately,
  * which is the one answer that is certainly wrong. */
@@ -202,7 +219,7 @@ const createVoiceRateLimiter = () => {
       // than letting one through — the per-request caps already bound what one
       // turn can spend. So a turn reserves what it asks for or the whole
       // budget, whichever is less.
-      const wanted = Math.min(units, normalized.maxUnits);
+      const wanted = reservationFor(units, normalized.maxUnits);
 
       if (bucket.units < wanted) {
         return {
@@ -234,9 +251,13 @@ const createVoiceRateLimiter = () => {
     settle({ scope, userId, limits, reserved = 0, spent = 0, now = Date.now() }) {
       const normalized = normalizeLimits(limits);
 
-      if (!normalized || reserved === spent) {
+      // A figure that cannot be counted leaves the reservation standing, which
+      // is what a turn whose cost nobody could establish should be charged.
+      if (!normalized || !isCountable(reserved) || !isCountable(spent) || reserved === spent) {
         return;
       }
+
+      const correction = reserved - spent;
 
       const bucket = buckets.get(keyFor(scope, userId));
 
@@ -245,7 +266,7 @@ const createVoiceRateLimiter = () => {
       }
 
       Object.assign(bucket, refilled(bucket, normalized, now));
-      bucket.units = Math.min(normalized.maxUnits, bucket.units + (reserved - spent));
+      bucket.units = Math.min(normalized.maxUnits, bucket.units + correction);
     },
 
     /** Forget everything. For tests, and for nothing else — there is no

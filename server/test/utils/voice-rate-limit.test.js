@@ -82,6 +82,20 @@ describe('voice-rate-limit', () => {
       expect(refused.retryAfterSec).to.equal(1);
     });
 
+    it('should charge the whole budget for a cost nobody could name', () => {
+      const limiter = createVoiceRateLimiter();
+
+      // The conservative direction. Treating an uncountable cost as nothing
+      // would let a caller who cannot say what a turn costs have as many of
+      // them as the request cap allows, for free. (An ABSENT `units` is a
+      // different thing and means zero — a scope with no cost dimension.)
+      const first = turn(limiter, { units: NaN });
+
+      expect(first.isAllowed).to.equal(true);
+      expect(first.reserved).to.equal(limits.maxUnits);
+      expect(turn(limiter, { units: 1 }).isAllowed).to.equal(false);
+    });
+
     it('should let through a turn that could cost more than the whole budget', () => {
       const limiter = createVoiceRateLimiter();
 
@@ -225,6 +239,24 @@ describe('voice-rate-limit', () => {
 
       expect(turn(limiter, { units: 100 }).isAllowed).to.equal(true);
       expect(turn(limiter, { units: 1 }).isAllowed).to.equal(false);
+    });
+
+    it('should not let a nonsense figure remove the cap', () => {
+      const limiter = createVoiceRateLimiter();
+
+      turn(limiter, { units: 100 });
+      // NaN or Infinity in a bucket does not throw — it makes every later
+      // comparison false, which reads as "there is room" and quietly turns the
+      // whole thing off. The costs come from a provider's JSON and a caller's
+      // payload, so this should be unreachable; a cap that fails open is worth
+      // making sure of.
+      settle(limiter, NaN, { reserved: 100 });
+      settle(limiter, undefined, { reserved: Infinity });
+
+      const refused = turn(limiter, { units: 10 });
+
+      expect(refused.isAllowed).to.equal(false);
+      expect(refused.exceeded).to.equal('units');
     });
 
     it('should do nothing for a user with no bucket', () => {
