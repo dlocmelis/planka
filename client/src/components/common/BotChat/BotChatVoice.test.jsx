@@ -557,6 +557,33 @@ test("the bot's reply is read aloud, and the mode says so", async () => {
   expect(status().textContent).toContain('common.voiceChatSpeaking');
 });
 
+test('a reply is not read aloud while the mode is off', async () => {
+  // The rule the Setlfi assistant had to be repaired to keep — *"Do not enable
+  // TTS without voice chat mode ON (currently when user types and assistant
+  // replies automatically TTS is enabled)"*, 2026-08-09. There, a second
+  // always-on read-aloud preference spoke replies with the mode switched off;
+  // here there has never been one and this is what says so. The panel is OPEN
+  // and the deployment has both halves of the voice configured, so the only
+  // thing not true of this conversation is the mode itself.
+  render();
+  click(launcher());
+  await settle();
+
+  receiveMessage('card-1', {
+    id: 'comment-1',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'It is waiting on review.',
+    createdAt: new Date(Date.now() + 1000),
+    isPersisted: true,
+  });
+
+  await settle();
+
+  expect(mockSpeak).not.toHaveBeenCalled();
+  expect(players).toHaveLength(0);
+});
+
 test('a reply that was already on the card when the mode came on is not read out', async () => {
   // Otherwise turning voice chat on would read out whichever answer happened to
   // be at the bottom of a conversation from last week.
