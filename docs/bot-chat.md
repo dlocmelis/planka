@@ -46,7 +46,14 @@ there is **answered** instead of being triaged as a request about a card. It
 moves nothing, re-prioritises nothing and re-plans nothing; the one thing it
 will DO is file new tickets, and it posts the links back into the chat.
 
-Two consequences worth knowing:
+It is **one conversation for the board**, not a private one per person —
+everything on a Planka board is visible to its members anyway, and the bot
+addresses each reply to whoever asked, so several people can use it and read
+each other. Talking in it needs nothing more than permission to comment (the
+card already exists; the orchestrator created it), which is the same rule as
+every other conversation in this panel.
+
+Three consequences worth knowing:
 
 - **Opening a card does not take you out of it.** Every other conversation
   follows the card you have open — looking something up mid-question would
@@ -56,6 +63,10 @@ Two consequences worth knowing:
   back to development", "this is urgent", "retry the deploy" are answered by
   the triage that can actually do them, and it needs the card. The general
   chat says so rather than pretending.
+- **An answer costs what every other message costs** — a whole agent session,
+  so minutes rather than seconds, queued behind whatever else the pipeline is
+  running. See *What a message costs* below; the general chat adds no new
+  cost, and the panel says `planka_bot is thinking…` while it waits.
 
 The entry is absent on a board that has no chat column or whose chat column is
 empty — the same rule as the launcher itself: an entry that opens a
