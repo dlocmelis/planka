@@ -364,6 +364,35 @@ test('...and Escape still closes it after a click on the thread moves focus off 
   expect(container.querySelector('[role="dialog"]')).toBeNull();
 });
 
+test('...and closing it hands the keyboard back to the button that opened it', () => {
+  mockPath = { boardId: 'board-1', cardId: 'card-1' };
+
+  render();
+  click(launcher());
+
+  const field = container.querySelector('textarea');
+  expect(document.activeElement).toBe(field);
+
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  // Everything focusable inside the panel goes away with it, and the browser
+  // drops focus on the body — so without this the reward for pressing Escape
+  // is a Tab sequence that starts again at the top of the board. The launcher
+  // is still on screen and is the control that opened it, which is where the
+  // disclosure pattern says focus belongs.
+  expect(document.activeElement).toBe(launcher());
+
+  // The close button is the same door, and closes the same way.
+  click(launcher());
+  click(findByLabel('action.close'));
+
+  expect(container.querySelector('[role="dialog"]')).toBeNull();
+  expect(document.activeElement).toBe(launcher());
+});
+
 test('the conversation follows the card that is open', () => {
   mockPath = { boardId: 'board-1', cardId: 'card-1' };
   mockMessagesByCardId['card-1'] = [
@@ -531,6 +560,14 @@ test('the panel says the bot is thinking while your message is the last one', ()
   click(launcher());
 
   expect(container.textContent).toContain('common.botIsThinking');
+
+  // ...out loud. An answer is minutes away and nothing moves the focus when it
+  // starts or when it times out, so a spinner alone tells a screen-reader user
+  // nothing at all — this row is the one part of the panel that has to announce
+  // itself, which is what the Setlfi assistant marks its own turn status with.
+  const status = container.querySelector('[role="status"]');
+  expect(status).not.toBeNull();
+  expect(status.textContent).toContain('common.botIsThinking');
 });
 
 test('an arriving message scrolls the thread down while it is parked at the bottom', () => {

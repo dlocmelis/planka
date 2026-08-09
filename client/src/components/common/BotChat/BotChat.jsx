@@ -3,7 +3,7 @@
  * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useDidUpdate } from '../../../lib/hooks';
 
@@ -67,6 +67,8 @@ const BotChat = React.memo(() => {
   const bot = useSelector(selectors.selectBotUserForCurrentBoard);
 
   const dispatch = useDispatch();
+
+  const launcherRef = useRef(null);
 
   const [isOpened, setIsOpened] = useState(false);
   const [cardId, setCardId] = useState(null);
@@ -134,6 +136,23 @@ const BotChat = React.memo(() => {
   useDidUpdate(() => {
     writeLastCardId(window.localStorage, cardId);
   }, [cardId]);
+
+  // Give the keyboard back to the button that opened the panel, which is the
+  // last piece of making Escape actually worth pressing. Everything focusable
+  // in the panel unmounts with it — the composer, the picker's search box, the
+  // close button — and a browser then drops focus on the body, so the next Tab
+  // starts again at the top of the board and whoever was navigating by keyboard
+  // has lost their place for having used the feature. The launcher is a toggle
+  // that stays on screen, so it is both still there to receive focus and the
+  // control the disclosure pattern says owns it.
+  useDidUpdate(() => {
+    if (!isOpened && launcherRef.current) {
+      // Programmatic, so `:focus-visible` follows how the panel was closed: a
+      // ring for the Escape that asked for it, none for a mouse on the close
+      // button.
+      launcherRef.current.focus();
+    }
+  }, [isOpened]);
 
   const card = useSelector((state) => (cardId ? selectCardById(state, cardId) : null));
 
@@ -342,6 +361,7 @@ const BotChat = React.memo(() => {
         </div>
       )}
       <Launcher
+        ref={launcherRef}
         bot={bot}
         position={position}
         unreadCount={unreadCount}

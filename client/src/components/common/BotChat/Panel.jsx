@@ -240,14 +240,23 @@ const Panel = React.memo(
           {messages.map((message) => (
             <Message key={message.id} message={message} />
           ))}
+          {/* Announced, not just drawn. This row is the only thing in the panel
+              that changes on its own — an answer takes minutes, so the wait
+              starts and then times out with no focus anywhere near it — and a
+              spinner says nothing to a screen reader. `role="status"` carries
+              the implicit polite live region, so it is read out without taking
+              the keyboard away from whatever is being typed next. It is what
+              the Setlfi assistant marks its own turn status with
+              (setl-web `components/assistant/TurnStatusRow.tsx`, rendered on
+              the same condition — only while there is a turn to report). */}
           {replyState === BotReplyStates.THINKING && (
-            <div className={styles.status}>
+            <div role="status" className={styles.status}>
               <Loader active inline size="mini" />
               <span>{t('common.botIsThinking', { username: bot.username })}</span>
             </div>
           )}
           {replyState === BotReplyStates.OVERDUE && (
-            <div className={styles.status}>
+            <div role="status" className={styles.status}>
               <Icon fitted name="clock outline" />
               <span>{t('common.botHasNotAnsweredYet', { username: bot.username })}</span>
             </div>
