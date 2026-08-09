@@ -18,7 +18,9 @@ import {
   microphoneStopReason,
   newVadState,
   pickRecorderMimeType,
+  isRefusal,
   readVoiceChatEnabled,
+  requestStopReason,
   sameLanguage,
   speakAvailability,
   speechTextLength,
@@ -483,6 +485,43 @@ describe('voice-chat', () => {
       expect(formatBytes(512)).toBe('512 bytes');
       expect(formatBytes(2048)).toBe('2 KB');
       expect(formatBytes(3 * 1024 * 1024)).toBe('3.0 MB');
+    });
+  });
+
+  describe('requestStopReason(error, unavailableReason) / isRefusal(error)', () => {
+    it('reads 503 as the feature going away, with the caller naming which half', () => {
+      expect(
+        requestStopReason({ code: 'E_SERVICE_UNAVAILABLE' }, VoiceChatStopReasons.DISABLED),
+      ).toBe(VoiceChatStopReasons.DISABLED);
+      expect(
+        requestStopReason({ code: 'E_SERVICE_UNAVAILABLE' }, VoiceChatStopReasons.NO_VOICE),
+      ).toBe(VoiceChatStopReasons.NO_VOICE);
+    });
+
+    it('tells an upstream failure apart, because the advice differs', () => {
+      expect(requestStopReason({ code: 'E_BAD_GATEWAY' }, VoiceChatStopReasons.DISABLED)).toBe(
+        VoiceChatStopReasons.PROVIDER_FAILED,
+      );
+    });
+
+    it('falls back to the generic failure for anything else, a dead request included', () => {
+      expect(requestStopReason({ code: 'E_NOT_FOUND' }, VoiceChatStopReasons.DISABLED)).toBe(
+        VoiceChatStopReasons.FAILED,
+      );
+      expect(requestStopReason(undefined, VoiceChatStopReasons.DISABLED)).toBe(
+        VoiceChatStopReasons.FAILED,
+      );
+    });
+
+    it('keeps a refusal of one recording out of the stop reasons entirely', () => {
+      // 422 means one turn was refused, not that the mode is broken — so it has
+      // no stop reason, and the loop keeps listening.
+      expect(isRefusal({ code: 'E_UNPROCESSABLE_ENTITY' })).toBe(true);
+      expect(isRefusal({ code: 'E_BAD_GATEWAY' })).toBe(false);
+      expect(isRefusal(undefined)).toBe(false);
+      expect(requestStopReason({ code: 'E_UNPROCESSABLE_ENTITY' }, null)).toBe(
+        VoiceChatStopReasons.FAILED,
+      );
     });
   });
 

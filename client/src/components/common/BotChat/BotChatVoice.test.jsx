@@ -668,6 +668,87 @@ test('a server that has lost its speech-to-text turns the mode off and says so',
   expect(actionsOfType(EntryActionTypes.COMMENT_FOR_CARD_CREATE)).toHaveLength(0);
 });
 
+test('a recording the server refuses costs one turn, not the mode', async () => {
+  // 422 is "this recording was wrong" — an unsupported container, audio past
+  // the duration cap. Turning voice chat off over one of them would make the
+  // user press the button again for something that was never broken.
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  mockTranscribe.mockRejectedValue({
+    code: 'E_UNPROCESSABLE_ENTITY',
+    message: 'Audio is too long: 340.0s exceeds the 300s limit',
+  });
+
+  await saySomething();
+
+  expect(voiceToggle().getAttribute('aria-pressed')).toBe('true');
+  expect(status().textContent).toContain('common.voiceChatTurnRefused');
+  // Still listening: the next turn goes through.
+  expect(status().textContent).toContain('common.voiceChatListening');
+  expect(actionsOfType(EntryActionTypes.COMMENT_FOR_CARD_CREATE)).toHaveLength(0);
+});
+
+test('an answer the server refuses is said so, and is not read again', async () => {
+  // A reply that reduces to nothing speakable — a bare heading, a fenced block
+  // — is one answer that cannot be read, not a broken mode.
+  mockSpeak.mockRejectedValue({
+    code: 'E_UNPROCESSABLE_ENTITY',
+    message: 'There is nothing in that message to read aloud',
+  });
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  receiveMessage('card-1', {
+    id: 'comment-1',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: '###',
+    createdAt: new Date(Date.now() + 1000),
+    isPersisted: true,
+  });
+  await settle();
+
+  expect(voiceToggle().getAttribute('aria-pressed')).toBe('true');
+  expect(status().textContent).toContain('common.voiceChatAnswerRefused');
+
+  // Marked spoken whatever happened, so nothing retries it on the next render.
+  await settle();
+  expect(mockSpeak).toHaveBeenCalledTimes(1);
+});
+
+test('a broken speech provider turns the mode off, and says whose fault it is', async () => {
+  // 502 is the provider behind the endpoint, not this machine — so the copy
+  // does not invite an immediate retry that would meet the same outage.
+  mockSpeak.mockRejectedValue({
+    code: 'E_BAD_GATEWAY',
+    message: 'The speech service rejected the request',
+  });
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  receiveMessage('card-1', {
+    id: 'comment-1',
+    userId: BOT.id,
+    author: MessageAuthors.BOT,
+    text: 'First answer.',
+    createdAt: new Date(Date.now() + 1000),
+    isPersisted: true,
+  });
+  await settle();
+
+  expect(voiceToggle().getAttribute('aria-pressed')).toBe('false');
+  expect(status().textContent).toContain('common.voiceChatProviderFailed');
+});
+
 test('a refused microphone turns the mode off with instructions', async () => {
   window.navigator.mediaDevices.getUserMedia.mockRejectedValue({ name: 'NotAllowedError' });
 

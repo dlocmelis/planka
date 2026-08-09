@@ -50,6 +50,13 @@ out why this one does not.
 that arrived after the mode was switched on for this conversation is spoken, and
 each is spoken once — including when the synthesis failed, which is not retried.
 
+**One refused turn is not a broken mode.** A recording the server will not
+accept and a reply with nothing speakable in it (a bare heading, a fenced block)
+are both answered 422; the row says so on a second line and the loop carries on
+listening. The mode only turns itself off for something that would refuse EVERY
+turn — the feature going away (503), the provider behind it failing (502), a
+microphone that was denied — and the sentence it leaves says which.
+
 **The mode is remembered per browser** (`planka-bot-chat-voice`), like the
 panel's width. Nothing opens a microphone on the strength of that alone: the
 loop only starts once the panel is open on a card you may comment on, and a

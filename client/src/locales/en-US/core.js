@@ -404,6 +404,7 @@ export default {
       viewer: 'Viewer',
       viewers: 'Viewers',
       visualTaskManagementWithLists: 'Visual task management with lists.',
+      voiceChatAnswerRefused: 'That answer could not be read aloud; it is on screen.',
       voiceChatAnswerTooLong: 'That answer was too long to read aloud; it is on screen.',
       voiceChatAudioBlocked:
         'Voice chat is off: this browser would not play audio without a tap. Turn it on again.',
@@ -417,10 +418,13 @@ export default {
       voiceChatNotAvailable: 'Voice chat is not available on this server.',
       voiceChatNotSupported: 'Voice chat is off: this browser cannot record audio.',
       voiceChatOpeningMicrophone: 'Opening the microphone…',
+      voiceChatProviderFailed:
+        'Voice chat is off: the speech service is not answering. Try again in a minute.',
       voiceChatRecordingTooLarge:
         'That recording was {{size}}, over the {{limit}} limit, so it was not sent. Try shorter turns.',
       voiceChatSpeaking: 'Reading the answer aloud…',
       voiceChatTranscribing: 'Sending what you said…',
+      voiceChatTurnRefused: 'That turn was not accepted; try saying it again.',
       voiceChatWaitingForBot: 'Waiting for an answer…',
       webhooks: 'Webhooks',
       whatsNew_title: "What's New",

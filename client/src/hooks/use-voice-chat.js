@@ -32,7 +32,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 // so importing it here would take every test that touches `hooks/index.js` down
 // with it.
 import voiceApi, { bytesToBase64, base64ToBlob } from '../api/voice';
-import ErrorCodes from '../constants/ErrorCodes';
 import {
   RECORDER_AUDIO_BITS_PER_SECOND,
   VOICE_CHAT_AUDIO_CONSTRAINTS,
@@ -43,10 +42,12 @@ import {
   formatBytes,
   frameLevelDb,
   isRecordingSupported,
+  isRefusal,
   isSendableTranscript,
   microphoneStopReason,
   newVadState,
   pickRecorderMimeType,
+  requestStopReason,
   sameLanguage,
   speakAvailability,
   uploadContentType,
@@ -346,13 +347,20 @@ export default function useVoiceChat({
           return;
         }
 
-        // 503 means the feature went away server-side. Retrying is pointless
-        // and the mode has to stop rather than sit listening at an endpoint
-        // that will refuse every utterance.
+        // A 422 is the server refusing THIS recording — a container it will not
+        // accept, audio past the duration cap. One turn is lost and the loop
+        // says so; turning the mode off over one bad recording would make the
+        // user press the button again for something that was never broken.
+        if (isRefusal(error)) {
+          onNoticeRef.current('common.voiceChatTurnRefused');
+          return;
+        }
+
+        // 503 means the feature went away server-side, 502 the provider behind
+        // it. Retrying is pointless in both, and the mode has to stop rather
+        // than sit listening at an endpoint that will refuse every utterance.
         onStopRef.current(
-          error && error.code === ErrorCodes.SERVICE_UNAVAILABLE
-            ? VoiceChatStopReasons.DISABLED
-            : VoiceChatStopReasons.FAILED,
+          requestStopReason(error, VoiceChatStopReasons.DISABLED),
           error && error.message,
         );
       } finally {
@@ -742,12 +750,18 @@ export default function useVoiceChat({
         });
       } catch (error) {
         if (!controller.isCancelled && isCurrent(generation)) {
-          onStopRef.current(
-            error && error.code === ErrorCodes.SERVICE_UNAVAILABLE
-              ? VoiceChatStopReasons.NO_VOICE
-              : VoiceChatStopReasons.FAILED,
-            error && error.message,
-          );
+          // A 422 is the server refusing THIS message — a reply that reduces to
+          // nothing speakable, which a code block or a bare heading does. It is
+          // one answer that cannot be read, not a broken mode, and `finally`
+          // marks it spoken so nothing retries it.
+          if (isRefusal(error)) {
+            onNoticeRef.current('common.voiceChatAnswerRefused');
+          } else {
+            onStopRef.current(
+              requestStopReason(error, VoiceChatStopReasons.NO_VOICE),
+              error && error.message,
+            );
+          }
         }
       } finally {
         if (audioUrlRef.current) {

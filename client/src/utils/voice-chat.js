@@ -51,6 +51,8 @@
  * unreachable. `vadStep`'s `armed` flag is the whole of the mechanism.
  */
 
+import ErrorCodes from '../constants/ErrorCodes';
+
 /* Phases */
 
 /**
@@ -100,8 +102,43 @@ export const VoiceChatStopReasons = {
    * had one when the bootstrap was read and answered 503 later. The mode stops
    * rather than degrading into a one-way conversation. */
   NO_VOICE: 'no-voice',
+  /** An upstream speech service failed or refused the request (502). Told apart
+   * from `FAILED` because the advice differs: the fault is not on this machine
+   * and pressing the button again immediately will meet the same outage, so the
+   * copy says so rather than inviting a retry. */
+  PROVIDER_FAILED: 'provider-failed',
   FAILED: 'failed',
 };
+
+/**
+ * Which of those a failed request means.
+ *
+ * A 503 is the feature going away under the loop — it stops rather than
+ * listening at an endpoint that will refuse every utterance. A 502 is the
+ * provider behind it. Anything else, including a request that never left the
+ * browser, is the generic failure.
+ *
+ * A 422 is DELIBERATELY not here: it means one recording or one message was
+ * refused, not that the mode is broken, and it is handled where it happens.
+ */
+export const requestStopReason = (error, unavailableReason) => {
+  const code = error && error.code;
+
+  if (code === ErrorCodes.SERVICE_UNAVAILABLE) {
+    return unavailableReason;
+  }
+
+  if (code === ErrorCodes.BAD_GATEWAY) {
+    return VoiceChatStopReasons.PROVIDER_FAILED;
+  }
+
+  return VoiceChatStopReasons.FAILED;
+};
+
+/** Whether a failed request was the server refusing THIS recording or THIS
+ * message, rather than a fault in the feature. The loop says so and keeps
+ * listening. */
+export const isRefusal = (error) => !!error && error.code === ErrorCodes.UNPROCESSABLE_ENTITY;
 
 /* The tuning */
 
@@ -774,6 +811,7 @@ export const VOICE_CHAT_STOP_REASON_KEYS = Object.freeze({
   [VoiceChatStopReasons.DISABLED]: 'common.voiceChatNotAvailable',
   [VoiceChatStopReasons.AUDIO_SUSPENDED]: 'common.voiceChatAudioBlocked',
   [VoiceChatStopReasons.NO_VOICE]: 'common.voiceChatNoVoice',
+  [VoiceChatStopReasons.PROVIDER_FAILED]: 'common.voiceChatProviderFailed',
   [VoiceChatStopReasons.FAILED]: 'common.voiceChatFailed',
 });
 
