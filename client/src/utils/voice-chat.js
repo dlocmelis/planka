@@ -107,6 +107,12 @@ export const VoiceChatStopReasons = {
    * and pressing the button again immediately will meet the same outage, so the
    * copy says so rather than inviting a retry. */
   PROVIDER_FAILED: 'provider-failed',
+  /** The session is no longer good for anything (401). Nothing about the mode
+   * is broken and pressing the button again will meet the same 401, so it says
+   * what actually happened — and the panel logs the app out on it, because
+   * these two endpoints are the only ones in the app that do not go through
+   * `sagas/core/request.js`, which is where every other 401 does that. */
+  UNAUTHORIZED: 'unauthorized',
   FAILED: 'failed',
 };
 
@@ -130,6 +136,10 @@ export const requestStopReason = (error, unavailableReason) => {
 
   if (code === ErrorCodes.BAD_GATEWAY) {
     return VoiceChatStopReasons.PROVIDER_FAILED;
+  }
+
+  if (code === ErrorCodes.UNAUTHORIZED) {
+    return VoiceChatStopReasons.UNAUTHORIZED;
   }
 
   return VoiceChatStopReasons.FAILED;
@@ -909,6 +919,7 @@ export const VOICE_CHAT_STOP_REASON_KEYS = Object.freeze({
   [VoiceChatStopReasons.AUDIO_SUSPENDED]: 'common.voiceChatAudioBlocked',
   [VoiceChatStopReasons.NO_VOICE]: 'common.voiceChatNoVoice',
   [VoiceChatStopReasons.PROVIDER_FAILED]: 'common.voiceChatProviderFailed',
+  [VoiceChatStopReasons.UNAUTHORIZED]: 'common.voiceChatSessionExpired',
   [VoiceChatStopReasons.FAILED]: 'common.voiceChatFailed',
 });
 

@@ -256,6 +256,24 @@ const launcher = () =>
 const voiceToggle = () =>
   findByLabel('action.turnOnVoiceChat') || findByLabel('action.turnOffVoiceChat');
 const status = () => container.querySelector('[role="status"]');
+const stopButton = () =>
+  [...container.querySelectorAll('button')].find(
+    (button) => button.textContent === 'action.stopSpeaking',
+  );
+
+/** One bot reply, arriving after the mode came on — which is the only kind that
+ * is ever read aloud. */
+const BOT_REPLY = {
+  id: 'comment-1',
+  userId: BOT.id,
+  author: MessageAuthors.BOT,
+  text: 'It is waiting on review.',
+  isPersisted: true,
+};
+
+const SPOKEN_ANSWER = {
+  item: { data: 'QUJD', mimeType: 'audio/mpeg', voice: 'voice-en', language: 'en' },
+};
 
 /** Let every pending microtask settle — the microphone is opened in an async
  * chain of four awaits before the sampler even starts. */
@@ -529,7 +547,11 @@ test("the bot's reply is read aloud, and the mode says so", async () => {
     {
       Authorization: 'Bearer access-token',
     },
+    expect.any(AbortSignal),
   );
+  // The turn is what carries that signal, so it is not aborted while the answer
+  // is still wanted.
+  expect(mockSpeak.mock.calls[0][3].aborted).toBe(false);
   expect(players).toHaveLength(1);
   expect(players[0].src).toBe('blob:voice');
   expect(status().textContent).toContain('common.voiceChatSpeaking');
@@ -638,9 +660,7 @@ test('the answer can be stopped, and the loop goes back to listening', async () 
 
   await settle();
 
-  const stop = [...container.querySelectorAll('button')].find(
-    (button) => button.textContent === 'action.stopSpeaking',
-  );
+  const stop = stopButton();
 
   expect(stop).toBeDefined();
 
@@ -648,6 +668,235 @@ test('the answer can be stopped, and the loop goes back to listening', async () 
   await settle();
 
   expect(status().textContent).toContain('common.voiceChatListening');
+});
+
+test('stopping a synthesis that is still in flight cancels it and plays nothing', async () => {
+  // The Stop button is offered for the WHOLE request, not only for the clip, so
+  // most presses of it land here. What must not happen is the answer arriving
+  // afterwards and playing anyway: this loop is half-duplex, the microphone
+  // re-arms the moment speaking ends, and an answer talking under an armed
+  // microphone gets transcribed and posted to the card as if the user had said
+  // it.
+  let deliverAnswer;
+  mockSpeak.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        deliverAnswer = resolve;
+      }),
+  );
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  receiveMessage('card-1', { ...BOT_REPLY, createdAt: new Date(Date.now() + 1000) });
+  await settle();
+
+  expect(mockSpeak).toHaveBeenCalledTimes(1);
+  expect(stopButton()).toBeDefined();
+
+  const { signal } = { signal: mockSpeak.mock.calls[0][3] };
+
+  click(stopButton());
+  await settle();
+
+  // The request itself is given up, not merely its result: synthesis is billed
+  // per character.
+  expect(signal.aborted).toBe(true);
+  expect(status().textContent).toContain('common.voiceChatListening');
+
+  await act(async () => {
+    deliverAnswer(SPOKEN_ANSWER);
+    await Promise.resolve();
+  });
+
+  await settle();
+
+  expect(players).toHaveLength(0);
+  expect(status().textContent).toContain('common.voiceChatListening');
+  // And nothing offers the same answer again on the next render.
+  expect(mockSpeak).toHaveBeenCalledTimes(1);
+});
+
+test('the microphone stays shut after a stop that beat the answer home', async () => {
+  // The other half of the same bug: `isSpeaking` gating the VAD is what keeps
+  // the loop half-duplex, so an answer that plays after Stop plays under an
+  // armed microphone.
+  let deliverAnswer;
+  mockSpeak.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        deliverAnswer = resolve;
+      }),
+  );
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  receiveMessage('card-1', { ...BOT_REPLY, createdAt: new Date(Date.now() + 1000) });
+  await settle();
+
+  click(stopButton());
+  await settle();
+
+  await act(async () => {
+    deliverAnswer(SPOKEN_ANSWER);
+    await Promise.resolve();
+  });
+
+  await settle();
+
+  // Nothing is playing, so what the microphone hears now is the room and not
+  // the bot: one turn goes out, and it is the user's.
+  await saySomething();
+
+  expect(players).toHaveLength(0);
+  expect(mockTranscribe).toHaveBeenCalledTimes(1);
+});
+
+test('a socket reconnect while the answer is being synthesised does not pay for it twice', async () => {
+  // `selectVoiceChatCapability` returns `bootstrap.voiceChat`, and the reducer
+  // replaces the whole bootstrap on SOCKET_RECONNECT_HANDLE — so every
+  // reconnect hands the panel an equal but NEW object. A speech effect that
+  // depended on it would restart here: a second billed synthesis, and an answer
+  // that never plays because the first run's teardown clears the pending one.
+  let deliverAnswer;
+  mockSpeak.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        deliverAnswer = resolve;
+      }),
+  );
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  receiveMessage('card-1', { ...BOT_REPLY, createdAt: new Date(Date.now() + 1000) });
+  await settle();
+
+  expect(mockSpeak).toHaveBeenCalledTimes(1);
+
+  act(() => {
+    mockVoiceCapability = { ...mockVoiceCapability };
+    store.dispatch({ type: 'SOCKET_RECONNECT_HANDLE' });
+  });
+
+  await settle();
+
+  expect(mockSpeak).toHaveBeenCalledTimes(1);
+  expect(mockSpeak.mock.calls[0][3].aborted).toBe(false);
+
+  await act(async () => {
+    deliverAnswer(SPOKEN_ANSWER);
+    await Promise.resolve();
+  });
+
+  await settle();
+
+  // The answer the user waited for is the one they hear.
+  expect(mockSpeak).toHaveBeenCalledTimes(1);
+  expect(players).toHaveLength(1);
+  expect(players[0].src).toBe('blob:voice');
+  expect(status().textContent).toContain('common.voiceChatSpeaking');
+});
+
+test('an answer the browser refuses to play is given up rather than repeated', async () => {
+  // `audio.onerror` is one of only two things that ever settle the playback
+  // promise, so a decode failure that was not handled would leave the row
+  // saying "Reading the answer aloud" for the rest of the conversation and the
+  // microphone shut behind it.
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  receiveMessage('card-1', { ...BOT_REPLY, createdAt: new Date(Date.now() + 1000) });
+  await settle();
+
+  expect(players).toHaveLength(1);
+
+  await act(async () => {
+    players[0].onerror();
+    await Promise.resolve();
+  });
+
+  await settle();
+
+  expect(status().textContent).toContain('common.voiceChatListening');
+  // Marked spoken all the same: a message that cannot be played must not be
+  // retried on every render for ever.
+  expect(mockSpeak).toHaveBeenCalledTimes(1);
+});
+
+test('a browser that will not leave the audio context suspended stops the mode and says so', async () => {
+  // The mode remembers itself across a reload and reopens the microphone with
+  // no user gesture; an autoplay policy answers that by handing back frames of
+  // zeroes, which read as a very quiet room rather than as a failure — so the
+  // row would say "Listening" at a microphone that can never hear anything.
+  window.AudioContext = class SuspendedAudioContext {
+    constructor() {
+      this.state = 'suspended';
+    }
+
+    // eslint-disable-next-line class-methods-use-this
+    resume() {
+      return Promise.resolve();
+    }
+
+    // eslint-disable-next-line class-methods-use-this
+    close() {
+      return Promise.resolve();
+    }
+  };
+
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  expect(voiceToggle().getAttribute('aria-pressed')).toBe('false');
+  expect(status().textContent).toContain('common.voiceChatAudioBlocked');
+});
+
+test('a session the server no longer accepts stops the mode and logs the app out', async () => {
+  // These two endpoints are the only requests in the app that do not go through
+  // `sagas/core/request.js`, which is what turns a 401 into a logout
+  // everywhere else.
+  render();
+  click(launcher());
+  click(voiceToggle());
+  await settle();
+
+  mockTranscribe.mockRejectedValue({
+    code: 'E_UNAUTHORIZED',
+    message: 'Access token is invalid',
+  });
+
+  await saySomething();
+
+  expect(voiceToggle().getAttribute('aria-pressed')).toBe('false');
+  expect(status().textContent).toContain('common.voiceChatSessionExpired');
+  expect(actionsOfType(EntryActionTypes.LOGOUT)).toHaveLength(1);
+});
+
+test('a stored preference for a mode this deployment cannot run is forgotten', async () => {
+  // Otherwise a returning user is stuck looking at "not available on this
+  // server" with the only control that could clear it disabled.
+  window.localStorage.setItem('planka-bot-chat-voice', 'true');
+  mockVoiceCapability = { ...mockVoiceCapability, ttsEnabled: false };
+
+  render();
+  click(launcher());
+  await settle();
+
+  expect(voiceToggle().getAttribute('aria-pressed')).toBe('false');
+  expect(window.localStorage.getItem('planka-bot-chat-voice')).toBeNull();
+  expect(window.navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
 });
 
 test('a server that has lost its speech-to-text turns the mode off and says so', async () => {

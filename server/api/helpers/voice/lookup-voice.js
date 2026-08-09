@@ -34,7 +34,11 @@
 const { ProxyAgent } = require('undici');
 
 const endpoints = require('../../../utils/voice-endpoints');
-const { CARTESIA_VERSION } = require('../../../utils/voice');
+const { CARTESIA_VERSION, discardBody, readBoundedBody } = require('../../../utils/voice');
+
+/** The ceiling on a catalogue page, as a backstop rather than a business rule:
+ * Cartesia's list for one language is a few dozen entries. */
+const MAX_CATALOG_BYTES = 4 * 1024 * 1024;
 const {
   VoiceSources,
   pickVoiceFromCatalog,
@@ -138,10 +142,25 @@ module.exports = {
         // report properly; there is nothing this can add. A 4xx on the language
         // is the provider declining to answer, not "no such voice", so it is
         // NOT cached as an answer.
+        //
+        // The body is never read on this path, and an undici body nobody
+        // consumes holds its connection open until it is — so it is given back
+        // explicitly rather than left to the collector.
+        discardBody(response);
+
         throw new Error(`HTTP ${response.status}`);
       }
 
-      payload = await response.json();
+      // Read here rather than through `.json()`, and before the abort timer is
+      // cleared: `.json()` has no ceiling, and this is the one call in the
+      // feature that sits in FRONT of an answer the user is waiting for.
+      const body = await readBoundedBody(response, MAX_CATALOG_BYTES);
+
+      if (!body.ok) {
+        throw new Error('catalogue response is too large');
+      }
+
+      payload = JSON.parse(body.buffer.toString('utf8'));
     } catch (error) {
       clearTimeout(timeout);
 

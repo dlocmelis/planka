@@ -35,11 +35,13 @@ const { ProxyAgent } = require('undici');
 const endpoints = require('../../../utils/voice-endpoints');
 const {
   CARTESIA_VERSION,
+  MAX_PROVIDER_ERROR_BYTES,
   VoiceProviderError,
   VoiceRequestError,
   isLanguageCode,
   isVoiceId,
   normalizeLanguage,
+  readBoundedBody,
   speechTextLength,
 } = require('../../../utils/voice');
 const { VoiceSources } = require('../../../utils/voice-catalog');
@@ -54,6 +56,37 @@ const {
  * than the markdown the ceiling measured — three times is setl's own headroom,
  * and the cut speaks "…the rest is on screen…" rather than stopping dead. */
 const PREPARED_TEXT_FACTOR = 3;
+
+/** Nobody reads aloud slower than this, and it is deliberately an under-estimate
+ * — it is the denominator of a ceiling, so being wrong on the low side makes
+ * that ceiling more generous rather than less. */
+const SLOWEST_SPEECH_CHARS_PER_SECOND = 8;
+
+/** The ceiling when the deployment has removed the character cap altogether:
+ * with nothing to derive one from, a flat backstop is all that is left. */
+const UNCAPPED_MAX_AUDIO_BYTES = 64 * 1024 * 1024;
+
+/**
+ * How many bytes of audio this deployment could legitimately be sent back.
+ *
+ * A backstop on the body read, not a business rule: the prepared text is at
+ * most `maxChars * PREPARED_TEXT_FACTOR` characters, that takes at least
+ * `SLOWEST_SPEECH_CHARS_PER_SECOND` characters a second to say, and the
+ * container fixes the byte rate — wav being the expensive one, at two bytes per
+ * sample. Doubled, because none of those three is exact and a legitimate answer
+ * must never hit this.
+ */
+const maxAudioBytesFor = (config) => {
+  if (!(config.maxChars > 0)) {
+    return UNCAPPED_MAX_AUDIO_BYTES;
+  }
+
+  const seconds = (config.maxChars * PREPARED_TEXT_FACTOR) / SLOWEST_SPEECH_CHARS_PER_SECOND;
+  const bytesPerSecond =
+    config.container === 'wav' ? config.sampleRate * 2 : Math.ceil(config.bitRate / 8);
+
+  return Math.ceil(seconds * bytesPerSecond * 2);
+};
 
 const contentTypeFor = (container) => (container === 'wav' ? 'audio/wav' : 'audio/mpeg');
 
@@ -155,6 +188,19 @@ module.exports = {
       throw new VoiceRequestError('Language is not a valid code');
     }
 
+    // A cheap gate in front of the exact one. `speechTextLength` spreads the
+    // whole string to count CODE POINTS, which on a body written to be big is
+    // several megabytes of heap and tens of milliseconds of synchronous event
+    // loop — spent before anything has been validated. A UTF-16 length is never
+    // below the code-point count and never above twice it, so a string longer
+    // than twice the ceiling is certainly over it, and this says so without
+    // walking it.
+    if (tts.maxChars > 0 && inputs.text.length > tts.maxChars * 2) {
+      throw new VoiceRequestError(
+        `Text is too long to read aloud: it exceeds the ${tts.maxChars}-character limit`,
+      );
+    }
+
     // Measured against the RAW markdown, which is the same string the client
     // measured before it offered the control — so a message the client thought
     // speakable is never refused here.
@@ -197,6 +243,7 @@ module.exports = {
     const timeout = setTimeout(() => controller.abort(), tts.timeoutSec * 1000);
 
     let response;
+    let responseBody;
     try {
       response = await fetch(`${endpoints.cartesiaBaseUrl}/tts/bytes`, {
         method: 'POST',
@@ -213,16 +260,33 @@ module.exports = {
           ? new ProxyAgent(sails.config.custom.outgoingProxy)
           : undefined,
       });
+
+      // Read here, INSIDE the window the abort timer covers, and with a
+      // ceiling. `arrayBuffer()` reads to the end of the body whatever comes
+      // back, and a `finally` around the fetch alone would have disarmed the
+      // timeout the moment the headers arrived — so a provider that stalls
+      // partway through the audio would pin this request indefinitely.
+      responseBody = await readBoundedBody(
+        response,
+        response.ok ? maxAudioBytesFor(tts) : MAX_PROVIDER_ERROR_BYTES,
+      );
     } finally {
       clearTimeout(timeout);
     }
 
     if (!response.ok) {
-      const errorBody = (await response.text()).slice(0, 2048);
-      throw new VoiceProviderError(tts.provider, response.status, errorBody);
+      throw new VoiceProviderError(
+        tts.provider,
+        response.status,
+        responseBody.buffer.toString('utf8').slice(0, 2048),
+      );
     }
 
-    const audio = Buffer.from(await response.arrayBuffer());
+    if (!responseBody.ok) {
+      throw new VoiceProviderError(tts.provider, response.status, 'audio response is too large');
+    }
+
+    const audio = responseBody.buffer;
 
     if (audio.length === 0) {
       // A 200 with no audio in it: the character count was spent before the

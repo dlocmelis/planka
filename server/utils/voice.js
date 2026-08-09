@@ -263,6 +263,78 @@ const isOutgoingHostAllowed = (hostname, env) => {
  */
 const speechTextLength = (text) => [...String(text || '')].length;
 
+/**
+ * How much of a provider's ERROR body is worth taking into memory before it is
+ * quoted into a log line. Generous for an HTML error page, small enough that a
+ * provider answering an outage with something enormous costs nothing.
+ */
+const MAX_PROVIDER_ERROR_BYTES = 64 * 1024;
+
+/**
+ * A response body, with a ceiling on how much of it is read and the connection
+ * handed back the moment that ceiling is crossed.
+ *
+ * `response.json()`, `.text()` and `.arrayBuffer()` all read to the END of the
+ * body whatever its size — the `.slice(0, 2048)` a caller then applies happens
+ * once the whole thing is already in memory. Both voice halves talk to a third
+ * party over a connection this process does not control, so both read through
+ * here instead. The repo already answers the same question for favicons in
+ * `api/helpers/utils/download-favicon.js`; this is that loop, shared.
+ *
+ * Answers `{ ok, buffer }`. `ok` is false when the body ran past `maxBytes`,
+ * and whatever arrived before that is still in `buffer` so a caller quoting an
+ * error page has something to quote.
+ *
+ * The caller is expected to run this INSIDE the window its abort timer covers:
+ * clearing that timer when the headers arrive leaves the body read unbounded in
+ * time, and a provider that stalls mid-body pins the request either way.
+ */
+const readBoundedBody = async (response, maxBytes) => {
+  if (!response.body) {
+    return { ok: true, buffer: Buffer.alloc(0) };
+  }
+
+  const reader = response.body.getReader();
+
+  const chunks = [];
+  let length = 0;
+
+  for (;;) {
+    // eslint-disable-next-line no-await-in-loop
+    const { value, done } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    chunks.push(value);
+    length += value.length;
+
+    if (length > maxBytes) {
+      // Not awaited: the connection is being given up, and the only thing
+      // waiting on it would be this request.
+      reader.cancel().catch(() => {});
+
+      return { ok: false, buffer: Buffer.concat(chunks) };
+    }
+  }
+
+  return { ok: true, buffer: Buffer.concat(chunks) };
+};
+
+/**
+ * Give a body back unread.
+ *
+ * An undici response whose body is never consumed holds its connection open
+ * until it is, so a path that throws on the STATUS without touching the body —
+ * which is the natural way to write it — leaks one connection per failure.
+ */
+const discardBody = (response) => {
+  if (response.body) {
+    response.body.cancel().catch(() => {});
+  }
+};
+
 /** MB/KB for a byte count, for user-facing copy only. */
 const formatBytes = (bytes) => {
   if (bytes >= 1024 * 1024) {
@@ -280,9 +352,11 @@ module.exports = {
   AUDIO_MIME_TYPES,
   CARTESIA_VERSION,
   INTERNAL_OUTGOING_PROXY,
+  MAX_PROVIDER_ERROR_BYTES,
   VoiceProviderError,
   VoiceRequestError,
   allowedAudioMimeTypes,
+  discardBody,
   formatBytes,
   isLanguageCode,
   isOutgoingHostAllowed,
@@ -291,5 +365,6 @@ module.exports = {
   normalizeLanguage,
   parseKeyterms,
   parseVoiceMap,
+  readBoundedBody,
   speechTextLength,
 };

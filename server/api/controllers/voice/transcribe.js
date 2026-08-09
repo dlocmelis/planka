@@ -130,7 +130,13 @@ module.exports = {
       // Base64 of the byte cap plus slack for the encoding's padding. The real
       // bound is voiceSttMaxBytes, checked against the DECODED length below —
       // this only keeps a hopeless string from being decoded at all.
-      maxLength: 4 * 1024 * 1024,
+      //
+      // One megabyte and not more, because that is the ceiling the body parser
+      // in front of this route enforces anyway (skipper's default, not
+      // overridden in `config/http.js`): the default 700 KB cap is ~956 KB
+      // encoded, so a value above this could never be reached and would only
+      // describe a limit that does not exist.
+      maxLength: 1024 * 1024,
     },
     mimeType: {
       type: 'string',
@@ -141,6 +147,13 @@ module.exports = {
       type: 'string',
       maxLength: 32,
       allowNull: true,
+      // Validated rather than forwarded. It goes straight into the provider's
+      // query string, so a value it does not know costs a billed round trip and
+      // comes back as the misleading "that recording could not be transcribed;
+      // try recording it again" — advice for a problem the caller does not
+      // have. `multi` is Nova-3's code-switching mode; anything else is a
+      // BCP-47 tag, which is what the synthesis half already insists on.
+      regex: /^(multi|[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*)$/,
     },
   },
 

@@ -53,6 +53,22 @@ const buildSttConfig = (custom) => {
     };
   }
 
+  // A VOICE_STT_MAX_BYTES that does not parse comes through as null, and `null
+  // || 0` is how "no cap at all" is spelled downstream: the guard in
+  // `controllers/voice/transcribe.js` stops firing AND the bootstrap publishes
+  // `sttMaxBytes: null`, so the browser stops pre-checking too. A typo would
+  // therefore REMOVE the upload limit — the loudest possible version of the
+  // silent-default failure this file exists to prevent — so the half goes off
+  // with an error instead.
+  if (typeof custom.voiceSttMaxBytes !== 'number' || custom.voiceSttMaxBytes <= 0) {
+    return {
+      config: null,
+      error:
+        "VOICE_STT_MAX_BYTES does not name a size (want something like '700kb'); " +
+        'refusing to run the upload with no limit',
+    };
+  }
+
   return {
     error: null,
     config: {
@@ -61,7 +77,7 @@ const buildSttConfig = (custom) => {
       model: (custom.voiceSttModel || 'nova-3').trim(),
       language: (custom.voiceSttLanguage || 'multi').trim(),
       keyterms: parseKeyterms(custom.voiceSttKeyterms),
-      maxBytes: custom.voiceSttMaxBytes || 0,
+      maxBytes: custom.voiceSttMaxBytes,
       maxDurationSec: custom.voiceSttMaxDurationSec || 0,
       timeoutSec: custom.voiceSttTimeoutSec || 60,
     },

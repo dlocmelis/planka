@@ -424,6 +424,7 @@ export default {
         'That recording was {{size}}, over the {{limit}} limit, so it was not sent. Try shorter turns.',
       voiceChatRecordingTooLong:
         'That recording was {{duration}}, over the {{limit}} limit this server accepts, so it was not sent. Try shorter turns.',
+      voiceChatSessionExpired: 'Voice chat is off: your session has expired. Sign in again.',
       voiceChatSpeaking: 'Reading the answer aloud…',
       voiceChatTranscribing: 'Sending what you said…',
       voiceChatTurnRefused: 'That turn was not accepted; try saying it again.',

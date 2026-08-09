@@ -70,6 +70,79 @@ import {
  */
 const RECORDER_STOP_DEADLINE_MS = 2000;
 
+/**
+ * The controller for one turn of speech — one bot answer being fetched and read
+ * out — and the answer to "who owns the speaker right now".
+ *
+ * A turn outlives the run that started it: the run parks inside `await` while
+ * the request is in flight and again while the clip plays, and at either point
+ * the turn can be revoked by something else entirely — the Stop button, the
+ * panel closing, the conversation moving to another card. Everything that must
+ * be undone when that happens is held HERE, on the turn, rather than in a ref
+ * shared by every run: the request, the object URL, and the promise the run is
+ * parked on. That is what makes revoking one turn incapable of cancelling the
+ * request, revoking the URL, or resolving the playback of the turn that
+ * replaced it.
+ *
+ * `cancel` answers whether it was this call that cancelled, so that the several
+ * places which may revoke the same turn do their share of the work exactly
+ * once.
+ */
+const newSpeechTurn = (messageId) => {
+  const abortController = new AbortController();
+
+  let isCancelled = false;
+  let audioUrl = null;
+  let resolvePlayback = null;
+
+  const releaseAudioUrl = () => {
+    if (audioUrl !== null) {
+      URL.revokeObjectURL(audioUrl);
+      audioUrl = null;
+    }
+  };
+
+  // The promise the run awaits while the clip plays. Its only other resolvers
+  // are the audio element's `onended` and `onerror`, and a cancelled turn takes
+  // both away — so without this a stopped answer would leave one pending
+  // promise and its whole closure behind, once per Stop press.
+  const settlePlayback = () => {
+    if (resolvePlayback !== null) {
+      const resolve = resolvePlayback;
+      resolvePlayback = null;
+      resolve();
+    }
+  };
+
+  return {
+    messageId,
+    signal: abortController.signal,
+    isCancelled: () => isCancelled,
+    holdAudioUrl: (url) => {
+      audioUrl = url;
+    },
+    holdPlayback: (resolve) => {
+      resolvePlayback = resolve;
+    },
+    releaseAudioUrl,
+    cancel: () => {
+      if (isCancelled) {
+        return false;
+      }
+
+      isCancelled = true;
+      // The request itself, not merely its result: synthesis is billed per
+      // character, so a turn nobody will hear stops costing money now rather
+      // than when its audio arrives and is thrown away.
+      abortController.abort();
+      settlePlayback();
+      releaseAudioUrl();
+
+      return true;
+    },
+  };
+};
+
 /** The `AudioContext` constructor, or null. Safari exposed only the prefixed
  * one until 14.1 and still exposes it. */
 const audioContextClass = () => {
@@ -115,11 +188,27 @@ export default function useVoiceChat({
   const isSpeakingRef = useRef(false);
   const isCapturingRef = useRef(false);
   const audioRef = useRef(null);
-  const audioUrlRef = useRef(null);
+  // The turn that currently OWNS the speaker: the synthesis in flight, the clip
+  // playing, and the shared state both of them write.
+  //
+  // It exists because a turn can be revoked at any await point — the Stop
+  // button, the panel closing, the conversation moving to another card — and
+  // the run that was revoked is still there, parked inside an `await`, about to
+  // write into refs that may by then belong to the turn that replaced it. Every
+  // write below therefore goes through `isSpeechTurnOwner`, and the two things
+  // that outlive a revoked turn (the request and the object URL) belong to the
+  // turn rather than to the hook, so cancelling one cannot cancel the other's.
+  //
+  // The microphone loop has had exactly this since it was written, in
+  // `generationRef`/`isCurrent`; this is the same idea for the speaker.
+  const speechTurnRef = useRef(null);
   // Bumped whenever the microphone is torn down, so an upload or a playback
   // that was in flight when the mode was switched off cannot write state back
   // into a loop that no longer exists.
   const generationRef = useRef(0);
+  // The upload in flight, so a mode that is switched off stops paying for the
+  // recording it will never read the transcript of.
+  const uploadAbortRef = useRef(null);
   const isMountedRef = useRef(true);
   // The voice the server picked for this conversation, sent back on the next
   // message so a conversation is read in one voice rather than resolving a new
@@ -181,27 +270,85 @@ export default function useVoiceChat({
     [],
   );
 
-  const stopSpeaking = useCallback(() => {
+  /** Whether this run still owns the speaker, and may therefore write the
+   * shared state. False from the instant it is revoked — which is any await
+   * point, so it is re-asked after every one of them. */
+  const isSpeechTurnOwner = useCallback(
+    (turn) => isMountedRef.current && !turn.isCancelled() && speechTurnRef.current === turn,
+    [],
+  );
+
+  /** Silence the element and let go of the clip it decoded. Without `load()` it
+   * keeps that clip and a later bare `play()` replays it. */
+  const releaseAudioElement = useCallback(() => {
     const audio = audioRef.current;
 
-    if (audio) {
-      audio.onended = null;
-      audio.onerror = null;
-      audio.pause();
-      audio.removeAttribute('src');
-      // Without load() the element keeps the decoded clip and a later bare
-      // play() replays it.
-      audio.load();
+    if (!audio) {
+      return;
     }
 
-    if (audioUrlRef.current) {
-      URL.revokeObjectURL(audioUrlRef.current);
-      audioUrlRef.current = null;
-    }
-
-    isSpeakingRef.current = false;
-    setIsSpeaking(false);
+    audio.onended = null;
+    audio.onerror = null;
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
   }, []);
+
+  /**
+   * Take back everything one speech turn owns: the request, the clip, the
+   * object URL, and the promise its run is parked on.
+   *
+   * Deliberately mechanical — it tells nobody anything. Whether the message
+   * counts as spoken differs between the two callers (`stopSpeaking` means the
+   * user does not want to hear it; the effect's own cleanup means the turn is
+   * being replaced) and is decided there.
+   */
+  const revokeSpeechTurn = useCallback(
+    (turn) => {
+      // `cancel` gives up the request, the object URL and the promise the run
+      // is parked on — everything that belongs to the turn alone — and answers
+      // false if somebody had already done it.
+      if (!turn || !turn.cancel()) {
+        return;
+      }
+
+      // The rest is SHARED, so only the turn that still owns it may touch it: a
+      // run revoked after another took the speaker would otherwise silence the
+      // clip that replaced its own.
+      if (speechTurnRef.current !== turn) {
+        return;
+      }
+
+      speechTurnRef.current = null;
+
+      releaseAudioElement();
+
+      isSpeakingRef.current = false;
+      setIsSpeaking(false);
+    },
+    [releaseAudioElement],
+  );
+
+  /**
+   * Stop the answer being read out — the Stop button, and everywhere the
+   * conversation itself ends.
+   *
+   * The message is marked spoken as well as revoked: the user has said they do
+   * not want to hear this one, and a `pendingSpeech` that survives the press
+   * would be offered again on the very next render.
+   */
+  const stopSpeaking = useCallback(() => {
+    const turn = speechTurnRef.current;
+
+    revokeSpeechTurn(turn);
+    // Also for the turn that finished on its own: the element still holds the
+    // clip it decoded until something asks it not to.
+    releaseAudioElement();
+
+    if (turn && isMountedRef.current) {
+      onSpokenRef.current(turn.messageId);
+    }
+  }, [releaseAudioElement, revokeSpeechTurn]);
 
   /** Throw away whatever the recorder is holding, handlers first: `stop()`
    * delivers one final `dataavailable`, and a handler still attached would push
@@ -263,6 +410,22 @@ export default function useVoiceChat({
       }
     };
 
+    // A recorder that errors mid-utterance keeps no audio and fires no `onstop`
+    // — the VAD would go on crediting speech into a recording that no longer
+    // exists, and the turn would be lost with nothing on screen to say so. The
+    // usual cause is the device going away, which is not something a fresh
+    // recorder recovers from, so the mode stops and says it failed.
+    recorder.onerror = () => {
+      // A recorder that has already been replaced, or whose utterance is
+      // already being uploaded, is not this loop's problem any more.
+      if (recorderRef.current !== recorder) {
+        return;
+      }
+
+      dropRecorder();
+      onStopRef.current(VoiceChatStopReasons.FAILED);
+    };
+
     try {
       recorder.start();
     } catch {
@@ -321,7 +484,10 @@ export default function useVoiceChat({
         return;
       }
 
+      const abortController = new AbortController();
+
       isUploadingRef.current = true;
+      uploadAbortRef.current = abortController;
       setIsTranscribing(true);
 
       try {
@@ -338,6 +504,7 @@ export default function useVoiceChat({
             mimeType,
           },
           authHeadersRef.current,
+          abortController.signal,
         );
 
         if (!isCurrent(generation)) {
@@ -370,6 +537,9 @@ export default function useVoiceChat({
           onTranscriptRef.current(item.text);
         }
       } catch (error) {
+        // Includes this loop's own abort, which rejects with a DOMException
+        // rather than an API error: the mode was switched off under the upload,
+        // so there is nothing to report and nobody to report it to.
         if (!isCurrent(generation)) {
           return;
         }
@@ -384,16 +554,22 @@ export default function useVoiceChat({
         }
 
         // 503 means the feature went away server-side, 502 the provider behind
-        // it. Retrying is pointless in both, and the mode has to stop rather
-        // than sit listening at an endpoint that will refuse every utterance.
-        onStopRef.current(
-          requestStopReason(error, VoiceChatStopReasons.DISABLED),
-          error && error.message,
-        );
+        // it, 401 a session that is no longer good for anything. Retrying is
+        // pointless in all three, and the mode has to stop rather than sit
+        // listening at an endpoint that will refuse every utterance.
+        onStopRef.current(requestStopReason(error, VoiceChatStopReasons.DISABLED));
       } finally {
-        isUploadingRef.current = false;
+        if (uploadAbortRef.current === abortController) {
+          uploadAbortRef.current = null;
+        }
 
+        // Both inside the guard: `isUploadingRef` is the gate that keeps two
+        // utterances from racing for one transcript, and it is SHARED. A stale
+        // upload resolving after the mode was toggled off and on again would
+        // otherwise disarm the new loop's gate and let a second recording be
+        // captured and uploaded alongside the first.
         if (isCurrent(generation)) {
+          isUploadingRef.current = false;
           setIsTranscribing(false);
         }
       }
@@ -420,6 +596,7 @@ export default function useVoiceChat({
       recorderStartedAtRef.current = null;
 
       let isSettled = false;
+      let deadlineId = null;
 
       const settle = () => {
         if (isSettled) {
@@ -427,20 +604,34 @@ export default function useVoiceChat({
         }
 
         isSettled = true;
+
+        // Or it fires up to `RECORDER_STOP_DEADLINE_MS` after the loop has been
+        // torn down and puts a dead loop back into `transcribing`.
+        if (deadlineId !== null) {
+          clearTimeout(deadlineId);
+          deadlineId = null;
+        }
+
         recorder.ondataavailable = null;
         recorder.onstop = null;
+        recorder.onerror = null;
 
         const blob = new Blob(chunks, { type: recorderMimeRef.current || chunks[0]?.type || '' });
         chunks.length = 0;
+
+        // The loop this utterance belongs to may already be gone — the mode was
+        // switched off between `stop()` and its final chunk. There is nowhere
+        // to send it, and nothing on screen left to tell about it.
+        if (!isCurrent(generation)) {
+          return;
+        }
 
         transcribe(blob, generation, startedAt === null ? null : performance.now() - startedAt);
 
         // The microphone is still open and the room may already be talking
         // again, so a fresh recorder goes in immediately rather than waiting
         // for the transcript.
-        if (isCurrent(generation)) {
-          startRecorder();
-        }
+        startRecorder();
       };
 
       recorder.onstop = settle;
@@ -454,7 +645,7 @@ export default function useVoiceChat({
 
       // Armed only if `stop()` has not already delivered: a recorder that never
       // fires `onstop` would otherwise strand the loop in `transcribing`.
-      setTimeout(settle, RECORDER_STOP_DEADLINE_MS);
+      deadlineId = setTimeout(settle, RECORDER_STOP_DEADLINE_MS);
     },
     [isCurrent, startRecorder, transcribe],
   );
@@ -478,6 +669,14 @@ export default function useVoiceChat({
       // platforms even after the track has ended.
       audioContextRef.current.close().catch(() => {});
       audioContextRef.current = null;
+    }
+
+    // The transcript would be discarded by the generation guard anyway; this is
+    // so the upload stops being paid for at the moment the mode goes off rather
+    // than when the provider finishes with a recording nobody will read.
+    if (uploadAbortRef.current) {
+      uploadAbortRef.current.abort();
+      uploadAbortRef.current = null;
     }
 
     analyserRef.current = null;
@@ -718,10 +917,19 @@ export default function useVoiceChat({
       return undefined;
     }
 
+    // Through the ref, and `capability` is deliberately NOT a dependency of this
+    // effect. `selectVoiceChatCapability` hands back `bootstrap.voiceChat`, and
+    // `reducers/common.js` replaces the whole bootstrap on SOCKET_RECONNECT —
+    // so depending on the object would tear this run down and start another one
+    // every time the socket blinks: a second billed synthesis, and an answer
+    // nobody ever hears. The tuning at the top of this file is read through a
+    // ref for exactly the same reason.
+    const capabilityNow = capabilityRef.current;
+
     // A reply the server would refuse for length is not sent at all: the mode
     // says so and carries on listening, rather than spending a round trip on a
     // 422 whose only handler turns the whole loop off.
-    if (speakAvailability(pendingSpeech.text, capability) === SpeakAvailabilities.TOO_LONG) {
+    if (speakAvailability(pendingSpeech.text, capabilityNow) === SpeakAvailabilities.TOO_LONG) {
       onNoticeRef.current('common.voiceChatAnswerTooLong');
       onSpokenRef.current(pendingSpeech.id);
 
@@ -729,7 +937,14 @@ export default function useVoiceChat({
     }
 
     const generation = generationRef.current;
-    const controller = { isCancelled: false };
+
+    // This turn, and the moment it takes the speaker. Everything below writes
+    // through `isSpeechTurnOwner(turn)` rather than straight into a shared ref:
+    // the run can be revoked at any await point, and by then the refs may
+    // belong to the turn that replaced it.
+    const turn = newSpeechTurn(pendingSpeech.id);
+
+    speechTurnRef.current = turn;
 
     (async () => {
       isSpeakingRef.current = true;
@@ -750,9 +965,10 @@ export default function useVoiceChat({
               : (heardLanguageRef.current && { language: heardLanguageRef.current }) || {}),
           },
           authHeadersRef.current,
+          turn.signal,
         );
 
-        if (controller.isCancelled || !isCurrent(generation)) {
+        if (!isSpeechTurnOwner(turn) || !isCurrent(generation)) {
           return;
         }
 
@@ -766,6 +982,14 @@ export default function useVoiceChat({
         const blob = base64ToBlob(item.data, item.mimeType);
         const url = URL.createObjectURL(blob);
 
+        // Asked again around the decode: `base64ToBlob` walks a megabyte of
+        // answer, and a URL created after the turn was revoked would be one
+        // nothing ever revokes — a leak for the life of the document.
+        if (!isSpeechTurnOwner(turn)) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+
         if (!audioRef.current) {
           // Through `window` rather than the bare global so a test can hand the
           // hook an element whose `play()` resolves — jsdom's does not
@@ -774,59 +998,74 @@ export default function useVoiceChat({
         }
 
         const audio = audioRef.current;
-        audioUrlRef.current = url;
+        turn.holdAudioUrl(url);
         audio.src = url;
 
         await new Promise((resolve) => {
+          // Held on the turn as well as on the element: revoking the turn takes
+          // both handlers away, and they are the only two things that would
+          // ever settle this.
+          turn.holdPlayback(resolve);
           audio.onended = resolve;
           audio.onerror = resolve;
 
           Promise.resolve(audio.play()).catch(resolve);
         });
       } catch (error) {
-        if (!controller.isCancelled && isCurrent(generation)) {
-          // A 422 is the server refusing THIS message — a reply that reduces to
-          // nothing speakable, which a code block or a bare heading does. It is
-          // one answer that cannot be read, not a broken mode, and `finally`
-          // marks it spoken so nothing retries it.
-          if (isRefusal(error)) {
-            onNoticeRef.current('common.voiceChatAnswerRefused');
-          } else {
-            onStopRef.current(
-              requestStopReason(error, VoiceChatStopReasons.NO_VOICE),
-              error && error.message,
-            );
-          }
+        // A revoked turn's rejection is its own abort — a DOMException, not an
+        // API error body — and there is nobody left to tell about it.
+        if (!isSpeechTurnOwner(turn) || !isCurrent(generation)) {
+          return;
+        }
+
+        // A 422 is the server refusing THIS message — a reply that reduces to
+        // nothing speakable, which a code block or a bare heading does. It is
+        // one answer that cannot be read, not a broken mode, and `finally`
+        // marks it spoken so nothing retries it.
+        if (isRefusal(error)) {
+          onNoticeRef.current('common.voiceChatAnswerRefused');
+        } else {
+          onStopRef.current(requestStopReason(error, VoiceChatStopReasons.NO_VOICE));
         }
       } finally {
-        if (audioUrlRef.current) {
-          URL.revokeObjectURL(audioUrlRef.current);
-          audioUrlRef.current = null;
-        }
-
-        isSpeakingRef.current = false;
-
-        if (isCurrent(generation)) {
+        // The whole of it under the ownership check. A run that has been
+        // revoked owns none of this any more: the URL it would revoke, the
+        // `isSpeaking` it would clear and the message it would mark spoken may
+        // all belong to the turn that replaced it — and marking spoken is the
+        // loudest of the three, because it empties `pendingSpeech` and so makes
+        // the replacement's own cleanup cancel IT.
+        if (isSpeechTurnOwner(turn)) {
+          speechTurnRef.current = null;
+          turn.releaseAudioUrl();
+          isSpeakingRef.current = false;
           setIsSpeaking(false);
+
           // Marked spoken whatever happened, including a failure: a message
           // that could not be read must not be retried on the next render for
           // ever.
-          onSpokenRef.current(pendingSpeech.id);
+          onSpokenRef.current(turn.messageId);
         }
       }
     })();
 
     return () => {
-      controller.isCancelled = true;
-      // Whatever is playing belongs to a message, a card or a mode that has
-      // just changed underneath it. Cancelling the request is not enough — the
-      // clip would go on talking.
-      stopSpeaking();
+      // Not `stopSpeaking`: this turn is being REPLACED, not refused, so it
+      // must not be marked spoken — that would empty `pendingSpeech` and cancel
+      // whichever run comes next as well.
+      revokeSpeechTurn(turn);
     };
     // `pendingSpeech` itself is read inside but deliberately not a dependency —
     // see `pendingSpeechId` above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEnabled, isAvailable, cardId, pendingSpeechId, capability, isCurrent, stopSpeaking]);
+  }, [
+    isEnabled,
+    isAvailable,
+    cardId,
+    pendingSpeechId,
+    isCurrent,
+    isSpeechTurnOwner,
+    revokeSpeechTurn,
+  ]);
 
   // Whatever was playing belongs to a conversation the user has left.
   useEffect(() => {

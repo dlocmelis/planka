@@ -34,6 +34,7 @@ import {
 } from '../../../utils/bot-chat';
 import {
   VOICE_CHAT_STOP_REASON_KEYS,
+  VoiceChatStopReasons,
   readVoiceChatEnabled,
   voiceChatPhase,
   writeVoiceChatEnabled,
@@ -420,8 +421,18 @@ const BotChat = React.memo(() => {
       setIsVoiceEnabled(false);
       writeVoiceChatEnabled(window.localStorage, false);
       setVoiceNotice(t(VOICE_CHAT_STOP_REASON_KEYS[reason] || VOICE_CHAT_STOP_REASON_KEYS.failed));
+
+      // The two voice endpoints are the only requests in this app that do not
+      // go through `sagas/core/request.js`, which is what turns a 401 into a
+      // logout everywhere else. Without this the session is dead and the rest
+      // of the app carries on as though it were not, until the next saga
+      // request happens to notice. `false` because there is nothing left to
+      // revoke — the token the server just refused is the one we would send.
+      if (reason === VoiceChatStopReasons.UNAUTHORIZED) {
+        dispatch(entryActions.logout(false));
+      }
     },
-    [t],
+    [dispatch, t],
   );
 
   const voice = useVoiceChat({
@@ -436,6 +447,19 @@ const BotChat = React.memo(() => {
     onNotice: handleVoiceNotice,
     onStop: handleVoiceStop,
   });
+
+  // A preference that cannot be honoured is not a preference. The mode is
+  // remembered per browser, so a deployment that turns voice off — or a browser
+  // that cannot record — would otherwise leave a returning user looking at
+  // "Voice chat is not available on this server" for ever, with the only
+  // control that could clear it disabled. Forgetting the flag is the whole fix:
+  // the composer's button already says why it is unavailable in its title.
+  useEffect(() => {
+    if (isVoiceEnabled && !voice.isAvailable) {
+      setIsVoiceEnabled(false);
+      writeVoiceChatEnabled(window.localStorage, false);
+    }
+  }, [isVoiceEnabled, voice.isAvailable]);
 
   const handleVoiceToggle = useCallback(() => {
     setIsVoiceEnabled((current) => {

@@ -28,7 +28,21 @@
 const { ProxyAgent } = require('undici');
 
 const endpoints = require('../../../utils/voice-endpoints');
-const { VoiceProviderError, VoiceRequestError } = require('../../../utils/voice');
+const {
+  MAX_PROVIDER_ERROR_BYTES,
+  VoiceProviderError,
+  VoiceRequestError,
+  readBoundedBody,
+} = require('../../../utils/voice');
+
+/**
+ * The ceiling on a transcript response, as a backstop rather than a business
+ * rule: a five-minute recording comes back as tens of kilobytes of JSON —
+ * Deepgram's per-word timings are the bulk of it — so this is two orders of
+ * magnitude above anything real, and exists only so a provider having a bad day
+ * cannot be an unbounded allocation on this process.
+ */
+const MAX_TRANSCRIPT_BYTES = 4 * 1024 * 1024;
 
 const buildUrl = (config, language) => {
   const url = new URL(endpoints.deepgramListenUrl);
@@ -76,6 +90,7 @@ module.exports = {
     const timeout = setTimeout(() => controller.abort(), stt.timeoutSec * 1000);
 
     let response;
+    let body;
     try {
       response = await fetch(buildUrl(stt, inputs.language), {
         method: 'POST',
@@ -91,6 +106,16 @@ module.exports = {
           ? new ProxyAgent(sails.config.custom.outgoingProxy)
           : undefined,
       });
+
+      // Read here, INSIDE the window the abort timer covers. Clearing that
+      // timer when the headers arrive — which is where a `finally` around the
+      // fetch alone puts it — leaves the body read unbounded in time, so a
+      // provider that stalls mid-body pins this request and its buffers for as
+      // long as it likes.
+      body = await readBoundedBody(
+        response,
+        response.ok ? MAX_TRANSCRIPT_BYTES : MAX_PROVIDER_ERROR_BYTES,
+      );
     } finally {
       clearTimeout(timeout);
     }
@@ -98,11 +123,31 @@ module.exports = {
     if (!response.ok) {
       // Cap what is quoted back: an upstream error page is not a payload we
       // control, and it ends up in a log line.
-      const body = (await response.text()).slice(0, 2048);
-      throw new VoiceProviderError(stt.provider, response.status, body);
+      throw new VoiceProviderError(
+        stt.provider,
+        response.status,
+        body.buffer.toString('utf8').slice(0, 2048),
+      );
     }
 
-    const parsed = await response.json();
+    if (!body.ok) {
+      throw new VoiceProviderError(
+        stt.provider,
+        response.status,
+        'transcript response is too large',
+      );
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(body.buffer.toString('utf8'));
+    } catch (error) {
+      throw new VoiceProviderError(
+        stt.provider,
+        response.status,
+        'transcript response is not JSON',
+      );
+    }
 
     const channel =
       parsed && parsed.results && Array.isArray(parsed.results.channels)

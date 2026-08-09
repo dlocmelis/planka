@@ -125,7 +125,12 @@ module.exports = {
       // The real ceiling is voiceTtsMaxChars, enforced in the helper against
       // the code-point count so the number in the message is the number the
       // provider would have measured. This only bounds what is parsed.
-      maxLength: 1048576,
+      //
+      // 128 KiB of UTF-16 units is roughly three hours of speech and about
+      // sixty times the default character cap — high enough that no plausible
+      // VOICE_TTS_MAX_CHARS reaches it, low enough that a body written to make
+      // this endpoint work is refused before anything walks it.
+      maxLength: 128 * 1024,
     },
     language: {
       type: 'string',
@@ -163,21 +168,36 @@ module.exports = {
       throw Errors.NOT_CONFIGURED;
     }
 
-    const { card, board } = await sails.helpers.cards
+    const { card, board, project } = await sails.helpers.cards
       .getPathToProjectById(inputs.cardId)
       .intercept('pathNotFound', () => Errors.CARD_NOT_FOUND);
 
-    const boardMembership = await BoardMembership.qm.getOneByBoardIdAndUserId(
-      board.id,
-      currentUser.id,
-    );
+    // Whoever may READ the thread may hear it, and reading it is not the same
+    // question as commenting on it — commenting is gated where it happens, on
+    // the comment endpoint and on transcription, which produces one.
+    //
+    // So this is the read bar VERBATIM, the one `controllers/comments/index.js`
+    // and `controllers/cards/show.js` use: an admin, or a manager of the
+    // project, or a member of the board. Membership alone would 404 an admin
+    // who can see every word of the conversation on screen.
+    if (currentUser.role !== User.Roles.ADMIN || project.ownerProjectManagerId) {
+      const isProjectManager = await sails.helpers.users.isProjectManager(
+        currentUser.id,
+        project.id,
+      );
 
-    // Membership is the whole bar here, deliberately: a viewer who may read the
-    // thread may hear it. Commenting is a different act and is gated where it
-    // happens — on the comment endpoint, and on transcription, which produces
-    // one.
-    if (!boardMembership) {
-      throw Errors.CARD_NOT_FOUND;
+      if (!isProjectManager) {
+        const boardMembership = await BoardMembership.qm.getOneByBoardIdAndUserId(
+          board.id,
+          currentUser.id,
+        );
+
+        // A card that does not exist and one on a board the caller cannot see
+        // are the same 404, which is the rule the read endpoints follow.
+        if (!boardMembership) {
+          throw Errors.CARD_NOT_FOUND;
+        }
+      }
     }
 
     const startedAt = Date.now();

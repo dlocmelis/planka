@@ -26,6 +26,7 @@ describe('Voice chat endpoints', function describeVoice() {
   let editor;
   let viewer;
   let outsider;
+  let admin;
 
   const tokens = {};
 
@@ -209,9 +210,20 @@ describe('Voice chat endpoints', function describeVoice() {
       canComment: false,
     }).fetch();
 
+    // On no board and in no project, which is the point: an admin reads every
+    // thread on the instance through the same endpoints everyone else does.
+    admin = await User.create({
+      id: '1925476504885136008',
+      email: 'voiceadmin@example.com',
+      username: 'voiceadmin',
+      role: User.Roles.ADMIN,
+      name: 'voiceadmin',
+    }).fetch();
+
     tokens.editor = await mintAccessToken(editor);
     tokens.viewer = await mintAccessToken(viewer);
     tokens.outsider = await mintAccessToken(outsider);
+    tokens.admin = await mintAccessToken(admin);
   });
 
   after(async () => {
@@ -368,6 +380,15 @@ describe('Voice chat endpoints', function describeVoice() {
         what: 'a fallback voice set to nothing at all',
         values: { voiceTtsVoice: '   ' },
         half: 'tts',
+      },
+      {
+        // `bytes()` answers null for anything it cannot parse, and `null || 0`
+        // is how "no cap at all" is spelled downstream — so a typo here used to
+        // REMOVE the upload limit and stop the bootstrap publishing one, which
+        // stops the browser pre-checking too.
+        what: 'an upload limit that does not name a size',
+        values: { voiceSttMaxBytes: null },
+        half: 'stt',
       },
     ];
 
@@ -650,6 +671,68 @@ describe('Voice chat endpoints', function describeVoice() {
       expect(res.body.code).to.equal('E_BAD_GATEWAY');
       expect(res.body.message).to.not.contain('upstream on fire');
     });
+
+    it('says the service is busy rather than broken when it is rate-limited', async () => {
+      // Distinct copy on purpose: 429 is worth trying again in a moment, and
+      // the generic 502 sentence tells the user the opposite.
+      providerResponses.deepgram = { status: 429, headers: {}, body: 'slow down' };
+
+      const res = await postTranscription(tokens.editor, audioBody());
+
+      expect(res.status).to.equal(502);
+      expect(res.body.code).to.equal('E_BAD_GATEWAY');
+      expect(res.body.message).to.contain('busy right now');
+      expect(res.body.message).to.not.contain('slow down');
+    });
+
+    it('answers 400 for a language mode the provider would not understand', async () => {
+      // It goes straight into the provider's query string, so a bad value used
+      // to cost a billed round trip and come back as "that recording could not
+      // be transcribed" — advice for a problem the caller does not have.
+      const res = await postTranscription(tokens.editor, {
+        ...audioBody(),
+        language: 'not a language',
+      });
+
+      expect(res.status).to.equal(400);
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    it('carries a recording at the documented cap through the real body parser', async () => {
+      // The operational claim the whole 700 KB number rests on
+      // (docs/bot-chat-voice.md): base64 of the cap is ~956 KB, and the body
+      // parser in front of this route admits 1 MB. Every other size test lowers
+      // the cap to something small, so nothing but this exercises the boundary
+      // that actually ships — and a change to either number breaks it here
+      // rather than on a user's microphone.
+      const cap = sails.config.custom.voiceSttMaxBytes;
+      const encoded = Buffer.alloc(cap, 7).toString('base64');
+
+      expect(encoded.length).to.be.above(900 * 1024);
+      expect(encoded.length).to.be.below(1024 * 1024);
+
+      const res = await postTranscription(tokens.editor, {
+        data: encoded,
+        mimeType: 'audio/webm;codecs=opus',
+      });
+
+      expect(res.status).to.equal(200);
+      expect(providerCalls).to.have.lengthOf(1);
+      // The provider was handed the bytes themselves, all of them.
+      expect(providerCalls[0].body).to.have.lengthOf(cap);
+    });
+
+    it('refuses one byte over that cap with a sentence rather than a parser error', async () => {
+      const res = await postTranscription(tokens.editor, {
+        data: Buffer.alloc(sails.config.custom.voiceSttMaxBytes + 1, 7).toString('base64'),
+        mimeType: 'audio/webm;codecs=opus',
+      });
+
+      expect(res.status).to.equal(422);
+      expect(res.body.code).to.equal('E_UNPROCESSABLE_ENTITY');
+      expect(res.body.message).to.contain('too large');
+      expect(providerCalls).to.have.lengthOf(0);
+    });
   });
 
   describe('POST /cards/:cardId/voice/speech', () => {
@@ -750,6 +833,17 @@ describe('Voice chat endpoints', function describeVoice() {
       const res = await postSpeech(tokens.viewer, { text: 'It is waiting on review.' });
 
       expect(res.status).to.equal(200);
+    });
+
+    it('lets an admin who is on no board hear a thread they can already read', async () => {
+      // The bar here is the READ bar — the one `controllers/comments/index.js`
+      // and `controllers/cards/show.js` use — and that is admin OR project
+      // manager OR board member. Membership alone would 404 somebody who has
+      // every word of the conversation on screen in front of them.
+      const res = await postSpeech(tokens.admin, { text: 'It is waiting on review.' });
+
+      expect(res.status).to.equal(200);
+      expect(providerCalls).to.have.lengthOf(1);
     });
 
     it('answers 404 to somebody who is not on the board at all', async () => {
@@ -939,6 +1033,53 @@ describe('Voice chat endpoints', function describeVoice() {
       // A 200 with no audio in it: the characters were billed and there is
       // nothing to play, so it is a failure rather than a silent clip.
       expect(res.status).to.equal(502);
+    });
+
+    it('answers 502 when the provider refuses the synthesis outright', async () => {
+      // The other half of "broken": an HTTP failure rather than an empty 200.
+      // The vendor's error page goes to the log, never to the user.
+      providerResponses.cartesia = {
+        status: 500,
+        headers: { 'Content-Type': 'text/html' },
+        body: '<html>upstream on fire</html>',
+      };
+
+      const res = await postSpeech(tokens.editor, { text: 'hello' });
+
+      expect(res.status).to.equal(502);
+      expect(res.body.code).to.equal('E_BAD_GATEWAY');
+      expect(res.body.message).to.not.contain('upstream on fire');
+    });
+
+    it('says the speech service is busy rather than broken when it is rate-limited', async () => {
+      providerResponses.cartesia = { status: 429, headers: {}, body: 'slow down' };
+
+      const res = await postSpeech(tokens.editor, { text: 'hello' });
+
+      expect(res.status).to.equal(502);
+      expect(res.body.message).to.contain('busy right now');
+      expect(res.body.message).to.not.contain('slow down');
+    });
+
+    it('gives up on an answer longer than this deployment could have produced', async () => {
+      // A backstop, not a business rule: `arrayBuffer()` reads to the end of
+      // whatever comes back, so a provider having a bad day would otherwise be
+      // an unbounded allocation on this process. The ceiling is derived from
+      // the character cap and the container's byte rate, so lowering the cap
+      // lowers it.
+      withVoice({ voiceTtsMaxChars: 20 });
+
+      providerResponses.cartesia = {
+        status: 200,
+        headers: { 'Content-Type': 'audio/mpeg' },
+        // The derived ceiling for 20 characters of mp3 is a few kilobytes.
+        body: Buffer.alloc(2 * 1024 * 1024, 0x55),
+      };
+
+      const res = await postSpeech(tokens.editor, { text: 'hello' });
+
+      expect(res.status).to.equal(502);
+      expect(res.body.code).to.equal('E_BAD_GATEWAY');
     });
   });
 });

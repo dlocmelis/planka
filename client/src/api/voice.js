@@ -41,11 +41,15 @@ export const base64ToBlob = (data, mimeType) => {
 
 /* Actions */
 
-const transcribeVoiceRecording = (cardId, data, headers) =>
-  http.postJson(`/cards/${cardId}/voice/transcription`, data, headers);
+// Both take an optional `AbortSignal`: these are the two metered endpoints in
+// the app, and a turn that has been abandoned — the Stop button, the panel
+// closing, the conversation moving to another card — should stop being paid for
+// at that moment rather than when its answer arrives and is thrown away.
+const transcribeVoiceRecording = (cardId, data, headers, signal) =>
+  http.postJson(`/cards/${cardId}/voice/transcription`, data, headers, signal);
 
-const speakMessage = (cardId, data, headers) =>
-  http.postJson(`/cards/${cardId}/voice/speech`, data, headers);
+const speakMessage = (cardId, data, headers, signal) =>
+  http.postJson(`/cards/${cardId}/voice/speech`, data, headers, signal);
 
 export default {
   transcribeVoiceRecording,
