@@ -132,6 +132,11 @@ services:
       # - VOICE_TTS_VOICE=
       # - VOICE_TTS_VOICES=
       # - VOICE_TTS_AUTO_VOICE=true
+      # Both endpoints are metered and both carry a per-user spending cap, on by
+      # default with numbers far above what anyone can reach by talking. Raise
+      # them, or set them to 0 to limit at your own proxy instead.
+      # - VOICE_STT_RATE_MAX_REQUESTS=20
+      # - VOICE_TTS_RATE_MAX_REQUESTS=20
 
       # --------------------------------------------------------------------
       # Outgoing traffic control (internal Squid proxy)

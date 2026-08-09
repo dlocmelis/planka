@@ -53,7 +53,10 @@ each is spoken once — including when the synthesis failed, which is not retrie
 **One refused turn is not a broken mode.** A recording the server will not
 accept and a reply with nothing speakable in it (a bare heading, a fenced block)
 are both answered 422; the row says so on a second line and the loop carries on
-listening. The mode only turns itself off for something that would refuse EVERY
+listening. A turn over the per-user spending cap (429) is the same, with one
+addition: the server says how long until the budget comes back, and the
+microphone stays shut for exactly that long rather than uploading into a
+refusal. The mode only turns itself off for something that would refuse EVERY
 turn — the feature going away (503), the provider behind it failing (502), an
 expired session (401), a microphone that was denied — and the sentence it leaves
 says which. The 401 also logs the app out: these two endpoints are the only
@@ -104,6 +107,56 @@ And every message is still a comment, so every message still starts a triage job
 in devteam-orchestrator — a whole agent session. Voice chat does not change that
 cost; it does make it easier to spend, which is worth knowing.
 
+### The spending cap
+
+Everything above bounds ONE request. What bounds a user is a per-user cap on
+each endpoint, because otherwise any board member with a script turns the
+deployment's Deepgram and Cartesia keys into an open service.
+
+Each half carries a token bucket with **two** dimensions — requests, and the
+unit the vendor actually bills in — because a request cap is only a cost cap if
+every request costs the same, and a two-second "yes" and a five-minute monologue
+do not. The defaults are far above what a person can do and far below what a
+script can:
+
+| | Window | Requests | Cost |
+| --- | --- | --- | --- |
+| Transcription | 5 min | 20 | 600 seconds of audio |
+| Reading aloud | 5 min | 20 | 30000 synthesized characters |
+
+Twenty turns in five minutes is one every fifteen seconds *sustained*, against a
+loop where each turn is a sentence, an upload and then a whole planka\_bot
+session. Ten minutes of audio in five wall-clock minutes is twice as much speech
+as there is time to speak. Thirty thousand characters is around half an hour of
+listening. None of the three can be reached by talking.
+
+Three things are worth knowing about how it counts:
+
+- **It reserves the worst case and settles the real one.** Nothing before the
+  provider answers knows how long a recording is, so a turn reserves
+  `VOICE_STT_MAX_DURATION_SEC` and gives back the difference once Deepgram
+  reports the duration; synthesis reserves three times what was sent (narration
+  expands a table, and that is the ceiling on the expansion) and settles to what
+  Cartesia actually read. A conversation of ordinary turns therefore never comes
+  near the budget, while parallel requests cannot all check a budget none of
+  them has spent yet.
+- **A turn that failed is not refunded.** This server cannot tell a provider
+  that charged for a call from one that did not — a 200 with no audio in it was
+  billed all the same — and a budget that comes back whenever a turn fails is
+  one that can be farmed by failing on purpose.
+- **It is per process, in memory.** PLANKA has no shared cache, so a deployment
+  running N instances behind a load balancer enforces N times these numbers per
+  user. It still bounds one account rather than leaving it unbounded; a
+  deployment that needs an exact global figure should set the numbers to 0 and
+  limit at its reverse proxy instead.
+
+A caller over the cap gets **429** with `retryAfterSec` in the body and a
+`Retry-After` header. That is deliberately neither of the other two failures the
+client branches on: a 503 withdraws the feature and a 502 stops the mode, while
+a 429 leaves voice chat running, says how long to wait, and holds the microphone
+shut for exactly that long rather than uploading a megabyte of audio for a
+refusal it could have predicted.
+
 ## Privacy
 
 **The audio is never stored.** It is decoded from the request, held only long
@@ -123,9 +176,9 @@ Transcription is gated on COMMENTING — editor, or a membership with
 someone who could not send that message has no business spending a
 transcription on it. Reading a message aloud is gated on READING, which in this
 app is admin *or* manager of the project *or* member of the board: the same
-three the card and its comments are served to. Neither endpoint is
-rate-limited, which is worth knowing before either key is given to a large
-instance — both are metered per audio minute and per character.
+three the card and its comments are served to. On top of that, both endpoints
+carry a per-user spending cap — see *The spending cap* above — because being
+allowed to spend is not the same as being allowed to spend without bound.
 
 ## Setup
 
@@ -199,6 +252,9 @@ keys above gets a sensible configuration.
 | `VOICE_STT_MAX_BYTES` | `700kb` | See the note below before raising it. A value that does not name a size turns speech-to-text off with an error rather than quietly leaving the upload uncapped. |
 | `VOICE_STT_MAX_DURATION_SEC` | `300` | Enforced against the duration the provider reports — so a recording refused here has already been transcribed and billed. Lower it and the browser ends its turns inside it rather than paying to be refused; see *What it costs*. |
 | `VOICE_STT_TIMEOUT_SEC` | `60` | |
+| `VOICE_STT_RATE_WINDOW_SEC` | `300` | The spending cap's window. `0` turns the whole cap off. |
+| `VOICE_STT_RATE_MAX_REQUESTS` | `20` | Transcriptions per user per window. `0` leaves the request count uncapped. |
+| `VOICE_STT_RATE_MAX_SECONDS` | `600` | Seconds of audio per user per window. `0` leaves the audio uncapped. |
 | `VOICE_TTS_PROVIDER` | `cartesia` | The only accepted value. |
 | `VOICE_TTS_MODEL` | `sonic-3.5` | |
 | `VOICE_TTS_VOICE` | Cartesia's documented "Skylar" id | The fallback voice, used when no language was resolved. |
@@ -209,6 +265,9 @@ keys above gets a sensible configuration.
 | `VOICE_TTS_BIT_RATE` | `128000` | mp3 only. |
 | `VOICE_TTS_MAX_CHARS` | `2000` | A longer message is refused rather than truncated. |
 | `VOICE_TTS_TIMEOUT_SEC` | `60` | |
+| `VOICE_TTS_RATE_WINDOW_SEC` | `300` | The spending cap's window. `0` turns the whole cap off. |
+| `VOICE_TTS_RATE_MAX_REQUESTS` | `20` | Messages read aloud per user per window. `0` leaves the request count uncapped. |
+| `VOICE_TTS_RATE_MAX_CHARS` | `30000` | Synthesized characters per user per window — what Cartesia read, not what was sent. `0` leaves the characters uncapped. |
 
 A misconfigured knob is loud and leaves its half off, rather than fatal: an
 invalid provider, output format, voice map or fallback voice id logs an error at
@@ -221,6 +280,13 @@ chose this" failure the validation exists to prevent. `VOICE_TTS_VOICE` is held
 to the same bar as an entry of the map because it is the id that reads every
 message no language was resolved for — a typo there is not one wrong accent, it
 is a provider 400 on every message.
+
+The three `_RATE_` knobs on each half are the exception to the sentence above,
+in one direction only: a value that does not parse takes the DEFAULT rather than
+disabling the half, because unlike `VOICE_STT_MAX_BYTES` — where a typo used to
+remove the limit — a typo here leaves the deployment on numbers somebody chose.
+A NEGATIVE value is refused loudly like everything else, since it would refuse
+every turn for ever and say nothing about why.
 
 ### Which voice reads the answer
 
@@ -299,6 +365,7 @@ about 180 KB. Left to itself Chrome would record at 128 kbit/s.
 | The voice switch: catalogue lookup and its cache | `server/api/helpers/voice/lookup-voice.js` |
 | Which voice out of a listing, and why | `server/utils/voice-catalog.js` |
 | Allowlist, voice map, length rules | `server/utils/voice.js` |
+| The per-user spending caps | `server/utils/voice-rate-limit.js`, `server/api/responses/tooManyRequests.js` |
 | Markdown → speakable text, table narration | `server/utils/voice-speech-text.js` |
 | Config resolution and the feature gate | `server/api/helpers/voice/get-config.js` |
 | Capability reported to the client | `server/api/helpers/bootstrap/present-one.js` |
