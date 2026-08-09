@@ -52,6 +52,73 @@ const {
   stripMarkdown,
 } = require('../../../utils/voice-speech-text');
 
+/**
+ * The languages Cartesia's `language` field accepts, verbatim from its own
+ * schema for `POST /tts/bytes`
+ * (https://docs.cartesia.ai/api-reference/tts/bytes, read 2026-08-09).
+ *
+ * It is an ENUM, not a hint: a code outside it is a 400, and a 400 here is a
+ * 502 to the caller on every single message. Two things can reach one —
+ * `VOICE_TTS_VOICES=lv=<id>` on a Latvian deployment, which is a perfectly
+ * reasonable thing for an operator to write, and a caller sending a pinned
+ * voice back with a language of their own invention (`isLanguageCode` accepts
+ * any two or three letters, so 'zzz' passes it).
+ *
+ * So a language this list does not have is not SENT, and the message is read
+ * anyway by the voice that was resolved for it. That is the same trade the
+ * fallback path already makes below, for the same reason: naming a language the
+ * provider will not take is a failure on every message, where omitting it costs
+ * at most some pronunciation.
+ *
+ * Drift is one-directional and benign — a language Cartesia adds and this list
+ * has not caught up with loses its hint until someone updates the list, rather
+ * than breaking anything.
+ */
+const CARTESIA_LANGUAGES = new Set([
+  'ar',
+  'bg',
+  'bn',
+  'cs',
+  'da',
+  'de',
+  'el',
+  'en',
+  'es',
+  'fi',
+  'fr',
+  'gu',
+  'he',
+  'hi',
+  'hr',
+  'hu',
+  'id',
+  'it',
+  'ja',
+  'ka',
+  'kn',
+  'ko',
+  'ml',
+  'mr',
+  'ms',
+  'nl',
+  'no',
+  'pa',
+  'pl',
+  'pt',
+  'ro',
+  'ru',
+  'sk',
+  'sv',
+  'ta',
+  'te',
+  'th',
+  'tl',
+  'tr',
+  'uk',
+  'vi',
+  'zh',
+]);
+
 /** Nobody reads aloud slower than this, and it is deliberately an under-estimate
  * — it is the denominator of a ceiling, so being wrong on the low side makes
  * that ceiling more generous rather than less. */
@@ -229,8 +296,12 @@ module.exports = {
     };
 
     // Omitted rather than sent empty, which is what lets Cartesia infer the
-    // language from the text itself.
-    if (language) {
+    // language from the text itself — and omitted too for a language its schema
+    // does not list, which would be a 400 rather than an inference. See
+    // `CARTESIA_LANGUAGES`. The language is still REPORTED to the caller either
+    // way: it is what pins the voice for the rest of the conversation, and that
+    // is this server's decision rather than the provider's.
+    if (language && CARTESIA_LANGUAGES.has(language)) {
       body.language = language;
     }
 

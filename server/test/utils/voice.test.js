@@ -19,6 +19,9 @@ const {
   parseVoiceMap,
   speechTextLength,
 } = require('../../utils/voice');
+const endpoints = require('../../utils/voice-endpoints');
+
+const { useVoiceEndpoints } = endpoints;
 
 describe('voice', () => {
   describe('#normalizeAudioMimeType(mimeType)', () => {
@@ -298,6 +301,37 @@ describe('voice', () => {
 
       expect(match, 'start.sh no longer exports OUTGOING_PROXY').to.not.equal(null);
       expect(match[1]).to.equal(INTERNAL_OUTGOING_PROXY);
+    });
+  });
+
+  describe('voice-endpoints', () => {
+    it('should serve the providers documented hostnames', () => {
+      expect(endpoints.deepgramListenUrl).to.equal('https://api.deepgram.com/v1/listen');
+      expect(endpoints.cartesiaBaseUrl).to.equal('https://api.cartesia.ai');
+    });
+
+    it('should refuse to be redirected by assignment', () => {
+      // The recordings and the replies go to whatever is in here, with the API
+      // key attached, so it is not a knob and not writable. A test that wants a
+      // local stub asks for one by name.
+      expect(() => {
+        endpoints.cartesiaBaseUrl = 'http://example.invalid';
+      }).to.throw(/useVoiceEndpoints/);
+
+      expect(endpoints.cartesiaBaseUrl).to.equal('https://api.cartesia.ai');
+    });
+
+    it('should redirect and restore through the named seam', () => {
+      const restore = useVoiceEndpoints({ cartesiaBaseUrl: 'http://127.0.0.1:9' });
+
+      expect(endpoints.cartesiaBaseUrl).to.equal('http://127.0.0.1:9');
+      // Applied over the DEFAULTS, so naming one endpoint cannot leave the
+      // other pointing at a previous caller's stub.
+      expect(endpoints.deepgramListenUrl).to.equal('https://api.deepgram.com/v1/listen');
+
+      restore();
+
+      expect(endpoints.cartesiaBaseUrl).to.equal('https://api.cartesia.ai');
     });
   });
 

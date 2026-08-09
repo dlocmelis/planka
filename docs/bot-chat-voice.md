@@ -321,7 +321,13 @@ one message a second rather than every message.
 **Nothing here can cost a user their answer.** A catalogue that is empty, slow
 or broken falls back to `VOICE_TTS_VOICE` and sends NO language with it — naming
 a language a voice was not published for is a 400 on every message, which is
-worse than the wrong accent. The synthesis log line carries `voiceSource=` so an
+worse than the wrong accent. The same rule applies to `language` itself:
+Cartesia's is an **enum** of the 42 codes it speaks, not a free hint, so a
+language outside it is dropped from the request rather than sent. Without that,
+`VOICE_TTS_VOICES=lv=<id>` — Latvian is not on Cartesia's list — would be a 502
+on every Latvian message, for as long as it stayed configured. The voice still
+reads the message, and the language is still reported back so the conversation
+keeps one voice; only the pronunciation hint is lost. The synthesis log line carries `voiceSource=` so an
 operator can tell the cases apart: `request`, `config`, `catalog`, `novoice`
 (pin one), `lookupfailed` (an incident) or `default` (nothing was detected).
 

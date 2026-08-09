@@ -2,7 +2,7 @@ const http = require('http');
 const { expect } = require('chai');
 const supertest = require('supertest');
 
-const endpoints = require('../../../utils/voice-endpoints');
+const { useVoiceEndpoints } = require('../../../utils/voice-endpoints');
 const { voiceRateLimiter } = require('../../../utils/voice-rate-limit');
 
 /**
@@ -38,8 +38,10 @@ describe('Voice chat endpoints', function describeVoice() {
   let providerResponses;
 
   let originalCustom;
-  let originalDeepgramUrl;
-  let originalCartesiaUrl;
+  /** Puts the two provider URLs back to the real ones. See
+   * `utils/voice-endpoints.js`: they are not writable, and this is the handle
+   * the named injection hands back. */
+  let restoreEndpoints;
 
   const mintAccessToken = async (user) => {
     const { token } = sails.helpers.utils.createJwtToken(user.id);
@@ -108,8 +110,6 @@ describe('Voice chat endpoints', function describeVoice() {
     request = supertest(sails.hooks.http.app);
 
     originalCustom = sails.config.custom;
-    originalDeepgramUrl = endpoints.deepgramListenUrl;
-    originalCartesiaUrl = endpoints.cartesiaBaseUrl;
 
     provider = http.createServer((req, res) => {
       const chunks = [];
@@ -142,8 +142,10 @@ describe('Voice chat endpoints', function describeVoice() {
     });
 
     providerUrl = `http://127.0.0.1:${provider.address().port}`;
-    endpoints.deepgramListenUrl = `${providerUrl}/v1/listen`;
-    endpoints.cartesiaBaseUrl = providerUrl;
+    restoreEndpoints = useVoiceEndpoints({
+      deepgramListenUrl: `${providerUrl}/v1/listen`,
+      cartesiaBaseUrl: providerUrl,
+    });
 
     // GET /bootstrap reads it, and an in-memory test datastore starts empty —
     // this is the row `db/init.js` writes on a real install.
@@ -245,8 +247,7 @@ describe('Voice chat endpoints', function describeVoice() {
 
   after(async () => {
     sails.config.custom = originalCustom;
-    endpoints.deepgramListenUrl = originalDeepgramUrl;
-    endpoints.cartesiaBaseUrl = originalCartesiaUrl;
+    restoreEndpoints();
 
     await new Promise((resolve) => {
       provider.close(resolve);
@@ -489,16 +490,17 @@ describe('Voice chat endpoints', function describeVoice() {
       });
 
       sails.log.warn = (message) => warnings.push(String(message));
-      endpoints.deepgramListenUrl = originalDeepgramUrl;
-      endpoints.cartesiaBaseUrl = originalCartesiaUrl;
+      // The REAL hostnames for the length of this check: what it asserts on is
+      // the sentence naming `api.deepgram.com`, which the stub would replace
+      // with 127.0.0.1.
+      const restoreRealEndpoints = useVoiceEndpoints();
 
       try {
         withVoice();
         await request.get('/api/bootstrap');
       } finally {
         sails.log.warn = originalWarn;
-        endpoints.deepgramListenUrl = `${providerUrl}/v1/listen`;
-        endpoints.cartesiaBaseUrl = providerUrl;
+        restoreRealEndpoints();
 
         Object.keys(originalEnv).forEach((key) => {
           if (originalEnv[key] === undefined) {
@@ -942,6 +944,42 @@ describe('Voice chat endpoints', function describeVoice() {
       const body = JSON.parse(providerCalls[0].body.toString());
       expect(body.voice).to.deep.equal({ mode: 'id', id: 'voice-ru' });
       expect(body.language).to.equal('ru');
+    });
+
+    it('keeps a language the provider does not speak out of the request', async () => {
+      // Cartesia's `language` is an ENUM, so a code outside it is a 400 there
+      // and a 502 here — on EVERY message, for as long as it is configured.
+      // `VOICE_TTS_VOICES=lv=<id>` on a Latvian deployment is enough to reach
+      // it, and so is a caller sending back a language of their own invention
+      // ('zzz' passes a two-or-three-letter check). The voice still reads the
+      // message; only the hint is dropped.
+      withVoice({ voiceTtsVoices: 'lv=voice-lv' });
+
+      const res = await postSpeech(tokens.editor, { text: 'Sveiki.', language: 'lv' });
+
+      expect(res.status).to.equal(200);
+      expect(res.body.item.voice).to.equal('voice-lv');
+      // Still reported, because pinning one voice to a conversation is this
+      // server's decision and not the provider's.
+      expect(res.body.item.language).to.equal('lv');
+
+      const body = JSON.parse(providerCalls[0].body.toString());
+      expect(body.voice).to.deep.equal({ mode: 'id', id: 'voice-lv' });
+      expect(body).to.not.have.property('language');
+    });
+
+    it('keeps an invented language out of the request on the pinned-voice path', async () => {
+      const res = await postSpeech(tokens.editor, {
+        text: 'Hello.',
+        voice: 'voice-from-client',
+        language: 'zzz',
+      });
+
+      expect(res.status).to.equal(200);
+
+      const body = JSON.parse(providerCalls[0].body.toString());
+      expect(body.voice).to.deep.equal({ mode: 'id', id: 'voice-from-client' });
+      expect(body).to.not.have.property('language');
     });
 
     it('reports no language when it resolved none, so nothing wrong gets pinned', async () => {
