@@ -37,7 +37,15 @@
     flex: 0 0 auto;
   }
 
+  // A flex item's automatic minimum size is its CONTENT's width, so a
+  // `nowrap` name never shrinks and the ellipsis below can never trigger:
+  // without `min-width: 0` a long card name simply overflows the row and the
+  // list grows a horizontal scrollbar (`.items` sets `overflow-y`, which makes
+  // the other axis `auto` too). Planka's own ellipsized flex children carry the
+  // same pair — see cards/Card/TaskList/Task.module.scss `.name`.
   .itemName {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

@@ -116,11 +116,12 @@ export const selectChatCardsForCurrentBoard = createSelector(
           .toRefArray()
           .some((comment) => comment.userId === bot.id);
 
+      // Only what the picker draws. A selector that answers with more than its
+      // caller reads is a contract nobody is checking: the extra fields are
+      // free to go stale, and the next reader takes them for supported.
       return {
         id: cardModel.id,
         name: cardModel.name,
-        listId: cardModel.listId,
-        commentsTotal: cardModel.commentsTotal,
         hasBotComment,
       };
     });
