@@ -1,0 +1,1338 @@
+const http = require('http');
+const { expect } = require('chai');
+const supertest = require('supertest');
+
+const { useVoiceEndpoints } = require('../../../utils/voice-endpoints');
+const { voiceRateLimiter } = require('../../../utils/voice-rate-limit');
+
+/**
+ * The two voice endpoints, driven through the real router, the real policies
+ * and the real provider clients — with the providers themselves replaced by a
+ * local server that records what was sent to it.
+ *
+ * What these are for is everything a unit test of the helpers cannot see: that
+ * the routes exist and are reachable, that an anonymous caller is refused, that
+ * the feature gate answers 503 rather than 500, that the card scoping is the
+ * board's own membership rule, and that the request this server actually puts
+ * on the wire is the one the providers document.
+ */
+describe('Voice chat endpoints', function describeVoice() {
+  this.timeout(30000);
+
+  let request;
+  let project;
+  let board;
+  let list;
+  let card;
+  let editor;
+  let otherEditor;
+  let viewer;
+  let outsider;
+  let admin;
+
+  const tokens = {};
+
+  let provider;
+  let providerUrl;
+  let providerCalls;
+  let providerResponses;
+
+  let originalCustom;
+  /** Puts the two provider URLs back to the real ones. See
+   * `utils/voice-endpoints.js`: they are not writable, and this is the handle
+   * the named injection hands back. */
+  let restoreEndpoints;
+
+  const mintAccessToken = async (user) => {
+    const { token } = sails.helpers.utils.createJwtToken(user.id);
+
+    await sails.helpers.sessions.createOne.with({
+      values: {
+        accessToken: token,
+        userId: user.id,
+        remoteAddress: '127.0.0.1',
+        userAgent: 'mocha',
+      },
+    });
+
+    return token;
+  };
+
+  /**
+   * Point the config at a new object rather than mutating the one that is
+   * there: `sails.helpers.voice.getConfig` caches against the object's
+   * identity, so a mutated key would not be seen.
+   */
+  const configure = (values) => {
+    sails.config.custom = { ...originalCustom, ...values };
+  };
+
+  /** A deployment with both credentials, plus whatever this test wants to
+   * change about it. Every override goes through here rather than through
+   * `configure`, which would drop the keys and turn the feature gate off. */
+  const withVoice = (values) =>
+    configure({
+      deepgramApiKey: 'deepgram-test-key',
+      cartesiaApiKey: 'cartesia-test-key',
+      voiceSttMaxBytes: 700 * 1024,
+      voiceSttMaxDurationSec: 300,
+      voiceTtsMaxChars: 2000,
+      voiceTtsVoices: 'ru=voice-ru',
+      ...values,
+    });
+
+  const postTranscription = (token, body) => {
+    const req = request.post(`/api/cards/${card.id}/voice/transcription`);
+
+    if (token) {
+      req.set('Authorization', `Bearer ${token}`);
+    }
+
+    return req.send(body);
+  };
+
+  const postSpeech = (token, body) => {
+    const req = request.post(`/api/cards/${card.id}/voice/speech`);
+
+    if (token) {
+      req.set('Authorization', `Bearer ${token}`);
+    }
+
+    return req.send(body);
+  };
+
+  const audioBody = (bytes = 1024) => ({
+    data: Buffer.alloc(bytes, 7).toString('base64'),
+    mimeType: 'audio/webm;codecs=opus',
+  });
+
+  before(async () => {
+    request = supertest(sails.hooks.http.app);
+
+    originalCustom = sails.config.custom;
+
+    provider = http.createServer((req, res) => {
+      const chunks = [];
+
+      req.on('data', (chunk) => chunks.push(chunk));
+      req.on('end', () => {
+        const call = {
+          url: req.url,
+          headers: req.headers,
+          body: Buffer.concat(chunks),
+        };
+
+        providerCalls.push(call);
+
+        let canned = providerResponses.deepgram;
+
+        if (req.url.startsWith('/tts/bytes')) {
+          canned = providerResponses.cartesia;
+        } else if (req.url.startsWith('/voices/')) {
+          canned = providerResponses.voices;
+        }
+
+        res.writeHead(canned.status, canned.headers);
+        res.end(canned.body);
+      });
+    });
+
+    await new Promise((resolve) => {
+      provider.listen(0, '127.0.0.1', resolve);
+    });
+
+    providerUrl = `http://127.0.0.1:${provider.address().port}`;
+    restoreEndpoints = useVoiceEndpoints({
+      deepgramListenUrl: `${providerUrl}/v1/listen`,
+      cartesiaBaseUrl: providerUrl,
+    });
+
+    // GET /bootstrap reads it, and an in-memory test datastore starts empty —
+    // this is the row `db/init.js` writes on a real install.
+    const internalConfig = await InternalConfig.qm.getOneMain();
+
+    if (!internalConfig) {
+      await InternalConfig.create({
+        id: InternalConfig.MAIN_ID,
+        isInitialized: true,
+      }).fetch();
+    }
+
+    project = await Project.create({
+      id: '1925476504885136001',
+      name: 'Voice Test Project',
+    }).fetch();
+
+    board = await Board.create({
+      id: '1925476504885136002',
+      projectId: project.id,
+      position: 1,
+      name: 'Voice Test Board',
+    }).fetch();
+
+    list = await List.create({
+      id: '1925476504885136003',
+      boardId: board.id,
+      type: List.Types.ACTIVE,
+      position: 65536,
+      name: 'Voice Test List',
+    }).fetch();
+
+    card = await Card.create({
+      id: '1925476504885136004',
+      boardId: board.id,
+      listId: list.id,
+      type: Card.Types.PROJECT,
+      position: 65536,
+      name: 'Voice Test Card',
+    }).fetch();
+
+    [editor, viewer, outsider] = await Promise.all(
+      ['voiceeditor', 'voiceviewer', 'voiceoutsider'].map((name, index) =>
+        User.create({
+          id: `192547650488513600${5 + index}`,
+          email: `${name}@example.com`,
+          username: name,
+          role: User.Roles.BOARD_USER,
+          name,
+        }).fetch(),
+      ),
+    );
+
+    // A second editor on the same board, for the one thing a single one cannot
+    // show: that the spending caps are per user rather than per instance.
+    otherEditor = await User.create({
+      id: '1925476504885136009',
+      email: 'voiceeditor2@example.com',
+      username: 'voiceeditor2',
+      role: User.Roles.BOARD_USER,
+      name: 'voiceeditor2',
+    }).fetch();
+
+    await Promise.all(
+      [editor, otherEditor].map((user) =>
+        BoardMembership.create({
+          projectId: project.id,
+          boardId: board.id,
+          userId: user.id,
+          role: BoardMembership.Roles.EDITOR,
+        }).fetch(),
+      ),
+    );
+
+    await BoardMembership.create({
+      projectId: project.id,
+      boardId: board.id,
+      userId: viewer.id,
+      role: BoardMembership.Roles.VIEWER,
+      canComment: false,
+    }).fetch();
+
+    // On no board and in no project, which is the point: an admin reads every
+    // thread on the instance through the same endpoints everyone else does.
+    admin = await User.create({
+      id: '1925476504885136008',
+      email: 'voiceadmin@example.com',
+      username: 'voiceadmin',
+      role: User.Roles.ADMIN,
+      name: 'voiceadmin',
+    }).fetch();
+
+    tokens.editor = await mintAccessToken(editor);
+    tokens.otherEditor = await mintAccessToken(otherEditor);
+    tokens.viewer = await mintAccessToken(viewer);
+    tokens.outsider = await mintAccessToken(outsider);
+    tokens.admin = await mintAccessToken(admin);
+  });
+
+  after(async () => {
+    sails.config.custom = originalCustom;
+    restoreEndpoints();
+
+    await new Promise((resolve) => {
+      provider.close(resolve);
+    });
+  });
+
+  beforeEach(() => {
+    // The spending caps are per user and outlive a request, so without this
+    // every test in this file would be spending the same editor's budget and
+    // the ones at the bottom would start seeing 429s from the ones at the top.
+    voiceRateLimiter.reset();
+
+    providerCalls = [];
+    providerResponses = {
+      deepgram: {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          metadata: { duration: 2.5 },
+          results: {
+            channels: [
+              {
+                alternatives: [{ transcript: '  what is blocking this  ', confidence: 0.94 }],
+                languages: ['en'],
+              },
+            ],
+          },
+        }),
+      },
+      cartesia: {
+        status: 200,
+        headers: { 'Content-Type': 'audio/mpeg' },
+        body: Buffer.from([0xff, 0xfb, 0x90, 0x00]),
+      },
+      // GET /voices/ — the catalogue the automatic voice switch reads. The
+      // shape is Cartesia's, cut to the fields the switch uses.
+      voices: {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          has_more: false,
+          data: [
+            {
+              id: 'catalog-covers-de',
+              language: 'de',
+              locales: [
+                { locale: 'en-US', is_native: true },
+                { locale: 'de-DE', is_native: false },
+              ],
+            },
+            {
+              id: 'catalog-native-de',
+              language: 'de',
+              locales: [{ locale: 'de-DE', is_native: true }],
+            },
+          ],
+        }),
+      },
+    };
+
+    withVoice();
+  });
+
+  describe('when neither credential is configured', () => {
+    beforeEach(() => {
+      configure({ deepgramApiKey: '', cartesiaApiKey: '' });
+    });
+
+    it('answers 503 on both routes, and calls no provider', async () => {
+      // 503 is the one status the client branches on: it means the feature is
+      // not configured here, so the controls are withdrawn rather than the user
+      // being told to try again.
+      const transcription = await postTranscription(tokens.editor, audioBody());
+      expect(transcription.status).to.equal(503);
+      expect(transcription.body.code).to.equal('E_SERVICE_UNAVAILABLE');
+
+      const speech = await postSpeech(tokens.editor, { text: 'hello' });
+      expect(speech.status).to.equal(503);
+
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    it('reports both halves off in the bootstrap', async () => {
+      const res = await request.get('/api/bootstrap');
+
+      expect(res.status).to.equal(200);
+      expect(res.body.item.voiceChat).to.deep.equal({
+        sttEnabled: false,
+        ttsEnabled: false,
+        sttMaxBytes: null,
+        sttMaxDurationSec: null,
+        ttsMaxChars: null,
+      });
+    });
+  });
+
+  describe('the bootstrap capability', () => {
+    it('reports each half separately, with the caps the client checks against', async () => {
+      withVoice({ cartesiaApiKey: '' });
+
+      const res = await request.get('/api/bootstrap');
+
+      expect(res.body.item.voiceChat.sttEnabled).to.equal(true);
+      expect(res.body.item.voiceChat.ttsEnabled).to.equal(false);
+      expect(res.body.item.voiceChat.sttMaxBytes).to.equal(700 * 1024);
+      expect(res.body.item.voiceChat.ttsMaxChars).to.equal(null);
+    });
+  });
+
+  /**
+   * A typo in an optional knob must not stop PLANKA from booting, and must not
+   * silently serve the default instead — it leaves that ONE half off and says
+   * so (see `api/helpers/voice/get-config.js`). Driven through the bootstrap
+   * and the routes rather than through the helper, because "that half stays
+   * disabled" only means anything if the endpoint really answers 503 and the
+   * client is really told the mode is unavailable.
+   */
+  describe('when a knob is misconfigured', () => {
+    const cases = [
+      {
+        what: 'a speech-to-text provider nobody implements',
+        values: { voiceSttProvider: 'whisper' },
+        half: 'stt',
+      },
+      {
+        what: 'a text-to-speech provider nobody implements',
+        values: { voiceTtsProvider: 'elevenlabs' },
+        half: 'tts',
+      },
+      {
+        what: 'an output format the request builder has no shape for',
+        values: { voiceTtsOutputFormat: 'flac' },
+        half: 'tts',
+      },
+      {
+        what: 'a voice map that is not <language>=<voice id>',
+        values: { voiceTtsVoices: 'russian' },
+        half: 'tts',
+      },
+      {
+        what: 'a voice map naming one language twice, differently',
+        values: { voiceTtsVoices: 'ru=voice-one,ru-RU=voice-two' },
+        half: 'tts',
+      },
+      {
+        // The one that is not one wrong accent but a provider 400 on every
+        // message: this voice reads everything no language was resolved for.
+        what: 'a fallback voice that is not a voice id',
+        values: { voiceTtsVoice: 'the nice sounding one' },
+        half: 'tts',
+      },
+      {
+        what: 'a fallback voice set to nothing at all',
+        values: { voiceTtsVoice: '   ' },
+        half: 'tts',
+      },
+      {
+        // `bytes()` answers null for anything it cannot parse, and `null || 0`
+        // is how "no cap at all" is spelled downstream — so a typo here used to
+        // REMOVE the upload limit and stop the bootstrap publishing one, which
+        // stops the browser pre-checking too.
+        what: 'an upload limit that does not name a size',
+        values: { voiceSttMaxBytes: null },
+        half: 'stt',
+      },
+      {
+        // A negative cap would refuse every turn for ever and say nothing about
+        // why, which is the one direction a spending limit must not fail in
+        // quietly.
+        what: 'a negative transcription rate limit',
+        values: { voiceSttRateMaxRequests: -1 },
+        half: 'stt',
+      },
+      {
+        what: 'a negative synthesis rate window',
+        values: { voiceTtsRateWindowSec: -300 },
+        half: 'tts',
+      },
+    ];
+
+    cases.forEach(({ what, values, half }) => {
+      it(`leaves only the affected half off for ${what}`, async () => {
+        withVoice(values);
+
+        const bootstrap = await request.get('/api/bootstrap');
+
+        expect(bootstrap.status).to.equal(200);
+        expect(bootstrap.body.item.voiceChat.sttEnabled).to.equal(half !== 'stt');
+        expect(bootstrap.body.item.voiceChat.ttsEnabled).to.equal(half !== 'tts');
+
+        const broken =
+          half === 'stt'
+            ? await postTranscription(tokens.editor, audioBody())
+            : await postSpeech(tokens.editor, { text: 'hello' });
+
+        expect(broken.status).to.equal(503);
+        expect(broken.body.code).to.equal('E_SERVICE_UNAVAILABLE');
+
+        // Nothing was dialled for the broken half — a misconfigured deployment
+        // must not be spending on a provider it cannot ask properly.
+        expect(providerCalls).to.have.lengthOf(0);
+
+        // ...and the other half is untouched, which is the whole point of
+        // failing one at a time.
+        const working =
+          half === 'stt'
+            ? await postSpeech(tokens.editor, { text: 'hello' })
+            : await postTranscription(tokens.editor, audioBody());
+
+        expect(working.status).to.equal(200);
+      });
+    });
+  });
+
+  describe('when the outgoing allowlist would deny the providers', () => {
+    /**
+     * Resolve the config with these env vars in place, collecting what it
+     * warned about.
+     *
+     * The provider endpoints are put back to the REAL ones for the duration:
+     * the warning names the host this server would actually dial, and every
+     * other test in this file has them pointed at a stub on 127.0.0.1, which is
+     * not the hostname an operator has to allowlist. The config is rebuilt
+     * because `withVoice` hands it a new object, and `GET /bootstrap` is the
+     * cheapest thing that asks for one.
+     */
+    const resolveWith = async (env) => {
+      const warnings = [];
+      const originalWarn = sails.log.warn;
+      const originalEnv = {};
+
+      Object.keys(env).forEach((key) => {
+        originalEnv[key] = process.env[key];
+
+        if (env[key] === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = env[key];
+        }
+      });
+
+      sails.log.warn = (message) => warnings.push(String(message));
+      // The REAL hostnames for the length of this check: what it asserts on is
+      // the sentence naming `api.deepgram.com`, which the stub would replace
+      // with 127.0.0.1.
+      const restoreRealEndpoints = useVoiceEndpoints();
+
+      try {
+        withVoice();
+        await request.get('/api/bootstrap');
+      } finally {
+        sails.log.warn = originalWarn;
+        restoreRealEndpoints();
+
+        Object.keys(originalEnv).forEach((key) => {
+          if (originalEnv[key] === undefined) {
+            delete process.env[key];
+          } else {
+            process.env[key] = originalEnv[key];
+          }
+        });
+      }
+
+      return warnings;
+    };
+
+    it('names each hostname an operator has to add, once', async () => {
+      // The failure this exists to stop: the keys are set, the bootstrap
+      // reports the mode available, the microphone opens — and every turn 502s
+      // because the proxy denied the call. Nothing else in the app would
+      // notice, so it is said here, where an operator reads the startup log.
+      const warnings = await resolveWith({
+        OUTGOING_ALLOWED_HOSTS: 'api.openai.com',
+        OUTGOING_PROXY: undefined,
+      });
+
+      expect(warnings.filter((message) => message.includes('api.deepgram.com'))).to.have.lengthOf(
+        1,
+      );
+      expect(warnings.filter((message) => message.includes('api.cartesia.ai'))).to.have.lengthOf(1);
+      expect(warnings.every((message) => message.includes('OUTGOING_ALLOWED_HOSTS'))).to.equal(
+        true,
+      );
+    });
+
+    it('says nothing when both hostnames are on it', async () => {
+      const warnings = await resolveWith({
+        OUTGOING_ALLOWED_HOSTS: 'api.deepgram.com,api.cartesia.ai',
+        OUTGOING_PROXY: undefined,
+      });
+
+      expect(warnings).to.have.lengthOf(0);
+    });
+
+    it('says nothing when no allowlist is in force', async () => {
+      const warnings = await resolveWith({
+        OUTGOING_ALLOWED_HOSTS: undefined,
+        OUTGOING_ALLOWED_IPS: undefined,
+        OUTGOING_PROXY: undefined,
+      });
+
+      expect(warnings).to.have.lengthOf(0);
+    });
+
+    it('names only the half that cannot get out', async () => {
+      const warnings = await resolveWith({
+        OUTGOING_ALLOWED_HOSTS: 'api.deepgram.com',
+        OUTGOING_PROXY: undefined,
+      });
+
+      expect(warnings).to.have.lengthOf(1);
+      expect(warnings[0]).to.include('api.cartesia.ai');
+    });
+  });
+
+  describe('POST /cards/:cardId/voice/transcription', () => {
+    it('refuses an anonymous caller', async () => {
+      const res = await postTranscription(null, audioBody());
+
+      expect(res.status).to.equal(401);
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    it('transcribes for a board editor', async () => {
+      const res = await postTranscription(tokens.editor, audioBody());
+
+      expect(res.status).to.equal(200);
+      expect(res.body.item).to.deep.equal({
+        text: 'what is blocking this',
+        languages: ['en'],
+        durationSec: 2.5,
+        confidence: 0.94,
+      });
+    });
+
+    it('sends the provider the request its documentation describes', async () => {
+      await postTranscription(tokens.editor, audioBody(64));
+
+      expect(providerCalls).to.have.lengthOf(1);
+
+      const [call] = providerCalls;
+      const url = new URL(`${providerUrl}${call.url}`);
+
+      expect(url.pathname).to.equal('/v1/listen');
+      expect(url.searchParams.get('model')).to.equal('nova-3');
+      expect(url.searchParams.get('language')).to.equal('multi');
+      expect(url.searchParams.get('smart_format')).to.equal('true');
+      // Repeated once per term, which is the Nova-3 feature. The older
+      // `keywords` parameter is silently ignored by Nova-3 — it would look
+      // configured and do nothing.
+      expect(url.searchParams.getAll('keyterm')).to.deep.equal(['PLANKA', 'planka_bot']);
+
+      expect(call.headers.authorization).to.equal('Token deepgram-test-key');
+      expect(call.headers['content-type']).to.equal('audio/webm');
+      // The audio itself, not a base64 string and not a multipart envelope.
+      expect(call.body).to.have.lengthOf(64);
+    });
+
+    it('lets one request override the language mode, and labels the transcript with it', async () => {
+      // The endpoint takes a per-request `language` so a caller that already
+      // knows what is about to be said is not held to the deployment's
+      // code-switching default. The panel does not send one — `multi` is what a
+      // hands-free conversation wants — but the parameter is documented, so it
+      // is pinned rather than left to be discovered by whoever first needs it.
+      const res = await postTranscription(tokens.editor, { ...audioBody(), language: 'lv' });
+
+      expect(res.status).to.equal(200);
+
+      const [call] = providerCalls;
+
+      expect(new URL(`${providerUrl}${call.url}`).searchParams.get('language')).to.equal('lv');
+      // A monolingual request reports no language of its own, so the mode that
+      // was asked for is what labels the transcript — otherwise the voice that
+      // reads the answer would be resolved against nothing.
+      expect(res.body.item.languages).to.deep.equal(['en']);
+    });
+
+    it('refuses a container that is not on the allowlist, before calling anyone', async () => {
+      const res = await postTranscription(tokens.editor, {
+        ...audioBody(),
+        mimeType: 'application/octet-stream',
+      });
+
+      expect(res.status).to.equal(422);
+      expect(res.body.message).to.contain('Unsupported audio content type');
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    it('refuses a recording with no bytes in it, before calling anyone', async () => {
+      // `====` is legal base64 for nothing at all — the shape a recorder that
+      // produced silence would upload. An empty STRING never reaches the
+      // handler: the action's own `required` check answers 400 first.
+      const nothing = await postTranscription(tokens.editor, { ...audioBody(), data: '====' });
+      expect(nothing.status).to.equal(422);
+      expect(nothing.body.message).to.contain('empty');
+
+      const absent = await postTranscription(tokens.editor, { ...audioBody(), data: '' });
+      expect(absent.status).to.equal(400);
+
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    it('refuses a recording over the cap, before calling anyone', async () => {
+      withVoice({ voiceSttMaxBytes: 10 });
+
+      const res = await postTranscription(tokens.editor, audioBody(64));
+
+      expect(res.status).to.equal(422);
+      expect(res.body.message).to.contain('too large');
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    it('discards a transcript whose audio was longer than the cap', async () => {
+      // Enforced against the duration the PROVIDER reports: nothing in a
+      // browser-produced webm states it reliably, so this is the first
+      // trustworthy measurement. The transcript is discarded rather than
+      // returned truncated.
+      withVoice({ voiceSttMaxDurationSec: 1 });
+
+      const res = await postTranscription(tokens.editor, audioBody());
+
+      expect(res.status).to.equal(422);
+      expect(res.body.message).to.contain('too long');
+    });
+
+    it('refuses a member who may not comment', async () => {
+      // The transcript is about to be posted as a comment, so the bar is the
+      // bar for commenting.
+      const res = await postTranscription(tokens.viewer, audioBody());
+
+      expect(res.status).to.equal(403);
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    it('answers 404 to somebody who is not on the board at all', async () => {
+      const res = await postTranscription(tokens.outsider, audioBody());
+
+      expect(res.status).to.equal(404);
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    it('does not re-report a provider refusal as this server failing', async () => {
+      providerResponses.deepgram = { status: 400, headers: {}, body: 'bad audio' };
+
+      const res = await postTranscription(tokens.editor, audioBody());
+
+      expect(res.status).to.equal(422);
+      // Fixed copy, not the vendor's error page.
+      expect(res.body.message).to.not.contain('bad audio');
+    });
+
+    it('answers 502 when the provider itself is broken', async () => {
+      providerResponses.deepgram = { status: 500, headers: {}, body: 'upstream on fire' };
+
+      const res = await postTranscription(tokens.editor, audioBody());
+
+      expect(res.status).to.equal(502);
+      expect(res.body.code).to.equal('E_BAD_GATEWAY');
+      expect(res.body.message).to.not.contain('upstream on fire');
+    });
+
+    it('says the service is busy rather than broken when it is rate-limited', async () => {
+      // Distinct copy on purpose: 429 is worth trying again in a moment, and
+      // the generic 502 sentence tells the user the opposite.
+      providerResponses.deepgram = { status: 429, headers: {}, body: 'slow down' };
+
+      const res = await postTranscription(tokens.editor, audioBody());
+
+      expect(res.status).to.equal(502);
+      expect(res.body.code).to.equal('E_BAD_GATEWAY');
+      expect(res.body.message).to.contain('busy right now');
+      expect(res.body.message).to.not.contain('slow down');
+    });
+
+    it('answers 400 for a language mode the provider would not understand', async () => {
+      // It goes straight into the provider's query string, so a bad value used
+      // to cost a billed round trip and come back as "that recording could not
+      // be transcribed" — advice for a problem the caller does not have.
+      const res = await postTranscription(tokens.editor, {
+        ...audioBody(),
+        language: 'not a language',
+      });
+
+      expect(res.status).to.equal(400);
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    it('carries a recording at the documented cap through the real body parser', async () => {
+      // The operational claim the whole 700 KB number rests on
+      // (docs/bot-chat-voice.md): base64 of the cap is ~956 KB, and the body
+      // parser in front of this route admits 1 MB. Every other size test lowers
+      // the cap to something small, so nothing but this exercises the boundary
+      // that actually ships — and a change to either number breaks it here
+      // rather than on a user's microphone.
+      const cap = sails.config.custom.voiceSttMaxBytes;
+      const encoded = Buffer.alloc(cap, 7).toString('base64');
+
+      expect(encoded.length).to.be.above(900 * 1024);
+      expect(encoded.length).to.be.below(1024 * 1024);
+
+      const res = await postTranscription(tokens.editor, {
+        data: encoded,
+        mimeType: 'audio/webm;codecs=opus',
+      });
+
+      expect(res.status).to.equal(200);
+      expect(providerCalls).to.have.lengthOf(1);
+      // The provider was handed the bytes themselves, all of them.
+      expect(providerCalls[0].body).to.have.lengthOf(cap);
+    });
+
+    it('refuses one byte over that cap with a sentence rather than a parser error', async () => {
+      const res = await postTranscription(tokens.editor, {
+        data: Buffer.alloc(sails.config.custom.voiceSttMaxBytes + 1, 7).toString('base64'),
+        mimeType: 'audio/webm;codecs=opus',
+      });
+
+      expect(res.status).to.equal(422);
+      expect(res.body.code).to.equal('E_UNPROCESSABLE_ENTITY');
+      expect(res.body.message).to.contain('too large');
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    describe('the per-user spending cap', () => {
+      it('stops paying for a caller who has had their turns for the window', async () => {
+        withVoice({ voiceSttRateMaxRequests: 2 });
+
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(200);
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(200);
+
+        const refused = await postTranscription(tokens.editor, audioBody());
+
+        // 429 and not 502 or 503: the client keeps the mode on for this one and
+        // waits, where those two make it stop the mode or withdraw the feature.
+        expect(refused.status).to.equal(429);
+        expect(refused.body.code).to.equal('E_TOO_MANY_REQUESTS');
+        expect(refused.body.retryAfterSec).to.be.above(0);
+        expect(refused.headers['retry-after']).to.equal(String(refused.body.retryAfterSec));
+
+        // The whole point: the provider was not dialled for the refused turn.
+        expect(providerCalls).to.have.lengthOf(2);
+      });
+
+      it('counts the budget against one user rather than the instance', async () => {
+        withVoice({ voiceSttRateMaxRequests: 1 });
+
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(200);
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(429);
+
+        // Somebody else's conversation is not held up by it.
+        expect((await postTranscription(tokens.otherEditor, audioBody())).status).to.equal(200);
+      });
+
+      it('refuses on audio spent even while turns are left', async () => {
+        // 8 seconds of audio a window, and each turn may be up to 5 — so what
+        // really gets counted is the 2.5 seconds the provider reports, and the
+        // third turn is the first that cannot be afforded (5 reserved, 3 left).
+        withVoice({ voiceSttMaxDurationSec: 5, voiceSttRateMaxSeconds: 8 });
+
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(200);
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(200);
+
+        const refused = await postTranscription(tokens.editor, audioBody());
+
+        expect(refused.status).to.equal(429);
+        expect(providerCalls).to.have.lengthOf(2);
+      });
+
+      it('does not charge a short turn for the long one it might have been', async () => {
+        // The regression the reserve/settle split exists to prevent. Each turn
+        // has to reserve the DURATION CEILING before the call, because nothing
+        // before the provider answers knows how long the audio is — so with a
+        // budget of two ceilings, a third ordinary turn would be refused if the
+        // reservation were never settled back down to the 2.5 seconds it really
+        // cost.
+        withVoice({ voiceSttMaxDurationSec: 300, voiceSttRateMaxSeconds: 600 });
+
+        for (let index = 0; index < 5; index += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          const res = await postTranscription(tokens.editor, audioBody());
+
+          expect(res.status, `turn ${index}`).to.equal(200);
+        }
+      });
+
+      it('does not hand the budget back to a turn that failed', async () => {
+        // Otherwise the cap is one an abusive caller can farm by failing on
+        // purpose — and this server cannot tell a provider that charged for the
+        // call from one that did not. Two failures reserve 5 seconds each and
+        // give neither back, so the third turn has nothing left to reserve.
+        withVoice({ voiceSttMaxDurationSec: 5, voiceSttRateMaxSeconds: 10 });
+
+        providerResponses.deepgram = { status: 500, headers: {}, body: 'boom' };
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(502);
+
+        providerResponses.deepgram = { status: 500, headers: {}, body: 'boom' };
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(502);
+
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(429);
+      });
+
+      it('spends nothing on a caller who may not comment anyway', async () => {
+        // The order the gates run in: rights before budget, so being refused
+        // does not use up a turn the user could have spent on a card they can
+        // actually write to.
+        withVoice({ voiceSttRateMaxRequests: 1 });
+
+        expect((await postTranscription(tokens.viewer, audioBody())).status).to.equal(403);
+        expect((await postTranscription(tokens.viewer, audioBody())).status).to.equal(403);
+      });
+
+      it('is off when the deployment says so', async () => {
+        withVoice({ voiceSttRateWindowSec: 0 });
+
+        for (let index = 0; index < 6; index += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          const res = await postTranscription(tokens.editor, audioBody());
+
+          expect(res.status, `turn ${index}`).to.equal(200);
+        }
+      });
+    });
+  });
+
+  describe('POST /cards/:cardId/voice/speech', () => {
+    it('refuses an anonymous caller', async () => {
+      const res = await postSpeech(null, { text: 'hello' });
+
+      expect(res.status).to.equal(401);
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    it('answers with the audio, base64-encoded, and the voice that read it', async () => {
+      const res = await postSpeech(tokens.editor, { text: 'It is waiting on review.' });
+
+      expect(res.status).to.equal(200);
+      expect(res.body.item.mimeType).to.equal('audio/mpeg');
+      expect(Buffer.from(res.body.item.data, 'base64')).to.deep.equal(
+        Buffer.from([0xff, 0xfb, 0x90, 0x00]),
+      );
+      expect(res.body.item.voice).to.be.a('string');
+    });
+
+    it('sends the provider the request its documentation describes', async () => {
+      await postSpeech(tokens.editor, { text: '## Heading\n\nSome **bold** text.' });
+
+      expect(providerCalls).to.have.lengthOf(1);
+
+      const [call] = providerCalls;
+      expect(call.url).to.equal('/tts/bytes');
+      // Mandatory: a request without it is answered 400.
+      expect(call.headers['cartesia-version']).to.equal('2026-03-01');
+      // Both headers Cartesia accepts, because they name the same secret and a
+      // feature that may sit unprovisioned for months must not break silently
+      // if one of them is retired.
+      expect(call.headers.authorization).to.equal('Bearer cartesia-test-key');
+      expect(call.headers['x-api-key']).to.equal('cartesia-test-key');
+
+      const body = JSON.parse(call.body.toString());
+      expect(body.model_id).to.equal('sonic-3.5');
+      expect(body.voice).to.deep.equal({ mode: 'id', id: sails.config.custom.voiceTtsVoice });
+      expect(body.output_format).to.deep.equal({
+        container: 'mp3',
+        sample_rate: 44100,
+        bit_rate: 128000,
+      });
+      // The markdown is prepared, not read out as punctuation.
+      expect(body.transcript).to.equal('Heading.\n\nSome bold text.');
+      // No language was named, so none is sent and Cartesia infers it.
+      expect(body).to.not.have.property('language');
+    });
+
+    it('narrates a table rather than reading its pipes aloud', async () => {
+      await postSpeech(tokens.editor, {
+        text: '| Merchant | Volume |\n|---|---|\n| Acme | 12 |\n| Globex | 34 |',
+      });
+
+      const body = JSON.parse(providerCalls[0].body.toString());
+
+      expect(body.transcript).to.equal(
+        'A table of 2 rows comparing Volume by Merchant. Acme: 12. Globex: 34.',
+      );
+    });
+
+    it('resolves the pinned voice for a language the deployment named', async () => {
+      const res = await postSpeech(tokens.editor, { text: 'Ждём ревью.', language: 'ru-RU' });
+
+      expect(res.status).to.equal(200);
+      expect(res.body.item.voice).to.equal('voice-ru');
+      // Reported WITH its language, which is what makes it safe to pin onto the
+      // rest of the conversation.
+      expect(res.body.item.language).to.equal('ru');
+
+      const body = JSON.parse(providerCalls[0].body.toString());
+      expect(body.voice).to.deep.equal({ mode: 'id', id: 'voice-ru' });
+      expect(body.language).to.equal('ru');
+    });
+
+    it('keeps a language the provider does not speak out of the request', async () => {
+      // Cartesia's `language` is an ENUM, so a code outside it is a 400 there
+      // and a 502 here — on EVERY message, for as long as it is configured.
+      // `VOICE_TTS_VOICES=lv=<id>` on a Latvian deployment is enough to reach
+      // it, and so is a caller sending back a language of their own invention
+      // ('zzz' passes a two-or-three-letter check). The voice still reads the
+      // message; only the hint is dropped.
+      withVoice({ voiceTtsVoices: 'lv=voice-lv' });
+
+      const res = await postSpeech(tokens.editor, { text: 'Sveiki.', language: 'lv' });
+
+      expect(res.status).to.equal(200);
+      expect(res.body.item.voice).to.equal('voice-lv');
+      // Still reported, because pinning one voice to a conversation is this
+      // server's decision and not the provider's.
+      expect(res.body.item.language).to.equal('lv');
+
+      const body = JSON.parse(providerCalls[0].body.toString());
+      expect(body.voice).to.deep.equal({ mode: 'id', id: 'voice-lv' });
+      expect(body).to.not.have.property('language');
+    });
+
+    it('keeps an invented language out of the request on the pinned-voice path', async () => {
+      const res = await postSpeech(tokens.editor, {
+        text: 'Hello.',
+        voice: 'voice-from-client',
+        language: 'zzz',
+      });
+
+      expect(res.status).to.equal(200);
+
+      const body = JSON.parse(providerCalls[0].body.toString());
+      expect(body.voice).to.deep.equal({ mode: 'id', id: 'voice-from-client' });
+      expect(body).to.not.have.property('language');
+    });
+
+    it('reports no language when it resolved none, so nothing wrong gets pinned', async () => {
+      const res = await postSpeech(tokens.editor, { text: 'Anything at all.' });
+
+      expect(res.body.item.voice).to.equal(sails.config.custom.voiceTtsVoice);
+      expect(res.body.item.language).to.equal(null);
+    });
+
+    it('speaks a voice the caller sent back rather than resolving a new one', async () => {
+      await postSpeech(tokens.editor, {
+        text: 'Second answer.',
+        voice: 'voice-ru',
+        language: 'ru',
+      });
+
+      const body = JSON.parse(providerCalls[0].body.toString());
+      expect(body.voice).to.deep.equal({ mode: 'id', id: 'voice-ru' });
+    });
+
+    it('lets a board viewer hear the thread they are allowed to read', async () => {
+      // Membership is the whole bar: commenting is a different act, gated where
+      // it happens.
+      const res = await postSpeech(tokens.viewer, { text: 'It is waiting on review.' });
+
+      expect(res.status).to.equal(200);
+    });
+
+    it('lets an admin who is on no board hear a thread they can already read', async () => {
+      // The bar here is the READ bar — the one `controllers/comments/index.js`
+      // and `controllers/cards/show.js` use — and that is admin OR project
+      // manager OR board member. Membership alone would 404 somebody who has
+      // every word of the conversation on screen in front of them.
+      const res = await postSpeech(tokens.admin, { text: 'It is waiting on review.' });
+
+      expect(res.status).to.equal(200);
+      expect(providerCalls).to.have.lengthOf(1);
+    });
+
+    it('answers 404 to somebody who is not on the board at all', async () => {
+      const res = await postSpeech(tokens.outsider, { text: 'hello' });
+
+      expect(res.status).to.equal(404);
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    it('refuses a message over the character ceiling, before calling anyone', async () => {
+      withVoice({ voiceTtsMaxChars: 10 });
+
+      const res = await postSpeech(tokens.editor, { text: 'far more than ten characters' });
+
+      expect(res.status).to.equal(422);
+      expect(res.body.message).to.contain('too long');
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    it('refuses a message with nothing speakable in it', async () => {
+      const res = await postSpeech(tokens.editor, { text: '```\ncode()\n```' });
+
+      // A fenced block reduces to the placeholder, which IS speakable — so the
+      // case that must be refused is one that reduces to nothing at all.
+      expect(res.status).to.equal(200);
+
+      const bare = await postSpeech(tokens.editor, { text: '###' });
+      expect(bare.status).to.equal(422);
+    });
+
+    it('refuses a language hint that is not one', async () => {
+      const res = await postSpeech(tokens.editor, { text: 'hello', language: 'english' });
+
+      expect(res.status).to.equal(422);
+      expect(providerCalls).to.have.lengthOf(0);
+    });
+
+    /**
+     * The automatic voice switch: a language the deployment has NOT pinned a
+     * voice for is looked up in the provider's own catalogue.
+     *
+     * It matters because Cartesia's voices are published PER LANGUAGE — the
+     * fallback this ships is an en-US voice — and the transcription default is
+     * `multi`, ten languages including Russian. Without the switch, every
+     * non-English reply on a deployment that configured nothing but the two
+     * keys is read by an English voice.
+     */
+    describe('the automatic voice switch', () => {
+      /** Only the calls to GET /voices/, in order. */
+      const lookups = () => providerCalls.filter((call) => call.url.startsWith('/voices/'));
+
+      it('asks the catalogue for a language nobody pinned, and prefers a native voice', async () => {
+        const res = await postSpeech(tokens.editor, {
+          text: 'Es wartet auf Review.',
+          language: 'de',
+        });
+
+        expect(res.status).to.equal(200);
+        // Not `catalog-covers-de`, which merely covers de-DE: a covering voice
+        // is the very thing the switch exists to move away from.
+        expect(res.body.item.voice).to.equal('catalog-native-de');
+        expect(res.body.item.language).to.equal('de');
+
+        expect(lookups()).to.have.lengthOf(1);
+        expect(lookups()[0].url).to.equal('/voices/?limit=10&language=de');
+
+        const speech = providerCalls.find((call) => call.url === '/tts/bytes');
+        const body = JSON.parse(speech.body.toString());
+        expect(body.voice).to.deep.equal({ mode: 'id', id: 'catalog-native-de' });
+        // Named on the wire, which is safe now: this voice was published for it.
+        expect(body.language).to.equal('de');
+      });
+
+      it('sends the lookup the same version and credential headers as the synthesis', async () => {
+        await postSpeech(tokens.editor, { text: 'Es wartet auf Review.', language: 'de' });
+
+        const [lookup] = lookups();
+        expect(lookup.headers['cartesia-version']).to.equal('2026-03-01');
+        expect(lookup.headers.authorization).to.equal('Bearer cartesia-test-key');
+        expect(lookup.headers['x-api-key']).to.equal('cartesia-test-key');
+      });
+
+      it('asks once per language, not once per message', async () => {
+        // The lookup sits IN FRONT of the audio, so paying for it on every
+        // message is the thing the cache exists to stop.
+        await postSpeech(tokens.editor, { text: 'Erste Antwort.', language: 'de' });
+        await postSpeech(tokens.editor, { text: 'Zweite Antwort.', language: 'de-AT' });
+
+        expect(lookups()).to.have.lengthOf(1);
+        expect(providerCalls.filter((call) => call.url === '/tts/bytes')).to.have.lengthOf(2);
+      });
+
+      it('never asks for a language the deployment pinned itself', async () => {
+        // `withVoice` pins ru=voice-ru. A deployment that has chosen its voices
+        // must not pay for a round trip to be told so.
+        const res = await postSpeech(tokens.editor, { text: 'Ждём ревью.', language: 'ru' });
+
+        expect(res.body.item.voice).to.equal('voice-ru');
+        expect(lookups()).to.have.lengthOf(0);
+      });
+
+      it('falls back without a language when the catalogue serves none', async () => {
+        // Latvian is exactly this case against the live API: the listing comes
+        // back empty. The fallback voice reads it and the language is NOT sent
+        // — naming a language a voice was not published for is a 400 on every
+        // message, which is worse than an accent.
+        providerResponses.voices = {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ has_more: false, data: [] }),
+        };
+
+        const res = await postSpeech(tokens.editor, {
+          text: 'Gaida pārskatīšanu.',
+          language: 'lv',
+        });
+
+        expect(res.status).to.equal(200);
+        expect(res.body.item.voice).to.equal(sails.config.custom.voiceTtsVoice);
+        expect(res.body.item.language).to.equal(null);
+
+        const speech = providerCalls.find((call) => call.url === '/tts/bytes');
+        expect(JSON.parse(speech.body.toString())).to.not.have.property('language');
+      });
+
+      it('still answers when the lookup itself fails', async () => {
+        // A catalogue that is down must cost the message its switch, not its
+        // answer.
+        providerResponses.voices = { status: 500, headers: {}, body: 'catalogue on fire' };
+
+        const res = await postSpeech(tokens.editor, {
+          text: 'Es wartet auf Review.',
+          language: 'de',
+        });
+
+        expect(res.status).to.equal(200);
+        expect(res.body.item.voice).to.equal(sails.config.custom.voiceTtsVoice);
+        expect(res.body.item.language).to.equal(null);
+      });
+
+      it('does not re-ask a failed language on the very next message', async () => {
+        providerResponses.voices = { status: 500, headers: {}, body: 'catalogue on fire' };
+
+        await postSpeech(tokens.editor, { text: 'Erste Antwort.', language: 'de' });
+        await postSpeech(tokens.editor, { text: 'Zweite Antwort.', language: 'de' });
+
+        // A provider that HANGS would otherwise cost every message the timeout.
+        expect(lookups()).to.have.lengthOf(1);
+      });
+
+      it('asks nobody when the switch is turned off', async () => {
+        withVoice({ voiceTtsAutoVoice: false });
+
+        const res = await postSpeech(tokens.editor, {
+          text: 'Es wartet auf Review.',
+          language: 'de',
+        });
+
+        expect(res.status).to.equal(200);
+        expect(lookups()).to.have.lengthOf(0);
+        expect(res.body.item.voice).to.equal(sails.config.custom.voiceTtsVoice);
+        expect(res.body.item.language).to.equal(null);
+      });
+
+      it('asks nobody when the caller sent a voice back', async () => {
+        // The pin that keeps one conversation in one voice outranks everything.
+        const res = await postSpeech(tokens.editor, {
+          text: 'Zweite Antwort.',
+          voice: 'catalog-native-de',
+          language: 'de',
+        });
+
+        expect(res.body.item.voice).to.equal('catalog-native-de');
+        expect(lookups()).to.have.lengthOf(0);
+      });
+    });
+
+    it('answers 502 when the provider is broken, and never plays silence', async () => {
+      providerResponses.cartesia = {
+        status: 200,
+        headers: { 'Content-Type': 'audio/mpeg' },
+        body: Buffer.alloc(0),
+      };
+
+      const res = await postSpeech(tokens.editor, { text: 'hello' });
+
+      // A 200 with no audio in it: the characters were billed and there is
+      // nothing to play, so it is a failure rather than a silent clip.
+      expect(res.status).to.equal(502);
+    });
+
+    it('answers 502 when the provider refuses the synthesis outright', async () => {
+      // The other half of "broken": an HTTP failure rather than an empty 200.
+      // The vendor's error page goes to the log, never to the user.
+      providerResponses.cartesia = {
+        status: 500,
+        headers: { 'Content-Type': 'text/html' },
+        body: '<html>upstream on fire</html>',
+      };
+
+      const res = await postSpeech(tokens.editor, { text: 'hello' });
+
+      expect(res.status).to.equal(502);
+      expect(res.body.code).to.equal('E_BAD_GATEWAY');
+      expect(res.body.message).to.not.contain('upstream on fire');
+    });
+
+    it('says the speech service is busy rather than broken when it is rate-limited', async () => {
+      providerResponses.cartesia = { status: 429, headers: {}, body: 'slow down' };
+
+      const res = await postSpeech(tokens.editor, { text: 'hello' });
+
+      expect(res.status).to.equal(502);
+      expect(res.body.message).to.contain('busy right now');
+      expect(res.body.message).to.not.contain('slow down');
+    });
+
+    it('gives up on an answer longer than this deployment could have produced', async () => {
+      // A backstop, not a business rule: `arrayBuffer()` reads to the end of
+      // whatever comes back, so a provider having a bad day would otherwise be
+      // an unbounded allocation on this process. The ceiling is derived from
+      // the character cap and the container's byte rate, so lowering the cap
+      // lowers it.
+      withVoice({ voiceTtsMaxChars: 20 });
+
+      providerResponses.cartesia = {
+        status: 200,
+        headers: { 'Content-Type': 'audio/mpeg' },
+        // The derived ceiling for 20 characters of mp3 is a few kilobytes.
+        body: Buffer.alloc(2 * 1024 * 1024, 0x55),
+      };
+
+      const res = await postSpeech(tokens.editor, { text: 'hello' });
+
+      expect(res.status).to.equal(502);
+      expect(res.body.code).to.equal('E_BAD_GATEWAY');
+    });
+
+    describe('the per-user spending cap', () => {
+      it('stops paying for a caller who has had their messages read for now', async () => {
+        withVoice({ voiceTtsRateMaxRequests: 2 });
+
+        expect((await postSpeech(tokens.editor, { text: 'one' })).status).to.equal(200);
+        expect((await postSpeech(tokens.editor, { text: 'two' })).status).to.equal(200);
+
+        const refused = await postSpeech(tokens.editor, { text: 'three' });
+
+        expect(refused.status).to.equal(429);
+        expect(refused.body.code).to.equal('E_TOO_MANY_REQUESTS');
+        expect(refused.body.retryAfterSec).to.be.above(0);
+        expect(refused.headers['retry-after']).to.equal(String(refused.body.retryAfterSec));
+
+        expect(providerCalls).to.have.lengthOf(2);
+      });
+
+      it('refuses on characters spent even while turns are left', async () => {
+        // 45 characters a window. Each turn reserves 3x the 11 characters of
+        // "hello there" — the ceiling on what narration can expand them to —
+        // and settles back to the 11 that were really spoken, so the first two
+        // fit (45 → 34 → 23) and the third has no room to reserve its 33.
+        withVoice({ voiceTtsRateMaxChars: 45 });
+
+        expect((await postSpeech(tokens.editor, { text: 'hello there' })).status).to.equal(200);
+        expect((await postSpeech(tokens.editor, { text: 'hello there' })).status).to.equal(200);
+
+        const refused = await postSpeech(tokens.editor, { text: 'hello there' });
+
+        expect(refused.status).to.equal(429);
+        expect(refused.body.code).to.equal('E_TOO_MANY_REQUESTS');
+        expect(providerCalls).to.have.lengthOf(2);
+      });
+
+      it('charges what was spoken rather than three times what was sent', async () => {
+        // The settle half of the same rule: a message that did not expand under
+        // narration must not be billed against the budget as though it had.
+        // Ten turns of 11 characters is 110 spoken and 330 reserved, so this
+        // fails outright if the reservation is never corrected.
+        withVoice({ voiceTtsRateMaxChars: 200 });
+
+        for (let index = 0; index < 10; index += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          const res = await postSpeech(tokens.editor, { text: 'hello there' });
+
+          expect(res.status, `message ${index}`).to.equal(200);
+        }
+      });
+
+      it('counts the budget against one user rather than the instance', async () => {
+        withVoice({ voiceTtsRateMaxRequests: 1 });
+
+        expect((await postSpeech(tokens.editor, { text: 'one' })).status).to.equal(200);
+        expect((await postSpeech(tokens.editor, { text: 'two' })).status).to.equal(429);
+        expect((await postSpeech(tokens.admin, { text: 'three' })).status).to.equal(200);
+      });
+
+      it('keeps the two halves of the feature on separate budgets', async () => {
+        // They are separate vendors with separate keys and separate units. A
+        // conversation that has had its turns transcribed must still be able to
+        // hear the answer.
+        withVoice({ voiceSttRateMaxRequests: 1, voiceTtsRateMaxRequests: 1 });
+
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(200);
+        expect((await postTranscription(tokens.editor, audioBody())).status).to.equal(429);
+        expect((await postSpeech(tokens.editor, { text: 'the answer' })).status).to.equal(200);
+      });
+
+      it('is off when the deployment says so', async () => {
+        withVoice({ voiceTtsRateMaxRequests: 0, voiceTtsRateMaxChars: 0 });
+
+        for (let index = 0; index < 6; index += 1) {
+          // eslint-disable-next-line no-await-in-loop
+          const res = await postSpeech(tokens.editor, { text: 'hello there' });
+
+          expect(res.status, `message ${index}`).to.equal(200);
+        }
+      });
+    });
+  });
+});

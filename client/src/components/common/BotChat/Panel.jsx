@@ -21,6 +21,7 @@ import {
 import CardPicker from './CardPicker';
 import Composer from './Composer';
 import Message from './Message';
+import VoiceStatus from './VoiceStatus';
 import UserAvatar from '../../users/UserAvatar';
 
 import styles from './Panel.module.scss';
@@ -46,6 +47,7 @@ const Panel = React.memo(
     hasEarlierMessages,
     canComment,
     isCardArchivedOrTrashed,
+    voiceChat,
     width,
     maxWidth,
     maxHeight,
@@ -329,7 +331,20 @@ const Panel = React.memo(
           </Button>
         </div>
         {bodyNode}
-        {cardId && <Composer bot={bot} isDisabled={!canComment} onSubmit={onSubmit} />}
+        {cardId && (
+          <Composer bot={bot} isDisabled={!canComment} voiceChat={voiceChat} onSubmit={onSubmit} />
+        )}
+        {/* Only where the loop could actually run. A read-only card or board
+            already explains itself in the row below, and a status line saying
+            "opening the microphone…" at a mode that will never open one is a
+            second, untrue answer to the same question. */}
+        {cardId && canComment && (
+          <VoiceStatus
+            phase={voiceChat.phase}
+            notice={voiceChat.notice}
+            onStopSpeaking={voiceChat.onStopSpeaking}
+          />
+        )}
         {cardId && !canComment && (
           <div className={styles.readOnly}>
             {isCardArchivedOrTrashed
@@ -354,6 +369,14 @@ Panel.propTypes = {
   hasEarlierMessages: PropTypes.bool.isRequired,
   canComment: PropTypes.bool.isRequired,
   isCardArchivedOrTrashed: PropTypes.bool.isRequired,
+  voiceChat: PropTypes.shape({
+    isAvailable: PropTypes.bool.isRequired,
+    isEnabled: PropTypes.bool.isRequired,
+    phase: PropTypes.string.isRequired,
+    notice: PropTypes.string,
+    onToggle: PropTypes.func.isRequired,
+    onStopSpeaking: PropTypes.func.isRequired,
+  }).isRequired,
   width: PropTypes.number.isRequired,
   maxWidth: PropTypes.string.isRequired,
   maxHeight: PropTypes.string.isRequired,

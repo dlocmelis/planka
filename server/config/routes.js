@@ -219,6 +219,11 @@ module.exports.routes = {
   'PATCH /api/comments/:id': 'comments/update',
   'DELETE /api/comments/:id': 'comments/delete',
 
+  // Voice chat mode for the planka_bot panel. Card-scoped so the spend is tied
+  // to a conversation the caller can actually see — see docs/bot-chat-voice.md.
+  'POST /api/cards/:cardId/voice/transcription': 'voice/transcribe',
+  'POST /api/cards/:cardId/voice/speech': 'voice/speak',
+
   'GET /api/boards/:boardId/actions': 'actions/index-in-board',
   'GET /api/cards/:cardId/actions': 'actions/index-in-card',
 

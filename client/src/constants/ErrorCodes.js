@@ -6,9 +6,23 @@
 const UNAUTHORIZED = 'E_UNAUTHORIZED';
 const NOT_FOUND = 'E_NOT_FOUND';
 const CONFLICT = 'E_CONFLICT';
+const UNPROCESSABLE_ENTITY = 'E_UNPROCESSABLE_ENTITY';
+// Sent by the two metered voice endpoints when this user has had their share of
+// what the deployment pays a speech provider for. Like a 422 it refuses ONE
+// turn and leaves the mode alone — unlike one, it also says when to come back.
+const TOO_MANY_REQUESTS = 'E_TOO_MANY_REQUESTS';
+const BAD_GATEWAY = 'E_BAD_GATEWAY';
+// The one error code the voice chat mode branches on rather than just showing:
+// it means the feature is not configured on this server, so the controls are
+// withdrawn instead of the user being told to try again.
+const SERVICE_UNAVAILABLE = 'E_SERVICE_UNAVAILABLE';
 
 export default {
   UNAUTHORIZED,
   NOT_FOUND,
   CONFLICT,
+  UNPROCESSABLE_ENTITY,
+  TOO_MANY_REQUESTS,
+  BAD_GATEWAY,
+  SERVICE_UNAVAILABLE,
 };

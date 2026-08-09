@@ -404,6 +404,37 @@ export default {
       viewer: 'Viewer',
       viewers: 'Viewers',
       visualTaskManagementWithLists: 'Visual task management with lists.',
+      voiceChatAnswerNotRead:
+        'This server has read a lot aloud just now, so that answer was not; it is on screen.',
+      voiceChatAnswerRefused: 'That answer could not be read aloud; it is on screen.',
+      voiceChatAnswerTooLong: 'That answer was too long to read aloud; it is on screen.',
+      voiceChatAudioBlocked:
+        'Voice chat is off: this browser would not play audio without a tap. Turn it on again.',
+      voiceChatFailed: 'Voice chat stopped. Turn it on again to keep talking.',
+      voiceChatHearingYou: 'I can hear you…',
+      voiceChatListening: 'Listening — just start talking.',
+      voiceChatMicrophoneBlocked:
+        'Voice chat is off: the microphone is blocked. Allow it for this site in your browser settings and turn voice chat on again.',
+      voiceChatNoMicrophone: 'Voice chat is off: no microphone was found.',
+      voiceChatNoVoice: 'Voice chat is off: this server has no voice to answer with.',
+      voiceChatNotAvailable: 'Voice chat is not available on this server.',
+      voiceChatNotSupported: 'Voice chat is off: this browser cannot record audio.',
+      voiceChatOpeningMicrophone: 'Opening the microphone…',
+      voiceChatProviderFailed:
+        'Voice chat is off: the speech service is not answering. Try again in a minute.',
+      voiceChatRecordingTooLarge:
+        'That recording was {{size}}, over the {{limit}} limit, so it was not sent. Try shorter turns.',
+      voiceChatRecordingTooLong:
+        'That recording was {{duration}}, over the {{limit}} limit this server accepts, so it was not sent. Try shorter turns.',
+      voiceChatSessionExpired: 'Voice chat is off: your session has expired. Sign in again.',
+      voiceChatSpeaking: 'Reading the answer aloud…',
+      voiceChatTooManyTurns:
+        'That is a lot of talking at once for this server — say it again in {{seconds}}s.',
+      voiceChatTooManyTurnsSoon:
+        'That is a lot of talking at once for this server — try saying it again in a moment.',
+      voiceChatTranscribing: 'Sending what you said…',
+      voiceChatTurnRefused: 'That turn was not accepted; try saying it again.',
+      voiceChatWaitingForBot: 'Waiting for an answer…',
       webhooks: 'Webhooks',
       whatsNew_title: "What's New",
       withoutBaseGroup: 'Without base group',
@@ -545,7 +576,10 @@ export default {
       sortList_title: 'Sort List',
       start: 'Start',
       stop: 'Stop',
+      stopSpeaking: 'Stop speaking',
       subscribe: 'Subscribe',
+      turnOffVoiceChat: 'Turn off voice chat',
+      turnOnVoiceChat: 'Turn on voice chat',
       unlinkSso: 'Unlink SSO',
       unlinkSso_title: 'Unlink SSO',
       unsubscribe: 'Unsubscribe',

@@ -30,7 +30,7 @@ import styles from './Composer.module.scss';
  * comment box uses), and `withBotMention` puts the bot's own mention at the
  * head of anything that does not already address it.
  */
-const Composer = React.memo(({ bot, isDisabled, onSubmit }) => {
+const Composer = React.memo(({ bot, isDisabled, voiceChat, onSubmit }) => {
   const boardMemberships = useSelector(selectors.selectMembershipsForCurrentBoard);
 
   const [t] = useTranslation();
@@ -100,6 +100,16 @@ const Composer = React.memo(({ bot, isDisabled, onSubmit }) => {
     submit();
   }, [submit]);
 
+  // The control beside Send is voice CHAT, not a push-to-talk microphone: it
+  // turns a hands-free loop on and off, and while it is on nobody presses
+  // anything. It keeps the slot even where the loop cannot run, disabled and
+  // saying why — a composer with no voice control at all leaves the feature
+  // undiscoverable on exactly the deployments where somebody has to be told it
+  // is not configured.
+  const voiceLabel = voiceChat.isEnabled
+    ? t('action.turnOffVoiceChat')
+    : t('action.turnOnVoiceChat');
+
   return (
     <div className={styles.wrapper}>
       <TextareaAutosize
@@ -114,6 +124,23 @@ const Composer = React.memo(({ bot, isDisabled, onSubmit }) => {
         onChange={handleChange}
         onKeyDown={handleKeyDown}
       />
+      {/* `toggle` + `active` rather than a bare `aria-pressed`: semantic-ui's
+          Button computes that attribute itself from those two props and
+          overwrites anything passed in, so setting it by hand renders a button
+          that announces nothing at all to a screen reader. */}
+      <Button
+        type="button"
+        icon
+        toggle
+        active={voiceChat.isEnabled}
+        disabled={isDisabled || !voiceChat.isAvailable}
+        aria-label={voiceLabel}
+        title={voiceChat.isAvailable ? voiceLabel : t('common.voiceChatNotAvailable')}
+        className={styles.button}
+        onClick={voiceChat.onToggle}
+      >
+        <Icon fitted name={voiceChat.isEnabled ? 'microphone' : 'microphone slash'} />
+      </Button>
       <Button
         type="button"
         icon
@@ -134,6 +161,11 @@ Composer.propTypes = {
   bot: PropTypes.object.isRequired,
   /* eslint-enable react/forbid-prop-types */
   isDisabled: PropTypes.bool.isRequired,
+  voiceChat: PropTypes.shape({
+    isAvailable: PropTypes.bool.isRequired,
+    isEnabled: PropTypes.bool.isRequired,
+    onToggle: PropTypes.func.isRequired,
+  }).isRequired,
   onSubmit: PropTypes.func.isRequired,
 };
 
