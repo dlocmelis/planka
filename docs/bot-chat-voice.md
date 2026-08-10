@@ -46,6 +46,23 @@ barge-in and needs a whole second subsystem to recognise its own voice coming
 back through the microphone; the header of `client/src/utils/voice-chat.js` sets
 out why this one does not.
 
+**A reply is read aloud only while the mode is ON.** Nothing else in this panel
+ever starts speech: type a question with the toggle off and the answer arrives
+silently, as it does for a reader who has never pressed it. There is no second,
+always-on "read replies aloud" preference here and there must not be one — the
+Setlfi assistant grew exactly that and had to be repaired for it (board card
+*"Do not enable TTS without voice chat mode ON (currently when user types and
+assistant replies automatically TTS is enabled)"*, 2026-08-09, which deleted the
+toggle rather than re-gating it). Two independent gates hold the rule:
+`pendingSpeech` in `client/src/components/common/BotChat/BotChat.jsx` is null
+unless `isVoiceRunning` (`isVoiceEnabled && isOpened`), and the read-aloud effect
+in `client/src/hooks/use-voice-chat.js` re-checks `isEnabled` before it
+synthesizes anything. The stored preference (`planka-bot-chat-voice`) defaults
+to off, so a browser that has never turned the mode on never reaches either.
+`BotChatVoice.test.jsx` guards both — "a reply is not read aloud while the mode
+is off" through the panel, and "the hook will not synthesize a reply while the
+mode is off" against the hook on its own.
+
 **A reply that was already on the card is never read out.** Only a bot comment
 that arrived after the mode was switched on for this conversation is spoken, and
 each is spoken once — including when the synthesis failed, which is not retried.

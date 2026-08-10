@@ -39,6 +39,9 @@ import EntryActionTypes from '../../../constants/EntryActionTypes';
 import { BoardMembershipRoles, ListTypes } from '../../../constants/Enums';
 import { MessageAuthors } from '../../../utils/bot-chat';
 import { VOICE_CHAT_TUNING } from '../../../utils/voice-chat';
+// The hook file directly, not the `hooks` barrel — that barrel reaches
+// `api/socket.js`, which reads `import.meta.env` and cannot be loaded by jest.
+import useVoiceChat from '../../../hooks/use-voice-chat';
 import BotChat from './BotChat';
 
 const BOT = { id: 'user-bot', username: 'planka_bot', name: 'Orchestrator Bot' };
@@ -565,6 +568,15 @@ test('a reply is not read aloud while the mode is off', async () => {
   // here there has never been one and this is what says so. The panel is OPEN
   // and the deployment has both halves of the voice configured, so the only
   // thing not true of this conversation is the mode itself.
+  //
+  // WHAT THIS DOES AND DOES NOT PIN. Two independent gates keep the rule —
+  // `pendingSpeech` in BotChat.jsx returning null unless `isVoiceRunning`, and
+  // `if (!isEnabled …) return` in hooks/use-voice-chat.js — and through the
+  // panel they are indistinguishable: with either one present the other never
+  // gets the chance to fail, so THIS case only goes red when both are removed.
+  // The hook-level case below pins the second one on its own. The first is
+  // covered in combination only; a panel test cannot reach past it, because
+  // `pendingSpeech` is the panel's own memo and has no other observable.
   render();
   click(launcher());
   await settle();
@@ -582,6 +594,65 @@ test('a reply is not read aloud while the mode is off', async () => {
 
   expect(mockSpeak).not.toHaveBeenCalled();
   expect(players).toHaveLength(0);
+});
+
+/**
+ * The speech half of `useVoiceChat`, with nothing else in the hook running.
+ *
+ * `canComment` is false on purpose: `isRunnable` needs it and the read-aloud
+ * effect does not, so the microphone never opens and the only thing left to
+ * decide anything is the gate under test. Everything else is a working
+ * deployment — a card, a token, both halves of the voice configured — so a
+ * refusal here can only have come from the mode being off.
+ *
+ * Props are spread rather than read one by one so this stays a probe and not a
+ * component with an interface.
+ */
+function SpeechProbe(props) {
+  useVoiceChat({
+    cardId: 'card-1',
+    capability: mockVoiceCapability,
+    canComment: false,
+    accessToken: 'access-token',
+    onTranscript: () => {},
+    onSpoken: () => {},
+    onNotice: () => {},
+    onStop: () => {},
+    ...props,
+  });
+
+  return null;
+}
+
+const renderProbe = async (props) => {
+  await act(async () => {
+    // `createElement` rather than JSX: the props are a bag this helper passes
+    // straight through, and spreading one in JSX is forbidden here.
+    root.render(React.createElement(SpeechProbe, props));
+  });
+
+  await settle();
+};
+
+test('the hook will not synthesize a reply while the mode is off, and it is the mode that decides', async () => {
+  // The second of the two gates, on its own. The panel case above cannot fail
+  // for this one alone — BotChat hands the hook a null `pendingSpeech` long
+  // before it gets here — so the hook is driven directly, with a reply already
+  // in hand and every other condition satisfied.
+  const reply = { id: 'comment-1', text: 'It is waiting on review.' };
+
+  await renderProbe({ isEnabled: false, pendingSpeech: reply });
+
+  expect(mockSpeak).not.toHaveBeenCalled();
+
+  // …and the control that makes the line above mean something: the same hook,
+  // the same reply, the same everything, with the mode ON. Without this the
+  // assertion would pass just as well for a probe that was never wired up.
+  await renderProbe({ isEnabled: true, pendingSpeech: reply });
+
+  expect(mockSpeak).toHaveBeenCalledTimes(1);
+  expect(mockSpeak.mock.calls[0][0]).toBe('card-1');
+  expect(mockSpeak.mock.calls[0][1].text).toBe('It is waiting on review.');
 });
 
 test('a reply that was already on the card when the mode came on is not read out', async () => {
