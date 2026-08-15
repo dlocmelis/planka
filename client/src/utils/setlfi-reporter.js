@@ -19,13 +19,23 @@
  * description, in the header setl writes (`CardHeader`,
  * data/core/support/planka.go in the setl repository):
  *
- *     --- Setlfi ---
+ *     **Setlfi ticket**
+ *
  *     Reporter: Deniss Locmelis den@setlfi.com
  *     Project: Tunzer (6a57aa2cc609223fff50b85c)
  *     Request: SR-000001
  *     Type: bug
- *     --------------
+ *
+ *     ---
+ *
  *     [EVERYTHING BELOW IS VISIBLE TO THE CUSTOMER — put internal notes in a comment]
+ *
+ * BOTH OPENERS ARE READ. The header used to open `--- Setlfi ---` and close on
+ * a row of dashes; that shape made this renderer's own Markdown transform read
+ * the card as YAML front matter and print a stack trace where the description
+ * belongs, so setl rewrote it. The board still holds every card raised before
+ * that, and their reporters have to be taggable too — setl's own
+ * `CustomerDescriptionFrom` accepts both for the same reason.
  *
  * THIS IS A CONTRACT BETWEEN TWO REPOSITORIES WITH NO WIRE FORMAT IN BETWEEN.
  * Both sides transcribe it by hand rather than sharing a constant, because
@@ -41,13 +51,19 @@
  * cannot collide with a real user: Planka ids are numeric snowflakes.
  */
 
-// The header block, exactly as setl writes it. Only the opener and the reporter
-// line are needed to identify the reporter; the closer bounds the search so a
-// customer who types "Reporter: someone else" into their own description cannot
-// redirect a mention.
-const HEADER_OPENER = '--- Setlfi ---';
-const HEADER_CLOSER = '--------------';
+// The header block, exactly as setl writes it. Only an opener and the reporter
+// line are needed to identify the reporter; the closing rule bounds the search
+// so a customer who types "Reporter: someone else" into their own description
+// cannot redirect a mention.
+const HEADER_OPENER = '**Setlfi ticket**';
+const LEGACY_HEADER_OPENER = '--- Setlfi ---';
 const REPORTER_LINE_PREFIX = 'Reporter:';
+
+// The closing rule, matched as "a line that is nothing but dashes" — `---` as
+// written today, `--------------` as written before, and any length between,
+// because a human retyping it does not count the dashes. It is `isHeaderRule`
+// in setl's data/core/support/planka.go, rule for rule.
+const isHeaderRule = (trimmed) => trimmed.length >= 3 && trimmed.replace(/-/g, '') === '';
 
 export const REPORTER_MENTION_ID = 'reporter';
 
@@ -68,14 +84,16 @@ export const parseReporterFromCardDescription = (description) => {
   }
 
   const trimmed = description.replace(/^[\s]+/, '');
-  if (!trimmed.startsWith(HEADER_OPENER)) {
+  if (!trimmed.startsWith(HEADER_OPENER) && !trimmed.startsWith(LEGACY_HEADER_OPENER)) {
     return null;
   }
 
   const lines = trimmed.split('\n');
   for (let i = 1; i < lines.length; i += 1) {
     const line = lines[i].trim();
-    if (line === HEADER_CLOSER) {
+    // The closing rule ends the header. Everything under it is the customer's
+    // own description, which the customer writes.
+    if (isHeaderRule(line)) {
       return null;
     }
     if (!line.startsWith(REPORTER_LINE_PREFIX)) {

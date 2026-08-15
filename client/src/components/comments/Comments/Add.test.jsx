@@ -97,12 +97,15 @@ jest.mock('../../users/UserAvatar', () => ({
 window.IS_REACT_ACT_ENVIRONMENT = true;
 
 const SUPPORT_CARD_DESCRIPTION = [
-  '--- Setlfi ---',
+  '**Setlfi ticket**',
+  '',
   'Reporter: Deniss Locmelis den@setlfi.com',
   'Project: Tunzer (6a57aa2cc609223fff50b85c)',
   'Request: SR-000001',
   'Type: bug',
-  '--------------',
+  '',
+  '---',
+  '',
   '[EVERYTHING BELOW IS VISIBLE TO THE CUSTOMER — put internal notes in a comment]',
   '',
   'Charts do not render for the last quarter.',

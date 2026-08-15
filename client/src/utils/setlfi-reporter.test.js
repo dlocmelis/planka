@@ -20,6 +20,28 @@ import {
 //
 // The counterpart is `TestCardHeaderIsTheShapePlankaParses` in setl.
 const SUPPORT_CARD_DESCRIPTION = [
+  '**Setlfi ticket**',
+  '',
+  'Reporter: Deniss Locmelis den@setlfi.com',
+  'Project: Tunzer (6a57aa2cc609223fff50b85c)',
+  'Request: SR-000001',
+  'Type: bug',
+  '',
+  '---',
+  '',
+  '[EVERYTHING BELOW IS VISIBLE TO THE CUSTOMER — put internal notes in a comment]',
+  '',
+  'Charts do not render for the last quarter.',
+].join('\n');
+
+/**
+ * The shape every card raised before setl rewrote the header carries — and the
+ * reason it was rewritten: this renderer's Markdown transform reads a leading
+ * `---` as YAML front matter and prints the exception where the description
+ * should be. Those cards are still on the board, and their reporter has to be
+ * taggable.
+ */
+const LEGACY_SUPPORT_CARD_DESCRIPTION = [
   '--- Setlfi ---',
   'Reporter: Deniss Locmelis den@setlfi.com',
   'Project: Tunzer (6a57aa2cc609223fff50b85c)',
@@ -40,6 +62,14 @@ describe('parseReporterFromCardDescription', () => {
     });
   });
 
+  it('reads a card raised before the header was rewritten', () => {
+    expect(parseReporterFromCardDescription(LEGACY_SUPPORT_CARD_DESCRIPTION)).toEqual({
+      id: 'reporter',
+      display: 'Deniss Locmelis',
+      email: 'den@setlfi.com',
+    });
+  });
+
   it('is not fooled by a card that is not a support ticket', () => {
     // The board is shared: an engineer's own card must not grow a mention entry
     // for a customer who does not exist.
@@ -51,9 +81,24 @@ describe('parseReporterFromCardDescription', () => {
   });
 
   it('refuses a reporter line written BELOW the header block', () => {
-    // Everything under the closer is the customer's own description, and the
-    // customer types it. It must not be able to redirect a mention.
+    // Everything under the closing rule is the customer's own description, and
+    // the customer types it. It must not be able to redirect a mention — in
+    // either header shape, since the rule is "a line that is nothing but
+    // dashes" on both.
     const spoofed = [
+      '**Setlfi ticket**',
+      '',
+      'Project: Tunzer (6a57aa2cc609223fff50b85c)',
+      'Request: SR-000001',
+      'Type: bug',
+      '',
+      '---',
+      '',
+      'Reporter: Someone Else nope@example.com',
+    ].join('\n');
+    expect(parseReporterFromCardDescription(spoofed)).toBeNull();
+
+    const legacySpoofed = [
       '--- Setlfi ---',
       'Project: Tunzer (6a57aa2cc609223fff50b85c)',
       'Request: SR-000001',
@@ -61,8 +106,7 @@ describe('parseReporterFromCardDescription', () => {
       '--------------',
       'Reporter: Someone Else nope@example.com',
     ].join('\n');
-
-    expect(parseReporterFromCardDescription(spoofed)).toBeNull();
+    expect(parseReporterFromCardDescription(legacySpoofed)).toBeNull();
   });
 
   it('keeps a name with several words, and copes with a header carrying no email', () => {
