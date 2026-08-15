@@ -17,6 +17,11 @@ import selectors from '../../../selectors';
 import entryActions from '../../../entry-actions';
 import { useForm, useNestedRef } from '../../../hooks';
 import { isUsernameChar, mentionTextToMarkup } from '../../../utils/mentions';
+import {
+  buildMentionData,
+  isReporterMentionId,
+  parseReporterFromCardDescription,
+} from '../../../utils/setlfi-reporter';
 import { focusEnd } from '../../../utils/element-helpers';
 import { isModifierKeyPressed } from '../../../utils/event-helpers';
 import UserAvatar from '../../users/UserAvatar';
@@ -28,6 +33,13 @@ const Edit = React.memo(({ commentId, onClose }) => {
 
   const comment = useSelector((state) => selectCommentById(state, commentId));
   const boardMemberships = useSelector(selectors.selectMembershipsForCurrentBoard);
+  // The reporter is offered while EDITING too, and that is not a nicety:
+  // tagging somebody a beat late — the comment is written, then the customer
+  // turns out to need it — is what an edit is for. setl publishes a comment an
+  // edit adds the mention to (support.Reconciler.applyMentionedLater).
+  const cardDescription = useSelector(
+    (state) => (selectors.selectCurrentCard(state) || {}).description,
+  );
 
   const dispatch = useDispatch();
   const [t] = useTranslation();
@@ -57,6 +69,17 @@ const Edit = React.memo(({ commentId, onClose }) => {
         'username',
       ),
     [boardMemberships],
+  );
+
+  const reporter = useMemo(
+    () => parseReporterFromCardDescription(cardDescription),
+    [cardDescription],
+  );
+
+  // Not in `userByUsername` on purpose — see the same note in Add.jsx.
+  const mentionData = useMemo(
+    () => buildMentionData(boardMemberships, reporter),
+    [boardMemberships, reporter],
   );
 
   const submit = useCallback(() => {
@@ -118,13 +141,20 @@ const Edit = React.memo(({ commentId, onClose }) => {
   );
 
   const suggestionRenderer = useCallback(
-    (entry, _, highlightedDisplay) => (
-      <div className={styles.suggestion}>
-        <UserAvatar id={entry.id} size="tiny" />
-        {highlightedDisplay}
-      </div>
-    ),
-    [],
+    (entry, _, highlightedDisplay) =>
+      isReporterMentionId(entry.id) ? (
+        <div className={styles.suggestion}>
+          <span className={styles.reporterBadge}>{t('common.reporter')}</span>
+          {highlightedDisplay}
+          {entry.email && <span className={styles.reporterEmail}>{entry.email}</span>}
+        </div>
+      ) : (
+        <div className={styles.suggestion}>
+          <UserAvatar id={entry.id} size="tiny" />
+          {highlightedDisplay}
+        </div>
+      ),
+    [t],
   );
 
   useEffect(() => {
@@ -154,10 +184,7 @@ const Edit = React.memo(({ commentId, onClose }) => {
         >
           <Mention
             appendSpaceOnAdd
-            data={boardMemberships.map(({ user }) => ({
-              id: user.id,
-              display: user.username || user.name,
-            }))}
+            data={mentionData}
             displayTransform={(_, display) => `@${display}`}
             renderSuggestion={suggestionRenderer}
             className={styles.mention}

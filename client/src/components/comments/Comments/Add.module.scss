@@ -34,6 +34,25 @@
     border-radius: 3px;
   }
 
+  .reporterBadge {
+    background: #e8f4ff;
+    border-radius: 3px;
+    color: #0366d6;
+    flex: 0 0 auto;
+    font-size: 10px;
+    letter-spacing: 0.4px;
+    padding: 1px 5px;
+    text-transform: uppercase;
+  }
+
+  .reporterEmail {
+    color: #6b778c;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .suggestion {
     align-items: center;
     display: flex;

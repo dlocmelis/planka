@@ -310,6 +310,12 @@ export default {
       rejectUnauthorizedTlsCertificates: 'Reject unauthorized TLS certificates',
       removeManager_title: 'Remove Manager',
       removeMember_title: 'Remove Member',
+      // The badge on the synthetic mention entry a Setlfi support card offers:
+      // the customer who reported the ticket, who has no Planka account and is
+      // NOT the board member with a similar name sitting under them in the same
+      // dropdown (see utils/setlfi-reporter.js). Other catalogues fall back to
+      // this one until it is translated.
+      reporter: 'Reporter',
       resizePanel: 'Resize panel',
       role: 'Role',
       saveThisKeyItWillNotBeShownAgain: 'Save this key — it will not be shown again!',

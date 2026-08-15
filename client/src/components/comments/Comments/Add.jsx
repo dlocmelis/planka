@@ -15,6 +15,11 @@ import selectors from '../../../selectors';
 import entryActions from '../../../entry-actions';
 import { useEscapeInterceptor, useForm, useNestedRef } from '../../../hooks';
 import { isUsernameChar, mentionTextToMarkup } from '../../../utils/mentions';
+import {
+  buildMentionData,
+  isReporterMentionId,
+  parseReporterFromCardDescription,
+} from '../../../utils/setlfi-reporter';
 import { isModifierKeyPressed } from '../../../utils/event-helpers';
 import UserAvatar from '../../users/UserAvatar';
 
@@ -26,6 +31,14 @@ const DEFAULT_DATA = {
 
 const Add = React.memo(() => {
   const boardMemberships = useSelector(selectors.selectMembershipsForCurrentBoard);
+  // On a Setlfi support card the person who raised the ticket is offered here
+  // too, above the board members. They have no Planka account, so the entry is
+  // built from the card's own header — see utils/setlfi-reporter.js, and the
+  // setl side that turns the resulting mention into a message on their feedback
+  // page.
+  const cardDescription = useSelector(
+    (state) => (selectors.selectCurrentCard(state) || {}).description,
+  );
 
   const dispatch = useDispatch();
   const [t] = useTranslation();
@@ -45,6 +58,20 @@ const Add = React.memo(() => {
         'username',
       ),
     [boardMemberships],
+  );
+
+  const reporter = useMemo(
+    () => parseReporterFromCardDescription(cardDescription),
+    [cardDescription],
+  );
+
+  // The reporter is deliberately NOT in `userByUsername`: that map is what
+  // rewrites typed `@name` text into mention markup, and a bare word typed into
+  // the middle of an internal note must not silently become an address to the
+  // customer. Only picking them out of this list does.
+  const mentionData = useMemo(
+    () => buildMentionData(boardMemberships, reporter),
+    [boardMemberships, reporter],
   );
 
   const submit = useCallback(() => {
@@ -117,13 +144,23 @@ const Add = React.memo(() => {
   );
 
   const suggestionRenderer = useCallback(
-    (entry, _, highlightedDisplay) => (
-      <div className={styles.suggestion}>
-        <UserAvatar id={entry.id} size="tiny" />
-        {highlightedDisplay}
-      </div>
-    ),
-    [],
+    (entry, _, highlightedDisplay) =>
+      isReporterMentionId(entry.id) ? (
+        // No UserAvatar: there is no user record behind this entry. The badge
+        // and the email are what tell it apart from the board member with a
+        // similar name directly below it — the confusion the ticket reported.
+        <div className={styles.suggestion}>
+          <span className={styles.reporterBadge}>{t('common.reporter')}</span>
+          {highlightedDisplay}
+          {entry.email && <span className={styles.reporterEmail}>{entry.email}</span>}
+        </div>
+      ) : (
+        <div className={styles.suggestion}>
+          <UserAvatar id={entry.id} size="tiny" />
+          {highlightedDisplay}
+        </div>
+      ),
+    [t],
   );
 
   useDidUpdate(() => {
@@ -163,10 +200,7 @@ const Add = React.memo(() => {
         >
           <Mention
             appendSpaceOnAdd
-            data={boardMemberships.map(({ user }) => ({
-              id: user.id,
-              display: user.username || user.name,
-            }))}
+            data={mentionData}
             displayTransform={(_, display) => `@${display}`}
             renderSuggestion={suggestionRenderer}
             className={styles.mention}
