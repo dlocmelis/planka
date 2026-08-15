@@ -17,6 +17,7 @@ import { useEscapeInterceptor, useForm, useNestedRef } from '../../../hooks';
 import { isUsernameChar, mentionTextToMarkup } from '../../../utils/mentions';
 import {
   buildMentionData,
+  hasReporterMention,
   isReporterMentionId,
   parseReporterFromCardDescription,
 } from '../../../utils/setlfi-reporter';
@@ -207,6 +208,12 @@ const Add = React.memo(() => {
           />
         </MentionsInput>
       </div>
+      {/* A tagged comment leaves the board: it is mirrored onto the customer's
+          feedback page. Say so where the decision is made, not in a document
+          nobody opens. */}
+      {hasReporterMention(data.text) && (
+        <div className={styles.reporterNotice}>{t('common.reporterWillSeeThisComment')}</div>
+      )}
       {(isOpened || data.text.length > 0) && (
         <div className={styles.controls}>
           <Button

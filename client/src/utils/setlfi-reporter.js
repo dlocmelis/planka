@@ -134,3 +134,13 @@ export const buildMentionData = (boardMemberships, reporter) => {
 
 /** True for the synthetic entry, which has no Planka user behind it to render. */
 export const isReporterMentionId = (id) => id === REPORTER_MENTION_ID;
+
+// The markup react-mentions writes for the entry above, and the same expression
+// setl's `HasReporterMention` applies to the stored comment. It is here so the
+// composer can SAY what the tag is about to do — a comment that reaches a
+// customer should never be a surprise to the person who wrote it.
+const REPORTER_MENTION_REGEX = new RegExp(`@\\[.*?\\]\\(${REPORTER_MENTION_ID}\\)`);
+
+/** True when this comment text tags the reporter, and so will be shown to them. */
+export const hasReporterMention = (text) =>
+  typeof text === 'string' && REPORTER_MENTION_REGEX.test(text);

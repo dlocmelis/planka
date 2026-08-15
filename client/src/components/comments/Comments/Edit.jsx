@@ -19,6 +19,7 @@ import { useForm, useNestedRef } from '../../../hooks';
 import { isUsernameChar, mentionTextToMarkup } from '../../../utils/mentions';
 import {
   buildMentionData,
+  hasReporterMention,
   isReporterMentionId,
   parseReporterFromCardDescription,
 } from '../../../utils/setlfi-reporter';
@@ -191,6 +192,11 @@ const Edit = React.memo(({ commentId, onClose }) => {
           />
         </MentionsInput>
       </div>
+      {/* Adding the tag in an EDIT publishes the comment too — setl promotes a
+          staff comment an edit tags the reporter in. Say so here as well. */}
+      {hasReporterMention(data.text) && (
+        <div className={styles.reporterNotice}>{t('common.reporterWillSeeThisComment')}</div>
+      )}
       <div className={styles.controls}>
         <Button
           {...clickAwayProps} // eslint-disable-line react/jsx-props-no-spreading

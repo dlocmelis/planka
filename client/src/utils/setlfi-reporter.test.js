@@ -6,6 +6,7 @@
 import {
   REPORTER_MENTION_ID,
   buildMentionData,
+  hasReporterMention,
   isReporterMentionId,
   parseReporterFromCardDescription,
 } from './setlfi-reporter';
@@ -126,6 +127,25 @@ describe('buildMentionData', () => {
       { id: '1428506806699622212', display: 'deniss' },
       { id: '1428506806699622213', display: 'Orchestrator Bot' },
     ]);
+  });
+});
+
+describe('hasReporterMention', () => {
+  // It answers the same question setl's `HasReporterMention` answers over the
+  // stored comment, and it is what the composer's "the reporter will see this"
+  // notice hangs off — so the two must not drift.
+  it('is true for the markup the dropdown writes, anywhere in the text', () => {
+    expect(hasReporterMention('@[Deniss Locmelis](reporter) shipping Friday')).toBe(true);
+    expect(hasReporterMention('Thanks @[Deniss Locmelis](reporter), it is live.')).toBe(true);
+    expect(hasReporterMention('Shipped.\n\ncc @[Deniss Locmelis](reporter)')).toBe(true);
+  });
+
+  it('is false for anything a staff member writes to a colleague', () => {
+    expect(hasReporterMention('@[deniss](1428506806699622212) can you look?')).toBe(false);
+    expect(hasReporterMention('the reporter says it is still broken')).toBe(false);
+    expect(hasReporterMention('@[someone](reporter-2) ping')).toBe(false);
+    expect(hasReporterMention('')).toBe(false);
+    expect(hasReporterMention(undefined)).toBe(false);
   });
 });
 

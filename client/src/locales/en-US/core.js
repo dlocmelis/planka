@@ -316,6 +316,10 @@ export default {
       // dropdown (see utils/setlfi-reporter.js). Other catalogues fall back to
       // this one until it is translated.
       reporter: 'Reporter',
+      // Shown under the comment box the moment the reporter is tagged in it.
+      // The customer really does read a tagged comment on their feedback page,
+      // and the person writing it should be told so before they press Add.
+      reporterWillSeeThisComment: 'The reporter will see this comment on their feedback page.',
       resizePanel: 'Resize panel',
       role: 'Role',
       saveThisKeyItWillNotBeShownAgain: 'Save this key — it will not be shown again!',

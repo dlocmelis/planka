@@ -23,6 +23,7 @@ import Add from './Add';
 // `data` the component hands it and renders each entry through the component's
 // own `renderSuggestion`, which is exactly the pair the real one uses.
 let mentionProps;
+let mentionsProps;
 
 jest.mock('react-mentions', () => ({
   __esModule: true,
@@ -31,6 +32,7 @@ jest.mock('react-mentions', () => ({
   MentionsInput: jest
     .requireActual('react')
     .forwardRef(({ children, value, onChange, inputRef }, ref) => {
+      mentionsProps = { value, onChange };
       /* eslint-disable no-param-reassign */
       if (ref) {
         ref.current = { isOpened: () => false, clearSuggestions: () => {} };
@@ -121,6 +123,7 @@ const render = () => {
 describe('the comment composer on a Setlfi support card', () => {
   beforeEach(() => {
     mentionProps = null;
+    mentionsProps = null;
     mockMemberships = [
       // The Planka user from the ticket's screenshot: a colleague whose name
       // begins the same way as the customer's, and who is NOT the reporter.
@@ -161,6 +164,31 @@ describe('the comment composer on a Setlfi support card', () => {
     expect(mentionProps.displayTransform(mentionProps.data[0].id, 'Deniss Locmelis')).toBe(
       '@Deniss Locmelis',
     );
+  });
+
+  it('says the reporter will read the comment, once it tags them', async () => {
+    // A comment that leaves the board and lands on a customer's screen must not
+    // be a surprise to the person writing it — the visibility rule is otherwise
+    // invisible from inside Planka.
+    const { container, unmount } = render();
+
+    expect(container.textContent).not.toContain('common.reporterWillSeeThisComment');
+
+    // Driven through the component's own onChange, the way react-mentions calls
+    // it when a suggestion is picked: (event, newValue) with the MARKUP.
+    const type = async (value) => {
+      await act(async () => {
+        mentionsProps.onChange({ target: { value } }, value);
+      });
+    };
+
+    await type('@[Deniss Locmelis](reporter) hi');
+    expect(container.textContent).toContain('common.reporterWillSeeThisComment');
+
+    await type('an internal note about @[deniss](1428506806699622212)');
+    expect(container.textContent).not.toContain('common.reporterWillSeeThisComment');
+
+    unmount();
   });
 
   it('offers board members only on a card that is not a support ticket', () => {
