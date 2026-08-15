@@ -310,6 +310,16 @@ export default {
       rejectUnauthorizedTlsCertificates: 'Reject unauthorized TLS certificates',
       removeManager_title: 'Remove Manager',
       removeMember_title: 'Remove Member',
+      // The badge on the synthetic mention entry a Setlfi support card offers:
+      // the customer who reported the ticket, who has no Planka account and is
+      // NOT the board member with a similar name sitting under them in the same
+      // dropdown (see utils/setlfi-reporter.js). Other catalogues fall back to
+      // this one until it is translated.
+      reporter: 'Reporter',
+      // Shown under the comment box the moment the reporter is tagged in it.
+      // The customer really does read a tagged comment on their feedback page,
+      // and the person writing it should be told so before they press Add.
+      reporterWillSeeThisComment: 'The reporter will see this comment on their feedback page.',
       resizePanel: 'Resize panel',
       role: 'Role',
       saveThisKeyItWillNotBeShownAgain: 'Save this key — it will not be shown again!',
