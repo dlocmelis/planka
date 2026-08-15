@@ -14,8 +14,23 @@ export default (markdown) => {
       plugins,
       tokens: true,
     });
-  } catch (error) {
-    return error.toString();
+  } catch {
+    // Same trap as components/common/Markdown.jsx: transform() front-matter
+    // parses anything starting with `---` as YAML and throws when it is not.
+    // Retry without the Liquid pass, and failing that give back the source —
+    // this is the board tile's preview text, and the source is a far better
+    // preview of a card than the exception message was. Returning
+    // error.toString() also leaked the offending lines of a description into a
+    // place that was never meant to show them.
+    try {
+      tokens = transform(markdown, {
+        plugins,
+        tokens: true,
+        disableLiquid: true,
+      });
+    } catch {
+      return markdown;
+    }
   }
 
   return tokens
