@@ -117,7 +117,14 @@
  *                         $ref: '#/components/schemas/CardLabel'
  *                     cardDependencies:
  *                       type: array
- *                       description: Related card dependencies, both directions
+ *                       description: >
+ *                         Related card dependencies, both directions. A row may name a card on a
+ *                         board the reader cannot open, and it is returned anyway: the id alone is
+ *                         what lets a client draw "waiting for a card you cannot see from here"
+ *                         instead of silently dropping the link. Deliberate, and the same decision
+ *                         GET /cards/{cardId}/card-dependencies documents at length — `included.cards`
+ *                         there carries only the cards the reader may read, and these payloads carry
+ *                         no cards for the far end at all.
  *                       items:
  *                         $ref: '#/components/schemas/CardDependency'
  *                     taskLists:

@@ -15,16 +15,32 @@ import ErrorCodes from '../../../constants/ErrorCodes';
 
 // A REFUSED DEPENDENCY IS SAID OUT LOUD. Every one of these answers is reachable
 // from the picker — a link to a card on a board this account may not read (404),
-// and one that would close a cycle (422) — and the failure action alone is
-// reduced by nothing and rendered by nothing, so the button did nothing and said
-// nothing. The message is chosen from the code rather than from Planka's English
-// text, because the toast is localised and the response is not.
+// one that would close a cycle (422), the same link added by two people at once
+// (409), and a board role downgraded while the card modal is open (403) — and
+// the failure action alone is reduced by nothing and rendered by nothing, so the
+// button did nothing and said nothing.
+//
+// The toast text is chosen HERE rather than shown from the response, because the
+// toast is localised and Planka's `message` is English. The status code alone is
+// not enough to choose it: the two 422s are different refusals — a card linked to
+// itself and a cycle — and telling somebody who clicked their own card that "the
+// two cards would wait for each other" is a wrong answer that reads like a bug.
+// So the code narrows and the server's own message picks between the exits that
+// share one (`server/api/controllers/card-dependencies/create.js`, `Errors`).
 const refusalReason = (error) => {
+  const message = (error && error.message) || '';
+
   switch (error && error.code) {
     case ErrorCodes.NOT_FOUND:
       return 'cardDependencyCardNotFound';
     case ErrorCodes.UNPROCESSABLE_ENTITY:
-      return 'cardDependencyWouldCreateCycle';
+      return message === 'Card depends on itself'
+        ? 'cardDependsOnItself'
+        : 'cardDependencyWouldCreateCycle';
+    case ErrorCodes.CONFLICT:
+      return 'cardDependencyAlreadyExists';
+    case ErrorCodes.FORBIDDEN:
+      return 'cardDependencyNotEnoughRights';
     default:
       return null;
   }

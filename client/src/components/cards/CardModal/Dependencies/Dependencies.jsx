@@ -17,6 +17,17 @@ import CardDependenciesStep from '../../CardDependenciesStep';
 
 import styles from './Dependencies.module.scss';
 
+// Three states rather than two: finished, put away (archived or trashed — nobody
+// is going to finish it and nothing is coming), and still waiting. The list name
+// beside the icon says WHICH of the two put-away lists it is.
+const dependencyIconName = (dependency) => {
+  if (dependency.isDone) {
+    return 'check circle outline';
+  }
+
+  return dependency.isPutAway ? 'ban' : 'hourglass half';
+};
+
 // "Dependent on: card B", plus the mirror of it — what is waiting for THIS card.
 //
 // Both halves are drawn because a dependency is only readable from one end at a
@@ -31,17 +42,27 @@ const Dependencies = React.memo(({ canEdit }) => {
   const dispatch = useDispatch();
   const [t] = useTranslation();
 
-  // What the picker must not offer: the cards this one already waits for, and
-  // THIS CARD ITSELF.
+  // What the picker must not offer: the cards this one already waits for, THIS
+  // CARD ITSELF, and the cards that are waiting for IT.
   //
   // Its own id is here because the picker's list cannot exclude it — that list
   // is selectCardsExceptCurrentForCurrentBoard, which has already dropped it —
   // while the paste box can still be handed this card's own link, and the
   // server answers that 422 `cardDependsOnItself`. Offering a button whose only
   // outcome is a refusal is worse than not offering it.
+  //
+  // The DEPENDENTS are here for the same reason, one hop further out: if B
+  // already waits for this card, marking this card as waiting for B closes a
+  // two-card loop and the server answers 422 `dependencyWouldCreateCycle`. The
+  // component already has that list in hand — it draws it directly below — so
+  // the offer costs nothing to withdraw.
   const excludedIds = useMemo(
-    () => [card.id, ...dependencies.map((dependency) => dependency.dependsOnCardId)],
-    [card.id, dependencies],
+    () => [
+      card.id,
+      ...dependencies.map((dependency) => dependency.dependsOnCardId),
+      ...dependents.map((dependent) => dependent.cardId),
+    ],
+    [card.id, dependencies, dependents],
   );
 
   const handleSelect = useCallback(
@@ -86,10 +107,7 @@ const Dependencies = React.memo(({ canEdit }) => {
       )}
       {dependencies.map((dependency) => (
         <div key={dependency.dependsOnCardId} className={styles.item}>
-          <Icon
-            name={dependency.isDone ? 'check circle outline' : 'hourglass half'}
-            className={styles.itemIcon}
-          />
+          <Icon name={dependencyIconName(dependency)} className={styles.itemIcon} />
           {renderName(dependency)}
           {dependency.listName && <span className={styles.listName}>{dependency.listName}</span>}
           {canEdit && (

@@ -34,12 +34,41 @@ const buildOrmState = () => {
     position: 1,
     name: 'Card A',
   });
+  session.List.create({
+    id: 'list-archive',
+    boardId: 'board-1',
+    type: ListTypes.ARCHIVE,
+    position: 3,
+    name: 'Archive',
+  });
+  session.List.create({
+    id: 'list-trash',
+    boardId: 'board-1',
+    type: ListTypes.TRASH,
+    position: 4,
+    name: 'Trash',
+  });
+
   session.Card.create({
     id: 'card-b',
     boardId: 'board-1',
     listId: 'list-done',
     position: 2,
     name: 'Card B',
+  });
+  session.Card.create({
+    id: 'card-archived',
+    boardId: 'board-1',
+    listId: 'list-archive',
+    position: 3,
+    name: 'An archived card',
+  });
+  session.Card.create({
+    id: 'card-trashed',
+    boardId: 'board-1',
+    listId: 'list-trash',
+    position: 4,
+    name: 'A trashed card',
   });
 
   return session.state;
@@ -86,6 +115,39 @@ describe('CardDependency', () => {
       actions.createCardDependency.success(dependency('card-b', 'card-a')),
     );
     expect(dependenciesOf(ormState, 'card-b')[0].isDone).toBe(false);
+  });
+
+  // Archive and Trash are neither finished nor waiting, and they used to be
+  // split between the two answers: an archived card read as SATISFIED — so an
+  // unfinished blocker somebody archived showed a tick — while a trashed one
+  // read as still coming, so a blocker somebody threw away showed an hourglass
+  // for ever. Both are "put away", and that is a third thing to say.
+  test('a blocker that was archived or trashed is put away rather than done', () => {
+    const ormState = reducer(
+      reducer(
+        buildOrmState(),
+        actions.createCardDependency.success(dependency('card-a', 'card-archived')),
+      ),
+      actions.createCardDependency.success(dependency('card-a', 'card-trashed')),
+    );
+
+    const dependencies = dependenciesOf(ormState, 'card-a');
+    expect(dependencies).toHaveLength(2);
+
+    dependencies.forEach((dep) => {
+      expect(dep.isDone).toBe(false);
+      expect(dep.isPutAway).toBe(true);
+    });
+  });
+
+  test('a blocker that is genuinely finished is not "put away"', () => {
+    const ormState = reducer(
+      buildOrmState(),
+      actions.createCardDependency.success(dependency('card-a', 'card-b')),
+    );
+
+    expect(dependenciesOf(ormState, 'card-a')[0].isDone).toBe(true);
+    expect(dependenciesOf(ormState, 'card-a')[0].isPutAway).toBe(false);
   });
 
   test('a dependency on a card this client has not loaded renders without a name', () => {

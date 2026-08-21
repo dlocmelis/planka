@@ -11,6 +11,7 @@ import { selectPath } from './router';
 import { selectCurrentUserId } from './users';
 import { buildCustomFieldValueId } from '../models/CustomFieldValue';
 import { ListTypes } from '../constants/Enums';
+import { isListArchiveOrTrash } from '../utils/record-helpers';
 import { isLocalId } from '../utils/local-id';
 
 export const makeSelectCardById = () =>
@@ -344,11 +345,18 @@ const buildDependencyView = ({ Card, List }, cardDependencyModel, otherCardId) =
     // whose type says the work in it is done. The pipeline's "Done" COLUMN is
     // the orchestrator's business, not the client's — this is only the tick the
     // reader sees beside a dependency that no longer holds anything up.
+    //
+    // ARCHIVE AND TRASH ARE NEITHER, and they used to be split between the two
+    // answers: archive counted as finished, so an unfinished card somebody
+    // archived read as satisfied, while trash counted as unfinished, so a
+    // blocker somebody threw away showed an hourglass for ever. Both are "put
+    // away" — nobody is going to finish them and nothing is coming — which is a
+    // third thing to say, and isPutAway is where it is said.
     isDone: Boolean(
       otherCardModel &&
-      (otherCardModel.isClosed ||
-        (listModel && [ListTypes.CLOSED, ListTypes.ARCHIVE].includes(listModel.type))),
+      (otherCardModel.isClosed || (listModel && listModel.type === ListTypes.CLOSED)),
     ),
+    isPutAway: Boolean(listModel && isListArchiveOrTrash(listModel)),
   };
 };
 

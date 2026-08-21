@@ -105,10 +105,14 @@ export default {
         '{{username}} has not answered yet — it may be busy. Your message is on the card and the reply will land here.',
       botIsThinking: '{{username}} is thinking…',
       byCreationTime: 'By creation time',
+      cardDependencyAlreadyExists: 'This card is already marked as dependent on that one.',
       cardDependencyCardNotFound:
         'That card could not be found, or it is on a board you do not have access to.',
+      cardDependencyNotEnoughRights:
+        'You no longer have permission to change this card’s dependencies.',
       cardDependencyWouldCreateCycle:
         'That would make the two cards wait for each other, so neither could ever start.',
+      cardDependsOnItself: 'A card cannot be dependent on itself.',
       cardOnAnotherBoard: 'A card on another board',
       byDefault: 'By default',
       byDueDate: 'By due date',

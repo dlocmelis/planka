@@ -595,6 +595,72 @@ describe('Card dependencies', function describeCardDependencies() {
     }
   });
 
+  // ...and the same guard PROVOKED rather than simulated, which the case above
+  // cannot do: it stubs the model, so it pins the mapping from a message to a
+  // 422 and says nothing about whether Postgres's message ever reaches one of
+  // the three places isCycleGuardViolation looks. If sails-postgresql buried it,
+  // every real race would answer 500 and this file would still be green.
+  //
+  // Two halves, because they answer two different questions:
+  //   1. the trigger refuses the write at all, and the tag survives the adapter;
+  //   2. two concurrent requests through the whole production path leave exactly
+  //      one link and a refusal the client can read — whichever of the two
+  //      guards happened to win the race.
+  it('refuses a cycle at the database, with the tag the helper looks for', async function realCycleGuard() {
+    if (!(await onRealDatabase())) {
+      this.skip();
+      return;
+    }
+
+    await givenDependency(cardA.id, cardB.id);
+
+    // Straight at the model, which is what a request whose walk has already
+    // passed effectively does: the walk is not consulted again between its read
+    // and this write.
+    let caught;
+    try {
+      await CardDependency.qm.createOne({ cardId: cardB.id, dependsOnCardId: cardA.id });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught, 'the database accepted a link that closes a cycle').to.not.equal(undefined);
+
+    const texts = [
+      caught.message,
+      caught.raw && caught.raw.message,
+      caught.cause && caught.cause.message,
+    ];
+    expect(
+      texts.some((text) => typeof text === 'string' && text.includes('card_dependency_cycle')),
+      `the trigger's tag did not reach any path the helper reads: ${JSON.stringify(texts)}`,
+    ).to.equal(true);
+  });
+
+  it('leaves exactly one link when two requests race to close a cycle', async function racesTwoInserts() {
+    if (!(await onRealDatabase())) {
+      this.skip();
+      return;
+    }
+
+    const [first, second] = await Promise.all([
+      createDependency(tokens.editor, cardA.id, cardB.id),
+      createDependency(tokens.editor, cardB.id, cardA.id),
+    ]);
+
+    const statuses = [first.status, second.status].sort();
+    expect(statuses[0]).to.equal(200);
+    expect(
+      statuses[1],
+      'the loser of the race must be refused the way the walk refuses, not with a 500',
+    ).to.equal(422);
+
+    const winner = first.status === 200 ? cardA.id : cardB.id;
+    const res = await getDependencies(tokens.editor, winner);
+    expect(res.status).to.equal(200);
+    expect(res.body.items).to.have.lengthOf(1);
+  });
+
   it('tells webhook subscribers when a dependency is placed, with both cards named', async () => {
     await givenDependency(requestCard.id, cardB.id);
 

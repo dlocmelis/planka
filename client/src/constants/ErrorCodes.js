@@ -4,6 +4,10 @@
  */
 
 const UNAUTHORIZED = 'E_UNAUTHORIZED';
+// A request this account is authenticated for and not allowed to make — a board
+// role downgraded while the page was open, which is reachable with a card modal
+// still on screen (see the card-dependencies saga).
+const FORBIDDEN = 'E_FORBIDDEN';
 const NOT_FOUND = 'E_NOT_FOUND';
 const CONFLICT = 'E_CONFLICT';
 const UNPROCESSABLE_ENTITY = 'E_UNPROCESSABLE_ENTITY';
@@ -19,6 +23,7 @@ const SERVICE_UNAVAILABLE = 'E_SERVICE_UNAVAILABLE';
 
 export default {
   UNAUTHORIZED,
+  FORBIDDEN,
   NOT_FOUND,
   CONFLICT,
   UNPROCESSABLE_ENTITY,
