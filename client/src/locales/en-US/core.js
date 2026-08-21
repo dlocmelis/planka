@@ -329,6 +329,7 @@ export default {
       role: 'Role',
       saveThisKeyItWillNotBeShownAgain: 'Save this key — it will not be shown again!',
       searchCards: 'Search cards...',
+      searchCardsOrPasteLink: 'Search cards, or paste a card link...',
       searchCustomFieldGroups: 'Search custom field groups...',
       searchCustomFields: 'Search custom fields...',
       searchLabels: 'Search labels...',
@@ -414,6 +415,7 @@ export default {
       userRemovedUserFromThisCard: '<0>{{actorUser}}</0> removed {{removedUser}} from this card',
       userSetCustomFieldValueOnCard:
         '<0>{{user}}</0> set {{field}} to «{{value}}» on <2>{{card}}</2>',
+      useCardWithId: 'Use the card with id {{id}}',
       username: 'Username',
       users: 'Users',
       viewer: 'Viewer',

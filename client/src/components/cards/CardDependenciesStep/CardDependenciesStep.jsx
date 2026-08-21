@@ -17,11 +17,16 @@ import styles from './CardDependenciesStep.module.scss';
 // The picker behind "Dependent on": every other card on this board, minus the
 // ones the current card already waits for.
 //
-// Only THIS board's cards, because the client holds one board at a time. The
-// API allows a dependency across boards (a request waiting for a sprint card)
-// and renders one it is given, but there is nothing here to search the other
-// board with — so this popup offers what it can actually list rather than a
-// search box that would silently answer for one board only.
+// The list is THIS board's cards, because the client holds one board at a time.
+// A dependency may cross boards — a request waiting for a sprint card is the
+// case this feature was asked for — and the second half of this popup is how
+// one is made from here: paste the other card's LINK (or its id) into the same
+// box and it is offered by id. The server checks the id and refuses one the
+// user may not read, so nothing here has to.
+//
+// A card search across boards would be the tidier control and it needs an
+// endpoint that does not exist; pasting the link of the card you are looking at
+// needs nothing and is what a person reaches for anyway.
 const CardDependenciesStep = React.memo(({ excludedIds, onSelect }) => {
   const cards = useSelector(selectors.selectCardsExceptCurrentForCurrentBoard);
 
@@ -36,6 +41,26 @@ const CardDependenciesStep = React.memo(({ excludedIds, onSelect }) => {
       ),
     [cards, excludedIds, cleanSearch],
   );
+
+  // A card id typed or pasted in, either bare or inside a card link. Offered
+  // only when it is not already a card on this board (that one is in the list
+  // above, under its own name, which is the better thing to click) and not
+  // already a dependency.
+  const pastedCardId = useMemo(() => {
+    const match = /(?:\/cards\/)?(\d{6,})\s*$/.exec(search.trim());
+
+    if (!match) {
+      return null;
+    }
+
+    const id = match[1];
+
+    if (excludedIds.includes(id) || cards.some((card) => card.id === id)) {
+      return null;
+    }
+
+    return id;
+  }, [search, cards, excludedIds]);
 
   const [searchFieldRef, handleSearchFieldRef] = useNestedRef('inputRef');
 
@@ -64,12 +89,12 @@ const CardDependenciesStep = React.memo(({ excludedIds, onSelect }) => {
           fluid
           ref={handleSearchFieldRef}
           value={search}
-          placeholder={t('common.searchCards')}
+          placeholder={t('common.searchCardsOrPasteLink')}
           maxLength={128}
           icon="search"
           onChange={handleSearchChange}
         />
-        {filteredCards.length > 0 ? (
+        {filteredCards.length > 0 && (
           <div className={styles.items}>
             {filteredCards.map((card) => (
               <button
@@ -83,7 +108,20 @@ const CardDependenciesStep = React.memo(({ excludedIds, onSelect }) => {
               </button>
             ))}
           </div>
-        ) : (
+        )}
+        {pastedCardId && (
+          <button
+            type="button"
+            data-id={pastedCardId}
+            className={styles.item}
+            onClick={handleSelectClick}
+          >
+            {t('common.useCardWithId', {
+              id: pastedCardId,
+            })}
+          </button>
+        )}
+        {filteredCards.length === 0 && !pastedCardId && (
           <div className={styles.message}>{t('common.noCardsFound')}</div>
         )}
       </Popup.Content>
