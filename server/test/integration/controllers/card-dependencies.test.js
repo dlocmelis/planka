@@ -312,6 +312,21 @@ describe('Card dependencies', function describeCardDependencies() {
     );
   });
 
+  it('carries the dependencies in the list-of-cards payload', async () => {
+    // The ENDLESS-LIST pagination path, which is a different controller from
+    // the board read above (cards/index.js, not boards/show.js) and destructures
+    // `cardDependencies` on the client either way. Without it a card paged in
+    // this way arrives with no dependency rows and draws an empty "Dependent on".
+    const res = await request
+      .get(`/api/lists/${sprintList.id}/cards`)
+      .set('Authorization', `Bearer ${tokens.editor}`);
+
+    expect(res.status).to.equal(200);
+    expect(res.body.included.cardDependencies.map((item) => item.dependsOnCardId)).to.include(
+      cardB.id,
+    );
+  });
+
   it('removes a dependency', async () => {
     const res = await deleteDependency(tokens.editor, cardA.id, cardB.id);
 
