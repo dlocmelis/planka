@@ -46,6 +46,7 @@
  *                     - users
  *                     - cardMemberships
  *                     - cardLabels
+ *                     - cardDependencies
  *                     - taskLists
  *                     - tasks
  *                     - attachments
@@ -68,6 +69,11 @@
  *                       description: Related card-label associations
  *                       items:
  *                         $ref: '#/components/schemas/CardLabel'
+ *                     cardDependencies:
+ *                       type: array
+ *                       description: Related card dependencies, in both directions
+ *                       items:
+ *                         $ref: '#/components/schemas/CardDependency'
  *                     taskLists:
  *                       type: array
  *                       description: Related task lists
@@ -159,6 +165,7 @@ module.exports = {
     const users = card.creatorUserId ? await User.qm.getByIds([card.creatorUserId]) : [];
     const cardMemberships = await CardMembership.qm.getByCardId(card.id);
     const cardLabels = await CardLabel.qm.getByCardId(card.id);
+    const cardDependencies = await CardDependency.qm.getByCardIdsOrDependsOnCardIds([card.id]);
 
     const taskLists = await TaskList.qm.getByCardId(card.id);
     const taskListIds = sails.helpers.utils.mapRecords(taskLists);
@@ -193,6 +200,7 @@ module.exports = {
       included: {
         cardMemberships,
         cardLabels,
+        cardDependencies,
         taskLists,
         tasks,
         customFieldGroups,

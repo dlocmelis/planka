@@ -33,6 +33,18 @@ module.exports = {
       cardId: cardIdOrIds,
     });
 
+    // Both directions: a deleted card stops waiting for anything AND stops
+    // being something other cards wait for. Dropping only the first half would
+    // leave a live card blocked forever on a card that no longer exists, which
+    // is the one dependency state nothing can clear from the UI.
+    await CardDependency.qm.delete({
+      cardId: cardIdOrIds,
+    });
+
+    await CardDependency.qm.delete({
+      dependsOnCardId: cardIdOrIds,
+    });
+
     const taskLists = await TaskList.qm.delete({
       cardId: cardIdOrIds,
     });

@@ -97,6 +97,9 @@ const Events = {
   CARD_UPDATE: 'cardUpdate',
   CARD_DELETE: 'cardDelete',
 
+  CARD_DEPENDENCY_CREATE: 'cardDependencyCreate',
+  CARD_DEPENDENCY_DELETE: 'cardDependencyDelete',
+
   CARD_LABEL_CREATE: 'cardLabelCreate',
   CARD_LABEL_DELETE: 'cardLabelDelete',
 
