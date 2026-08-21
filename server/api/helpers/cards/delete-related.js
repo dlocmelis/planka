@@ -37,13 +37,11 @@ module.exports = {
     // being something other cards wait for. Dropping only the first half would
     // leave a live card blocked forever on a card that no longer exists, which
     // is the one dependency state nothing can clear from the UI.
-    await CardDependency.qm.delete({
-      cardId: cardIdOrIds,
-    });
-
-    await CardDependency.qm.delete({
-      dependsOnCardId: cardIdOrIds,
-    });
+    //
+    // Through the helper rather than straight at the model, because the far end
+    // of a dependency may be on another board, whose room hears nothing about
+    // this card being deleted — see the helper for the whole reason.
+    await sails.helpers.cardDependencies.deleteForCards(inputs.recordOrRecords);
 
     const taskLists = await TaskList.qm.delete({
       cardId: cardIdOrIds,

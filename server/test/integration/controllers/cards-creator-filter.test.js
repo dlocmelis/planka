@@ -252,6 +252,10 @@ describe('cards creatorUserIds filter (controller)', function describeCardsCreat
     expect(Object.keys(res.body).sort()).to.deep.equal(['included', 'items']);
     expect(Object.keys(res.body.included).sort()).to.deep.equal([
       'attachments',
+      // Added with card dependencies: the client destructures it out of this
+      // very response (sagas/core/services/cards.js), so the endless-list path
+      // has to carry it like every other included collection.
+      'cardDependencies',
       'cardLabels',
       'cardMemberships',
       'customFieldGroups',
