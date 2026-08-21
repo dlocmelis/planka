@@ -31,9 +31,17 @@ const Dependencies = React.memo(({ canEdit }) => {
   const dispatch = useDispatch();
   const [t] = useTranslation();
 
+  // What the picker must not offer: the cards this one already waits for, and
+  // THIS CARD ITSELF.
+  //
+  // Its own id is here because the picker's list cannot exclude it — that list
+  // is selectCardsExceptCurrentForCurrentBoard, which has already dropped it —
+  // while the paste box can still be handed this card's own link, and the
+  // server answers that 422 `cardDependsOnItself`. Offering a button whose only
+  // outcome is a refusal is worse than not offering it.
   const excludedIds = useMemo(
-    () => dependencies.map((dependency) => dependency.dependsOnCardId),
-    [dependencies],
+    () => [card.id, ...dependencies.map((dependency) => dependency.dependsOnCardId)],
+    [card.id, dependencies],
   );
 
   const handleSelect = useCallback(

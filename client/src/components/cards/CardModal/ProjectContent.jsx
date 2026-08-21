@@ -144,6 +144,16 @@ const ProjectContent = React.memo(() => {
     };
   }, shallowEqual);
 
+  // Whether the "Dependent on" module has anything at all to draw: a link in
+  // either direction, or the right to add one. Asked HERE because the module's
+  // icon and wrapper live here, and Dependencies itself answers null.
+  const hasDependencies = useSelector(
+    (state) =>
+      canEditDependencies ||
+      selectors.selectDependenciesForCurrentCard(state).length > 0 ||
+      selectors.selectDependentsForCurrentCard(state).length > 0,
+  );
+
   const dispatch = useDispatch();
   const [t] = useTranslation();
   const [descriptionDraft, setDescriptionDraft] = useState(null);
@@ -534,12 +544,18 @@ const ProjectContent = React.memo(() => {
             </div>
           )}
           <CustomFieldGroups />
-          <div className={styles.contentModule}>
-            <div className={styles.moduleWrapper}>
-              <Icon name="linkify" className={styles.moduleIcon} />
-              <Dependencies canEdit={canEditDependencies} />
+          {/* Conditional like every other module here, and for the reason they
+              are: Dependencies renders NOTHING for a viewer with no links to
+              show, so an unconditional wrapper drew a lone linkify icon with
+              empty space beside it on every ordinary card. */}
+          {hasDependencies && (
+            <div className={styles.contentModule}>
+              <div className={styles.moduleWrapper}>
+                <Icon name="linkify" className={styles.moduleIcon} />
+                <Dependencies canEdit={canEditDependencies} />
+              </div>
             </div>
-          </div>
+          )}
           <TaskLists />
           {attachmentIds.length > 0 && (
             <div className={styles.contentModule}>

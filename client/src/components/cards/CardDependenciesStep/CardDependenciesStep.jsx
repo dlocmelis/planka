@@ -46,8 +46,12 @@ const CardDependenciesStep = React.memo(({ excludedIds, onSelect }) => {
   // only when it is not already a card on this board (that one is in the list
   // above, under its own name, which is the better thing to click) and not
   // already a dependency.
+  // ANCHORED AT BOTH ENDS, so only a string that IS an id or IS a card link
+  // offers the button. Unanchored, any search text ending in six digits — a
+  // ticket reference, a date, an amount — offered "Use the card with id …" for
+  // a card nobody named.
   const pastedCardId = useMemo(() => {
-    const match = /(?:\/cards\/)?(\d{6,})\s*$/.exec(search.trim());
+    const match = /^(?:\S*\/cards\/)?(\d{6,})$/.exec(search.trim());
 
     if (!match) {
       return null;

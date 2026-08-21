@@ -13,6 +13,12 @@
  *       the cards waiting for it. The related cards are included with the list they are in,
  *       so a caller can tell a finished blocker from an unfinished one without a second
  *       request. Cards the caller may not read are named by id only.
+ *
+ *       Note for maintainers: the web client does NOT call this — it reads its rows from
+ *       the `cardDependencies` block of `GET /boards/{id}` and `GET /lists/{id}/cards`.
+ *       The consumers are the devteam orchestrator (which acts on dependencies and needs
+ *       the far end resolved across boards) and the Setlfi support backend. It is a route
+ *       with no in-repo caller and it is not dead.
  *     tags:
  *       - Card Dependencies
  *     operationId: getCardDependencies
