@@ -621,6 +621,14 @@ describe('Card dependencies', function describeCardDependencies() {
     expect(data.included.boards.map((board) => board.id)).to.include(requestsBoard.id);
     expect(data.included.lists.map((list) => list.id)).to.include(requestsList.id);
     expect(data.included.projects.map((item) => item.id)).to.include(project.id);
+
+    // WHO placed the mark, at the document's top level beside `event` and
+    // `data`. The orchestrator reads it as the event's actor and its voting
+    // gate exempts the bot's own moves by exactly this field, so a payload
+    // without it would make every bot-placed link look like a person's.
+    expect(calls[0].body.event).to.equal(Webhook.Events.CARD_DEPENDENCY_CREATE);
+    expect(calls[0].body.user.id).to.equal(editor.id);
+    expect(calls[0].body.user.username).to.equal(editor.username);
   });
 
   it('tells webhook subscribers when a dependency is removed', async () => {
