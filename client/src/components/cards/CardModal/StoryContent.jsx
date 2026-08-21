@@ -21,6 +21,7 @@ import { ClosableContext } from '../../../contexts';
 import NameField from './NameField';
 import Thumbnail from './Thumbnail';
 import CustomFieldGroups from './CustomFieldGroups';
+import Dependencies from './Dependencies';
 import Communication from './Communication';
 import CreationDetailsStep from './CreationDetailsStep';
 import MoreActionsStep from './MoreActionsStep';
@@ -85,6 +86,7 @@ const StoryContent = React.memo(() => {
     canUseLabels,
     canAddAttachment,
     canAddCustomFieldGroup,
+    canEditDependencies,
   } = useSelector((state) => {
     const boardMembership = selectors.selectCurrentUserMembershipForCurrentBoard(state);
 
@@ -113,6 +115,7 @@ const StoryContent = React.memo(() => {
         canUseLabels: false,
         canAddAttachment: false,
         canAddCustomFieldGroup: false,
+        canEditDependencies: false,
       };
     }
 
@@ -132,6 +135,7 @@ const StoryContent = React.memo(() => {
       canUseLabels: isEditor,
       canAddAttachment: isEditor,
       canAddCustomFieldGroup: isEditor,
+      canEditDependencies: isEditor,
     };
   }, shallowEqual);
 
@@ -454,6 +458,12 @@ const StoryContent = React.memo(() => {
             )}
           </Gallery>
           <CustomFieldGroups />
+          <div className={styles.contentModule}>
+            <div className={styles.moduleWrapper}>
+              <Icon name="linkify" className={styles.moduleIcon} />
+              <Dependencies canEdit={canEditDependencies} />
+            </div>
+          </div>
           {attachmentIds.length > 0 && (
             <div className={styles.contentModule}>
               <div className={styles.moduleWrapper}>

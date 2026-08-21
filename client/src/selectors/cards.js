@@ -10,6 +10,7 @@ import { selectRecentCardId } from './core';
 import { selectPath } from './router';
 import { selectCurrentUserId } from './users';
 import { buildCustomFieldValueId } from '../models/CustomFieldValue';
+import { ListTypes } from '../constants/Enums';
 import { isLocalId } from '../utils/local-id';
 
 export const makeSelectCardById = () =>
@@ -322,6 +323,83 @@ export const selectTaskListIdsForCurrentCard = createSelector(
   },
 );
 
+// The two directions of the current card's dependency links, resolved to
+// something renderable.
+//
+// A dependency may point at a card on ANOTHER board, and the client only ever
+// holds one board at a time, so `card` is null whenever the other end is not
+// loaded. Every consumer has to render that case — "a card you cannot see from
+// here" — rather than assume a name is available.
+const buildDependencyView = ({ Card, List }, cardDependencyModel, otherCardId) => {
+  const otherCardModel = Card.withId(otherCardId);
+  const listModel = otherCardModel && List.withId(otherCardModel.listId);
+
+  return {
+    id: cardDependencyModel.id,
+    cardId: cardDependencyModel.cardId,
+    dependsOnCardId: cardDependencyModel.dependsOnCardId,
+    card: otherCardModel ? otherCardModel.ref : null,
+    listName: listModel ? listModel.name : null,
+    // Planka's own notion of finished: the card is closed, or it sits in a list
+    // whose type says the work in it is done. The pipeline's "Done" COLUMN is
+    // the orchestrator's business, not the client's — this is only the tick the
+    // reader sees beside a dependency that no longer holds anything up.
+    isDone: Boolean(
+      otherCardModel &&
+      (otherCardModel.isClosed ||
+        (listModel && [ListTypes.CLOSED, ListTypes.ARCHIVE].includes(listModel.type))),
+    ),
+  };
+};
+
+export const makeSelectDependenciesByCardId = () =>
+  createSelector(
+    orm,
+    (_, id) => id,
+    (session, id) => {
+      const cardModel = session.Card.withId(id);
+
+      if (!cardModel) {
+        return [];
+      }
+
+      return cardModel.dependencies
+        .toModelArray()
+        .map((cardDependencyModel) =>
+          buildDependencyView(session, cardDependencyModel, cardDependencyModel.dependsOnCardId),
+        );
+    },
+  );
+
+export const selectDependenciesByCardId = makeSelectDependenciesByCardId();
+
+export const makeSelectDependentsByCardId = () =>
+  createSelector(
+    orm,
+    (_, id) => id,
+    (session, id) => {
+      const cardModel = session.Card.withId(id);
+
+      if (!cardModel) {
+        return [];
+      }
+
+      return cardModel.dependents
+        .toModelArray()
+        .map((cardDependencyModel) =>
+          buildDependencyView(session, cardDependencyModel, cardDependencyModel.cardId),
+        );
+    },
+  );
+
+export const selectDependentsByCardId = makeSelectDependentsByCardId();
+
+export const selectDependenciesForCurrentCard = (state) =>
+  selectDependenciesByCardId(state, selectPath(state).cardId);
+
+export const selectDependentsForCurrentCard = (state) =>
+  selectDependentsByCardId(state, selectPath(state).cardId);
+
 export const selectAttachmentIdsForCurrentCard = createSelector(
   orm,
   (state) => selectPath(state).cardId,
@@ -488,6 +566,12 @@ export default {
   selectUserIdsForCurrentCard,
   selectLabelIdsForCurrentCard,
   selectTaskListIdsForCurrentCard,
+  makeSelectDependenciesByCardId,
+  selectDependenciesByCardId,
+  makeSelectDependentsByCardId,
+  selectDependentsByCardId,
+  selectDependenciesForCurrentCard,
+  selectDependentsForCurrentCard,
   selectAttachmentIdsForCurrentCard,
   selectImageAttachmentIdsExceptCoverForCurrentCard,
   selectAttachmentsForCurrentCard,

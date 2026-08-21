@@ -82,6 +82,7 @@ export function* handleListUpdate(list) {
   let cards;
   let cardMemberships;
   let cardLabels;
+  let cardDependencies;
   let taskLists;
   let tasks;
   let attachments;
@@ -98,6 +99,7 @@ export function* handleListUpdate(list) {
           cards,
           cardMemberships,
           cardLabels,
+          cardDependencies,
           taskLists,
           tasks,
           attachments,
@@ -119,6 +121,7 @@ export function* handleListUpdate(list) {
       cards,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,

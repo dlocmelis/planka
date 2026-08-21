@@ -187,6 +187,14 @@ const createSocketEventsChannel = () =>
       emit(entryActions.handleLabelFromCardRemove(item));
     };
 
+    const handleCardDependencyCreate = ({ item }) => {
+      emit(entryActions.handleCardDependencyCreate(item));
+    };
+
+    const handleCardDependencyDelete = ({ item }) => {
+      emit(entryActions.handleCardDependencyDelete(item));
+    };
+
     const handleTaskListCreate = ({ item }) => {
       emit(entryActions.handleTaskListCreate(item));
     };
@@ -353,6 +361,9 @@ const createSocketEventsChannel = () =>
     socket.on('cardLabelCreate', handleLabelToCardAdd);
     socket.on('cardLabelDelete', handleLabelFromCardRemove);
 
+    socket.on('cardDependencyCreate', handleCardDependencyCreate);
+    socket.on('cardDependencyDelete', handleCardDependencyDelete);
+
     socket.on('taskListCreate', handleTaskListCreate);
     socket.on('taskListUpdate', handleTaskListUpdate);
     socket.on('taskListDelete', handleTaskListDelete);
@@ -449,6 +460,9 @@ const createSocketEventsChannel = () =>
 
       socket.off('cardLabelCreate', handleLabelToCardAdd);
       socket.off('cardLabelDelete', handleLabelFromCardRemove);
+
+      socket.off('cardDependencyCreate', handleCardDependencyCreate);
+      socket.off('cardDependencyDelete', handleCardDependencyDelete);
 
       socket.off('taskListCreate', handleTaskListCreate);
       socket.off('taskListUpdate', handleTaskListUpdate);

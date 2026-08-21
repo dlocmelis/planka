@@ -20,6 +20,7 @@ import { CardTypeIcons } from '../../../constants/Icons';
 import { ClosableContext } from '../../../contexts';
 import NameField from './NameField';
 import TaskLists from './TaskLists';
+import Dependencies from './Dependencies';
 import CustomFieldGroups from './CustomFieldGroups';
 import Communication from './Communication';
 import CreationDetailsStep from './CreationDetailsStep';
@@ -84,6 +85,7 @@ const ProjectContent = React.memo(() => {
     canAddTaskList,
     canAddAttachment,
     canAddCustomFieldGroup,
+    canEditDependencies,
   } = useSelector((state) => {
     const boardMembership = selectors.selectCurrentUserMembershipForCurrentBoard(state);
 
@@ -115,6 +117,7 @@ const ProjectContent = React.memo(() => {
         canAddTaskList: false,
         canAddAttachment: false,
         canAddCustomFieldGroup: false,
+        canEditDependencies: false,
       };
     }
 
@@ -137,6 +140,7 @@ const ProjectContent = React.memo(() => {
       canAddTaskList: isEditor,
       canAddAttachment: isEditor,
       canAddCustomFieldGroup: isEditor,
+      canEditDependencies: isEditor,
     };
   }, shallowEqual);
 
@@ -530,6 +534,12 @@ const ProjectContent = React.memo(() => {
             </div>
           )}
           <CustomFieldGroups />
+          <div className={styles.contentModule}>
+            <div className={styles.moduleWrapper}>
+              <Icon name="linkify" className={styles.moduleIcon} />
+              <Dependencies canEdit={canEditDependencies} />
+            </div>
+          </div>
           <TaskLists />
           {attachmentIds.length > 0 && (
             <div className={styles.contentModule}>

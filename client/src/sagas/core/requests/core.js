@@ -55,6 +55,7 @@ export function* fetchCore() {
   let cards1;
   let cardMemberships;
   let cardLabels;
+  let cardDependencies;
   let taskLists;
   let tasks;
   let attachments;
@@ -70,6 +71,7 @@ export function* fetchCore() {
       lists,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,
@@ -120,6 +122,7 @@ export function* fetchCore() {
     lists,
     cardMemberships,
     cardLabels,
+    cardDependencies,
     taskLists,
     tasks,
     attachments,

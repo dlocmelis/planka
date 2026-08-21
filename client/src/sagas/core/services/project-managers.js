@@ -60,6 +60,7 @@ export function* handleProjectManagerCreate(projectManager, users) {
   let cards;
   let cardMemberships;
   let cardLabels;
+  let cardDependencies;
   let taskLists;
   let tasks;
   let attachments;
@@ -113,6 +114,7 @@ export function* handleProjectManagerCreate(projectManager, users) {
           cards,
           cardMemberships,
           cardLabels,
+          cardDependencies,
           taskLists,
           tasks,
           attachments,
@@ -156,6 +158,7 @@ export function* handleProjectManagerCreate(projectManager, users) {
       cards,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,
