@@ -254,7 +254,19 @@ describe('Card dependencies', function describeCardDependencies() {
       dependencyBroadcastsTo(`board:${sprintBoard.id}`, 'cardDependencyCreate'),
     ).to.have.lengthOf(1);
 
-    await deleteDependency(tokens.editor, requestCard.id, cardB.id);
+    // ...and so does the REMOVAL. Same reason and the same failure without it:
+    // a client watching only the blocker's board would go on drawing a
+    // "Blocking" row for a card that is no longer waiting for anything.
+    broadcasts.length = 0;
+    const removed = await deleteDependency(tokens.editor, requestCard.id, cardB.id);
+    expect(removed.status).to.equal(200);
+    expect(
+      dependencyBroadcastsTo(`board:${requestsBoard.id}`, 'cardDependencyDelete'),
+    ).to.have.lengthOf(1);
+    expect(
+      dependencyBroadcastsTo(`board:${sprintBoard.id}`, 'cardDependencyDelete'),
+    ).to.have.lengthOf(1);
+
     await Card.destroyOne(requestCard.id);
   });
 
