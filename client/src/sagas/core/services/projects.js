@@ -155,6 +155,7 @@ export function* handleProjectUpdate(project) {
   let cards;
   let cardMemberships;
   let cardLabels;
+  let cardDependencies;
   let taskLists;
   let tasks;
   let attachments;
@@ -202,6 +203,7 @@ export function* handleProjectUpdate(project) {
           cards,
           cardMemberships,
           cardLabels,
+          cardDependencies,
           taskLists,
           tasks,
           attachments,
@@ -243,6 +245,7 @@ export function* handleProjectUpdate(project) {
       cards,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,

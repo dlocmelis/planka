@@ -58,6 +58,7 @@
  *                     - cards
  *                     - cardMemberships
  *                     - cardLabels
+ *                     - cardDependencies
  *                     - taskLists
  *                     - tasks
  *                     - attachments
@@ -119,6 +120,18 @@
  *                       description: Related card-label associations
  *                       items:
  *                         $ref: '#/components/schemas/CardLabel'
+ *                     cardDependencies:
+ *                       type: array
+ *                       description: >
+ *                         Related card dependencies, in both directions. A row may name a card on a
+ *                         board the reader cannot open, and it is returned anyway: the id alone is
+ *                         what lets a client draw "waiting for a card you cannot see from here"
+ *                         instead of silently dropping the link. Deliberate, and the same decision
+ *                         GET /cards/{cardId}/card-dependencies documents at length — `included.cards`
+ *                         there carries only the cards the reader may read, and these payloads carry
+ *                         no cards for the far end at all.
+ *                       items:
+ *                         $ref: '#/components/schemas/CardDependency'
  *                     taskLists:
  *                       type: array
  *                       description: Related task lists
@@ -246,6 +259,7 @@ module.exports = {
     const users = await User.qm.getByIds(userIds);
     const cardMemberships = await CardMembership.qm.getByCardIds(cardIds);
     const cardLabels = await CardLabel.qm.getByCardIds(cardIds);
+    const cardDependencies = await CardDependency.qm.getByCardIdsOrDependsOnCardIds(cardIds);
 
     const taskLists = await TaskList.qm.getByCardIds(cardIds);
     const taskListIds = sails.helpers.utils.mapRecords(taskLists);
@@ -306,6 +320,7 @@ module.exports = {
         cards,
         cardMemberships,
         cardLabels,
+        cardDependencies,
         taskLists,
         tasks,
         customFieldGroups,

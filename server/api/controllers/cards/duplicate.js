@@ -65,6 +65,7 @@
  *                   required:
  *                     - cardMemberships
  *                     - cardLabels
+ *                     - cardDependencies
  *                     - taskLists
  *                     - tasks
  *                     - attachments
@@ -82,6 +83,17 @@
  *                       description: Related card-label associations
  *                       items:
  *                         $ref: '#/components/schemas/CardLabel'
+ *                     cardDependencies:
+ *                       type: array
+ *                       description: >
+ *                         The copy's own dependencies. Only the "depends on"
+ *                         direction is carried over from the original: what a
+ *                         card waits for is a fact about that card, while what
+ *                         waits for it is a fact about other cards, and copying
+ *                         that direction would add a blocker to cards nobody
+ *                         touched.
+ *                       items:
+ *                         $ref: '#/components/schemas/CardDependency'
  *                     taskLists:
  *                       type: array
  *                       description: Related task lists
@@ -256,6 +268,7 @@ module.exports = {
       card: nextCard,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,
@@ -291,6 +304,7 @@ module.exports = {
       included: {
         cardMemberships,
         cardLabels,
+        cardDependencies,
         taskLists,
         tasks,
         customFieldGroups,

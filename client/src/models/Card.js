@@ -779,6 +779,14 @@ export default class extends BaseModel {
 
     this.customFieldValues.delete();
     this.comments.delete();
+
+    // Both directions of every dependency this card is part of: the links where
+    // it waits, and the links where something waits for IT. The server drops
+    // both when a card is deleted (helpers/cards/delete-related), so leaving
+    // either here would draw a "Dependent on" row pointing at a card that is
+    // gone from the store.
+    this.dependencies.delete();
+    this.dependents.delete();
   }
 
   deleteWithClearable() {

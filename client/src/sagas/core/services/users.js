@@ -98,6 +98,7 @@ export function* handleUserUpdate(user) {
   let cards;
   let cardMemberships;
   let cardLabels;
+  let cardDependencies;
   let taskLists;
   let tasks;
   let attachments;
@@ -148,6 +149,7 @@ export function* handleUserUpdate(user) {
             cards,
             cardMemberships,
             cardLabels,
+            cardDependencies,
             taskLists,
             tasks,
             attachments,
@@ -193,6 +195,7 @@ export function* handleUserUpdate(user) {
       cards,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,

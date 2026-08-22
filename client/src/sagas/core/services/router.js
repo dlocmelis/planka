@@ -83,7 +83,9 @@ export function* handleLocationChange() {
   let cardMemberships1;
   let cardMemberships2;
   let cardLabels1;
+  let cardDependencies1;
   let cardLabels2;
+  let cardDependencies2;
   let taskLists1;
   let taskLists2;
   let tasks1;
@@ -131,6 +133,7 @@ export function* handleLocationChange() {
                 users: users1,
                 cardMemberships: cardMemberships1,
                 cardLabels: cardLabels1,
+                cardDependencies: cardDependencies1,
                 taskLists: taskLists1,
                 tasks: tasks1,
                 attachments: attachments1,
@@ -159,6 +162,7 @@ export function* handleLocationChange() {
               users: users1,
               cardMemberships: cardMemberships1,
               cardLabels: cardLabels1,
+              cardDependencies: cardDependencies1,
               taskLists: taskLists1,
               tasks: tasks1,
               attachments: attachments1,
@@ -192,6 +196,7 @@ export function* handleLocationChange() {
                     users: users2,
                     cardMemberships: cardMemberships2,
                     cardLabels: cardLabels2,
+                    cardDependencies: cardDependencies2,
                     taskLists: taskLists2,
                     tasks: tasks2,
                     attachments: attachments2,
@@ -244,6 +249,7 @@ export function* handleLocationChange() {
       mergeRecords(card && [card], cards),
       mergeRecords(cardMemberships1, cardMemberships2),
       mergeRecords(cardLabels1, cardLabels2),
+      mergeRecords(cardDependencies1, cardDependencies2),
       mergeRecords(taskLists1, taskLists2),
       mergeRecords(tasks1, tasks2),
       mergeRecords(attachments1, attachments2),

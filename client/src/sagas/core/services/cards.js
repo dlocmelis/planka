@@ -83,6 +83,7 @@ export function* fetchCards(listId) {
         users,
         cardMemberships,
         cardLabels,
+        cardDependencies,
         taskLists,
         tasks,
         attachments,
@@ -100,6 +101,7 @@ export function* fetchCards(listId) {
       users,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,
@@ -190,6 +192,7 @@ export function* handleCardCreate(card) {
   let users;
   let cardMemberships;
   let cardLabels;
+  let cardDependencies;
   let taskLists;
   let tasks;
   let attachments;
@@ -204,6 +207,7 @@ export function* handleCardCreate(card) {
         users,
         cardMemberships,
         cardLabels,
+        cardDependencies,
         taskLists,
         tasks,
         attachments,
@@ -222,6 +226,7 @@ export function* handleCardCreate(card) {
       users,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,
@@ -306,6 +311,7 @@ export function* handleCardUpdate(card) {
   let users;
   let cardMemberships;
   let cardLabels;
+  let cardDependencies;
   let taskLists;
   let tasks;
   let attachments;
@@ -321,6 +327,7 @@ export function* handleCardUpdate(card) {
           users,
           cardMemberships,
           cardLabels,
+          cardDependencies,
           taskLists,
           tasks,
           attachments,
@@ -341,6 +348,7 @@ export function* handleCardUpdate(card) {
       users,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,
@@ -447,6 +455,7 @@ export function* transferCard(id, boardId, listId, index) {
   let users;
   let cardMemberships;
   let cardLabels;
+  let cardDependencies;
   let taskLists;
   let tasks;
   let attachments;
@@ -461,6 +470,7 @@ export function* transferCard(id, boardId, listId, index) {
         users,
         cardMemberships,
         cardLabels,
+        cardDependencies,
         taskLists,
         tasks,
         attachments,
@@ -482,6 +492,7 @@ export function* transferCard(id, boardId, listId, index) {
         users,
         cardMemberships,
         cardLabels,
+        cardDependencies,
         taskLists,
         tasks,
         attachments,
@@ -504,6 +515,7 @@ export function* transferCard(id, boardId, listId, index) {
       users,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,
@@ -565,6 +577,7 @@ export function* duplicateCard(id, data) {
   let card;
   let cardMemberships;
   let cardLabels;
+  let cardDependencies;
   let taskLists;
   let tasks;
   let attachments;
@@ -578,6 +591,7 @@ export function* duplicateCard(id, data) {
       included: {
         cardMemberships,
         cardLabels,
+        cardDependencies,
         taskLists,
         tasks,
         attachments,
@@ -612,6 +626,7 @@ export function* duplicateCard(id, data) {
       card,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,

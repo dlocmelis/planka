@@ -29,6 +29,9 @@ export default [
   'cardUpdate',
   'cardDelete',
 
+  'cardDependencyCreate',
+  'cardDependencyDelete',
+
   'cardLabelCreate',
   'cardLabelDelete',
 

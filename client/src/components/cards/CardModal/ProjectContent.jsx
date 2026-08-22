@@ -20,6 +20,7 @@ import { CardTypeIcons } from '../../../constants/Icons';
 import { ClosableContext } from '../../../contexts';
 import NameField from './NameField';
 import TaskLists from './TaskLists';
+import Dependencies from './Dependencies';
 import CustomFieldGroups from './CustomFieldGroups';
 import Communication from './Communication';
 import CreationDetailsStep from './CreationDetailsStep';
@@ -84,6 +85,7 @@ const ProjectContent = React.memo(() => {
     canAddTaskList,
     canAddAttachment,
     canAddCustomFieldGroup,
+    canEditDependencies,
   } = useSelector((state) => {
     const boardMembership = selectors.selectCurrentUserMembershipForCurrentBoard(state);
 
@@ -115,6 +117,7 @@ const ProjectContent = React.memo(() => {
         canAddTaskList: false,
         canAddAttachment: false,
         canAddCustomFieldGroup: false,
+        canEditDependencies: false,
       };
     }
 
@@ -137,8 +140,19 @@ const ProjectContent = React.memo(() => {
       canAddTaskList: isEditor,
       canAddAttachment: isEditor,
       canAddCustomFieldGroup: isEditor,
+      canEditDependencies: isEditor,
     };
   }, shallowEqual);
+
+  // Whether the "Dependent on" module has anything at all to draw: a link in
+  // either direction, or the right to add one. Asked HERE because the module's
+  // icon and wrapper live here, and Dependencies itself answers null.
+  const hasDependencies = useSelector(
+    (state) =>
+      canEditDependencies ||
+      selectors.selectDependenciesForCurrentCard(state).length > 0 ||
+      selectors.selectDependentsForCurrentCard(state).length > 0,
+  );
 
   const dispatch = useDispatch();
   const [t] = useTranslation();
@@ -530,6 +544,18 @@ const ProjectContent = React.memo(() => {
             </div>
           )}
           <CustomFieldGroups />
+          {/* Conditional like every other module here, and for the reason they
+              are: Dependencies renders NOTHING for a viewer with no links to
+              show, so an unconditional wrapper drew a lone linkify icon with
+              empty space beside it on every ordinary card. */}
+          {hasDependencies && (
+            <div className={styles.contentModule}>
+              <div className={styles.moduleWrapper}>
+                <Icon name="linkify" className={styles.moduleIcon} />
+                <Dependencies canEdit={canEditDependencies} />
+              </div>
+            </div>
+          )}
           <TaskLists />
           {attachmentIds.length > 0 && (
             <div className={styles.contentModule}>

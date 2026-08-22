@@ -66,6 +66,7 @@ export function* handleBoardMembershipCreate(boardMembership, users) {
   let cards;
   let cardMemberships;
   let cardLabels;
+  let cardDependencies;
   let taskLists;
   let tasks;
   let attachments;
@@ -114,6 +115,7 @@ export function* handleBoardMembershipCreate(boardMembership, users) {
           cards,
           cardMemberships,
           cardLabels,
+          cardDependencies,
           taskLists,
           tasks,
           attachments,
@@ -153,6 +155,7 @@ export function* handleBoardMembershipCreate(boardMembership, users) {
       cards,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,

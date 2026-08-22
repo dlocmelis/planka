@@ -38,6 +38,7 @@ export function* handleSocketReconnect() {
   let cards;
   let cardMemberships;
   let cardLabels;
+  let cardDependencies;
   let taskLists;
   let tasks;
   let attachments;
@@ -66,6 +67,7 @@ export function* handleSocketReconnect() {
       cards,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,
@@ -98,6 +100,7 @@ export function* handleSocketReconnect() {
       cards,
       cardMemberships,
       cardLabels,
+      cardDependencies,
       taskLists,
       tasks,
       attachments,

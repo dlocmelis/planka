@@ -214,6 +214,33 @@ module.exports = {
 
     const nextCardLabels = await CardLabel.qm.create(cardLabelsValues);
 
+    // ONE of the two directions is copied, and which one is the whole decision.
+    //
+    // "What this card waits for" is a fact about this card, exactly like its
+    // labels and its checklists: the copy is the same piece of work, so it
+    // waits for the same things, and a duplicate that arrived ready to start
+    // while its original was still blocked would be a way to walk around the
+    // dependency.
+    //
+    // "What waits for this card" is a fact about OTHER people's cards. Copying
+    // it would silently add a blocker to cards nobody touched — the original's
+    // dependents would then be waiting for a duplicate that exists because
+    // somebody wanted a second copy, and the automation would hold them until
+    // it was finished. So that direction is deliberately dropped.
+    //
+    // It cannot close a cycle: the copy is a brand-new card that nothing waits
+    // for yet, so every edge added here points away from it.
+    const cardDependencies = await CardDependency.qm.getByCardId(inputs.record.id);
+
+    const nextCardDependencies = await Promise.all(
+      cardDependencies.map((cardDependency) =>
+        CardDependency.qm.createOne({
+          cardId: card.id,
+          dependsOnCardId: cardDependency.dependsOnCardId,
+        }),
+      ),
+    );
+
     const taskLists = await TaskList.qm.getByCardId(inputs.record.id);
     const taskListIds = sails.helpers.utils.mapRecords(taskLists);
 
@@ -305,6 +332,39 @@ module.exports = {
       inputs.request,
     );
 
+    // AFTER the cardCreate above, deliberately: a dependency row naming a card
+    // the receiving client has never heard of is an orphan in its store.
+    //
+    // Told to the blocker's board as well as to the copy's, for the reason
+    // create-one gives at length — the blocker has just become something one
+    // more card is waiting for, and its board is a different socket room.
+    if (nextCardDependencies.length > 0) {
+      const dependsOnCards = await Card.qm.getByIds(
+        _.uniq(_.map(nextCardDependencies, 'dependsOnCardId')),
+      );
+
+      const boardIdByCardId = _.fromPairs(
+        dependsOnCards.map((dependsOnCard) => [dependsOnCard.id, dependsOnCard.boardId]),
+      );
+
+      nextCardDependencies.forEach((cardDependency) => {
+        const boardIds = _.uniq(
+          _.compact([card.boardId, boardIdByCardId[cardDependency.dependsOnCardId]]),
+        );
+
+        boardIds.forEach((boardId) => {
+          sails.sockets.broadcast(
+            `board:${boardId}`,
+            'cardDependencyCreate',
+            {
+              item: cardDependency,
+            },
+            inputs.request,
+          );
+        });
+      });
+    }
+
     const webhooks = await Webhook.qm.getAll();
 
     sails.helpers.utils.sendWebhooks.with({
@@ -318,6 +378,7 @@ module.exports = {
           lists: [list],
           cardMemberships: nextCardMemberships,
           cardLabels: nextCardLabels,
+          cardDependencies: nextCardDependencies,
           taskLists: nextTaskLists,
           tasks: nextTasks,
           attachments: sails.helpers.attachments.presentMany(nextAttachments),
@@ -371,6 +432,7 @@ module.exports = {
       card,
       cardMemberships: nextCardMemberships,
       cardLabels: nextCardLabels,
+      cardDependencies: nextCardDependencies,
       taskLists: nextTaskLists,
       tasks: nextTasks,
       attachments: nextAttachments,
