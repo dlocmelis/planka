@@ -23,8 +23,12 @@
  * protection by refusing to copy a `__proto__` key across (assigning one onto an ordinary
  * object is exactly the prototype write the CVE fix exists to prevent).
  *
- * Values are returned by identity when nothing needed rebuilding, so a request with no
- * bracketed query parameter -- which is almost all of them -- is untouched.
+ * Cost, so that nobody has to measure it at 2am: the `plainObjects: true` parser returns a
+ * null-prototype object for the query as a WHOLE, not only for bracketed parameters, so this
+ * does rebuild `req.query` on every single request -- one shallow copy of a handful of strings.
+ * Nested values are returned by identity when nothing beneath them needed rebuilding, so the
+ * copy stays shallow for the requests that carry no bracketed parameter, which is almost all of
+ * them.
  */
 
 // qs stops nesting at depth 5; this is only a backstop against a pathological input.

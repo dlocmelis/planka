@@ -184,6 +184,29 @@ describe('normalize-query', () => {
 
       expect(query).to.be.eql({ search: 'text', userIds: '1,2' });
     });
+
+    it('should still rebuild the query object itself, because express makes that null-prototype too', async () => {
+      // `plainObjects: true` applies to the query as a whole, not only to bracketed parameters,
+      // so this middleware copies `req.query` on EVERY request. Pinned because the cost of the
+      // middleware is exactly this copy, and a future reader should not have to measure it.
+      const raw = await parseQueryThroughExpress('search=text');
+      const normalized = await parseQueryThroughExpress('search=text', [normalizeQuery]);
+
+      expect(Object.getPrototypeOf(raw)).to.be.equal(null);
+      expect(Object.getPrototypeOf(normalized)).to.be.equal(Object.prototype);
+    });
+
+    it('should keep nested values by identity, so the copy stays shallow', () => {
+      const source = Object.create(null);
+      source.userIds = ['1', '2'];
+      source.nested = { deep: 'value' };
+
+      const result = withObjectPrototypes(source);
+
+      expect(result).to.not.be.equal(source);
+      expect(result.userIds).to.be.equal(source.userIds);
+      expect(result.nested).to.be.equal(source.nested);
+    });
   });
 
   describe('wiring in sails.config.http', () => {
