@@ -54,6 +54,12 @@ const parseQueryThroughExpress = (queryString, middlewares = []) =>
 const CURSOR_QUERY_STRING =
   'before[listChangedAt]=2024-01-01T00%3A00%3A00.000Z&before[id]=1357158568008091264';
 
+// What the only over-HTTP caller of this endpoint actually puts on the wire: Go's
+// `url.Values.Encode()` percent-encodes the brackets too
+// (setl/data/core/support/planka.go, `(*PlankaClient).ArchivedCards`).
+const PERCENT_ENCODED_CURSOR_QUERY_STRING =
+  'before%5BlistChangedAt%5D=2024-01-01T00%3A00%3A00.000Z&before%5Bid%5D=1357158568008091264';
+
 describe('normalize-query', () => {
   describe('the express 4.22.0 behaviour this exists for', () => {
     it('should hand bracketed query parameters over as null-prototype objects', async () => {
@@ -244,6 +250,18 @@ describe('normalize-query', () => {
       const validated = rttc.validate(before.type, query.before);
 
       expect(before.custom(validated)).to.be.equal(false);
+    });
+
+    it('should accept the percent-encoded brackets the Go reconciler sends', async () => {
+      const query = await parseQueryThroughExpress(PERCENT_ENCODED_CURSOR_QUERY_STRING, [
+        normalizeQuery,
+      ]);
+
+      expect(query.before).to.be.eql({
+        listChangedAt: '2024-01-01T00:00:00.000Z',
+        id: '1357158568008091264',
+      });
+      expect(before.custom(rttc.validate(before.type, query.before))).to.be.equal(true);
     });
 
     it('should reject a cursor that is missing a half', async () => {
