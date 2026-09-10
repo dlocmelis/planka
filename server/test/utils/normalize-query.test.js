@@ -7,12 +7,17 @@ const rttc = require('rttc');
 /* eslint-enable import/no-extraneous-dependencies */
 
 const { expect } = require('chai');
-const lodash = require('lodash');
+
+const { globals } = require('../../config/globals');
 
 // `api/controllers/cards/index.js` calls lodash through the `_` global that Sails installs at
-// lift. These tests do not lift, so provide it before requiring the action.
+// lift. These tests do not lift, so provide it before requiring the action -- and take it from
+// `config/globals.js`, because WHICH lodash it is decides the answer here: `isBefore()` gates
+// the cursor on `_.isPlainObject()`, and that has to be true for the null-prototype objects
+// express 4.22.0 hands over. (It is for both lodash 4 and the `@sailshq/lodash` 3.10 fork sails
+// falls back to, but pinning to the same module production uses keeps it that way.)
 if (typeof global._ === 'undefined') {
-  global._ = lodash;
+  global._ = globals._;
 }
 
 const { withObjectPrototypes, normalizeQuery } = require('../../utils/normalize-query');
@@ -219,6 +224,55 @@ describe('normalize-query', () => {
       );
 
       customNames.forEach((name) => expect(http.middleware.order).to.include(name));
+    });
+
+    /**
+     * Run sails' own http hook `configure()` against a config, with a stub sails object. That
+     * function is the real gate this config has to clear at lift: it throws
+     * E_INVALID_HTTP_CONFIG when a custom middleware is missing from `middleware.order`, or
+     * when the order names something that is not a function (sails 1.5.17,
+     * lib/hooks/http/index.js). Asserting against it rather than against a hand-copied list
+     * matters because a wrong order here is not a 500 on one route -- it is planka not
+     * starting at all, which takes the whole board down.
+     * @param {object} httpConfig A value for `sails.config.http`.
+     * @returns {string[]} The middleware order sails settled on.
+     */
+    const runSailsHttpConfigure = (httpConfig) => {
+      // eslint-disable-next-line global-require
+      const defineHttpHook = require('sails/lib/hooks/http');
+
+      const stubSails = {
+        config: {
+          appPath: __dirname,
+          ssl: {},
+          paths: { public: '.tmp/public' },
+          http: httpConfig,
+        },
+        log: { debug: () => {} },
+      };
+
+      const hook = defineHttpHook(stubSails);
+      stubSails.hooks = { http: { defaults: hook.defaults } };
+
+      hook.configure();
+
+      return stubSails.config.http.middleware.order;
+    };
+
+    it("should pass sails' own lift-time http config validation", () => {
+      expect(runSailsHttpConfigure(http)).to.include('normalizeQuery');
+    });
+
+    it('should fail that same validation if `normalizeQuery` is dropped from the order', () => {
+      const withoutTheEntry = {
+        ...http,
+        middleware: {
+          ...http.middleware,
+          order: http.middleware.order.filter((name) => name !== 'normalizeQuery'),
+        },
+      };
+
+      expect(() => runSailsHttpConfigure(withoutTheEntry)).to.throw(/normalizeQuery/);
     });
   });
 
