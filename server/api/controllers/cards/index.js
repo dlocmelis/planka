@@ -200,7 +200,17 @@ module.exports = {
       required: true,
     },
     before: {
-      type: 'json',
+      // 'ref', NOT 'json'. Express 4.22.0's prototype-pollution hardening makes
+      // the "extended" query parser emit NULL-PROTOTYPE objects for bracketed
+      // query parameters, and rttc.validate('json', <null-proto>) throws
+      // "Cannot read properties of undefined (reading 'name')" before `custom`
+      // ever runs -- so every cursor page of GET /lists/:id/cards answered 500
+      // and no client could read past the first 50 cards of an endless list.
+      // 'ref' hands the value through untouched; isBefore below still rejects
+      // anything that is not exactly {listChangedAt, id} with a 400, and lodash
+      // isPlainObject() is true for a null-prototype object, so the validation
+      // this route documents is unchanged.
+      type: 'ref',
       custom: isBefore,
     },
     search: {
