@@ -167,6 +167,13 @@ const CardActionsStep = React.memo(({ cardId, defaultStep, onNameEdit, onClose }
     canUseLabels,
   ]);
 
+  // Only a backlog ticket may be handed to a build session; see
+  // handleBuildWithSessionClick.
+  const isBacklogCard = useMemo(
+    () => !!list && (list.name || '').trim().toLowerCase() === 'backlog',
+    [list],
+  );
+
   const hasTopSection = useMemo(() => {
     return (
       (card.type === CardTypes.PROJECT && canUseMembers) ||
@@ -295,6 +302,42 @@ const CardActionsStep = React.memo(({ cardId, defaultStep, onNameEdit, onClose }
   const handleLabelsClick = useCallback(() => {
     openStep(StepTypes.LABELS);
   }, [openStep]);
+
+  /*
+   * "Build this with a session" — hands an existing backlog ticket to the
+   * orchestrator's end-to-end build mode, which carries it from design to
+   * deployed in one session while the person watches and steers.
+   *
+   * Shown only on a card still in Backlog, because that is the only place the
+   * orchestrator accepts (a card further along has a plan or a branch behind
+   * it that a session would fork). The server enforces the same rule; this
+   * only avoids offering an action that would be refused.
+   *
+   * Same three constraints as the toolbar button — see StartBuildButton.jsx:
+   * same-origin POST, and a real navigation rather than a link the SPA router
+   * would swallow.
+   */
+  const handleBuildWithSessionClick = useCallback(async () => {
+    onClose();
+    try {
+      const response = await fetch('/_term/e2e/adopt', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardId }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.id) {
+        // The orchestrator's refusals name the column and the rule, so they
+        // are worth showing verbatim.
+        throw new Error(body.error || `HTTP ${response.status}`);
+      }
+      window.location.assign(`/_term/e2e/${body.id}`);
+    } catch (e) {
+      // eslint-disable-next-line no-alert
+      window.alert(e.message);
+    }
+  }, [cardId, onClose]);
 
   const handleEditTypeClick = useCallback(() => {
     openStep(StepTypes.EDIT_TYPE);
@@ -450,6 +493,12 @@ const CardActionsStep = React.memo(({ cardId, defaultStep, onNameEdit, onClose }
               {t('action.editType', {
                 context: 'title',
               })}
+            </Menu.Item>
+          )}
+          {isBacklogCard && (
+            <Menu.Item className={styles.menuItem} onClick={handleBuildWithSessionClick}>
+              <Icon name="magic" className={styles.menuItemIcon} />
+              {t('action.buildWithSession')}
             </Menu.Item>
           )}
           {hasTopSection && hasBottomSection && <hr className={styles.divider} />}

@@ -13,6 +13,7 @@ import entryActions from '../../../../entry-actions';
 import { BoardContexts, BoardViews } from '../../../../constants/Enums';
 import { BoardViewIcons } from '../../../../constants/Icons';
 import ActionsStep from './ActionsStep';
+import StartBuildButton from './StartBuildButton';
 
 import styles from './RightSide.module.scss';
 
@@ -37,6 +38,11 @@ const RightSide = React.memo(() => {
 
   return (
     <>
+      {board.context === BoardContexts.BOARD && (
+        <div className={styles.action}>
+          <StartBuildButton />
+        </div>
+      )}
       <div className={styles.action}>
         <div className={styles.buttonGroup}>
           {views.map((view) => (
