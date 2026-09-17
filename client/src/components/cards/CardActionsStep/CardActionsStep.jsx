@@ -317,6 +317,23 @@ const CardActionsStep = React.memo(({ cardId, defaultStep, onNameEdit, onClose }
    * same-origin POST, and a real navigation rather than a link the SPA router
    * would swallow.
    */
+  /*
+   * "Open in terminal" — the live transcript for this card, at any stage.
+   *
+   * Unconditional, unlike the build action above: a card has a terminal page
+   * whether or not anything is running on it, and whether or not a session
+   * ever owned it. With nothing live it shows what the last job did, which
+   * is exactly what somebody looking at a finished or stuck ticket wants.
+   *
+   * A real navigation rather than a link: PLANKA marks same-site links
+   * "same-site" and pushes them into its own router, which has no route for
+   * /_term/* and answers with its own 404.
+   */
+  const handleOpenTerminalClick = useCallback(() => {
+    onClose();
+    window.location.assign(`/_term/card/${cardId}`);
+  }, [cardId, onClose]);
+
   const handleBuildWithSessionClick = useCallback(async () => {
     onClose();
     try {
@@ -495,6 +512,10 @@ const CardActionsStep = React.memo(({ cardId, defaultStep, onNameEdit, onClose }
               })}
             </Menu.Item>
           )}
+          <Menu.Item className={styles.menuItem} onClick={handleOpenTerminalClick}>
+            <Icon name="terminal" className={styles.menuItemIcon} />
+            {t('action.openInTerminal')}
+          </Menu.Item>
           {isBacklogCard && (
             <Menu.Item className={styles.menuItem} onClick={handleBuildWithSessionClick}>
               <Icon name="magic" className={styles.menuItemIcon} />

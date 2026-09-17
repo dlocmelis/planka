@@ -487,6 +487,7 @@ export default {
       move: 'Move',
       moveCard_title: 'Move Card',
       moveList_title: 'Move List',
+      openInTerminal: 'Open in terminal',
       regenerateApiKey: 'Regenerate API key',
       remove: 'Remove',
       removeAssignee: 'Remove assignee',
