@@ -64,19 +64,23 @@ const isDocumentHidden = () => typeof document !== 'undefined' && document.hidde
 //
 // `act` runs an action optimistically: the view is changed at once, the
 // request is made, and a failure puts the view back. Any poll that was already
-// in flight when the action began is discarded, so it cannot paint the
-// pre-action state over the optimistic one.
+// in flight when the action began is discarded, and no poll is made while one
+// is pending, so neither can paint the pre-action state over the optimistic
+// one; the reload once the last pending action settles is what replaces it.
 export default (boardId, expanded) => {
   const [state, setState] = useState(() => initialState(boardId));
   const [hidden, setHidden] = useState(isDocumentHidden);
 
   const generationRef = useRef(0);
+  // The actions whose requests are pending on this board.
+  const pendingRef = useRef(new Set());
   const offsetRef = useRef(0);
   const viewRef = useRef(state.view);
   viewRef.current = state.view;
 
   useEffect(() => {
     generationRef.current += 1;
+    pendingRef.current = new Set();
     setState(initialState(boardId));
   }, [boardId]);
 
@@ -90,6 +94,12 @@ export default (boardId, expanded) => {
 
   // Answers whether polling should go on.
   const load = useCallback(async () => {
+    // A poll made while an action's request is pending may be answered from
+    // before the action, so it is not made at all; polling goes on.
+    if (pendingRef.current.size > 0) {
+      return true;
+    }
+
     const generation = generationRef.current;
 
     let view;
@@ -156,6 +166,10 @@ export default (boardId, expanded) => {
     async (optimistic, request) => {
       generationRef.current += 1;
 
+      const pending = pendingRef.current;
+      const token = {};
+      pending.add(token);
+
       const previous = viewRef.current;
 
       if (optimistic && previous) {
@@ -169,6 +183,7 @@ export default (boardId, expanded) => {
 
         throw error;
       } finally {
+        pending.delete(token);
         load();
       }
     },

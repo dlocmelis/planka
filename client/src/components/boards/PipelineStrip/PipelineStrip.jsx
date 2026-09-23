@@ -7,13 +7,14 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types';
 import upperFirst from 'lodash/upperFirst';
 import classNames from 'classnames';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
 import { Button, Icon, Label, Placeholder } from 'semantic-ui-react';
 import toast from 'react-hot-toast';
 import { push } from '../../../lib/redux-router';
 import { usePopup } from '../../../lib/popup';
 
+import selectors from '../../../selectors';
 import Paths from '../../../constants/Paths';
 import ToastTypes from '../../../constants/ToastTypes';
 import {
@@ -75,6 +76,7 @@ const showToast = (params) => {
 const PipelineStrip = React.memo(({ boardId }) => {
   const [t] = useTranslation();
   const dispatch = useDispatch();
+  const currentUser = useSelector(selectors.selectCurrentUser);
 
   const [expanded, setExpanded] = useState(() => readFlag(EXPANDED_KEY) === true);
   // null: follow the rule (open when every thread is busy); true/false: the
@@ -284,6 +286,10 @@ const PipelineStrip = React.memo(({ boardId }) => {
 
   const handleDrain = useCallback(
     (on) => {
+      // The orchestrator credits a drain to the Planka username, so that is
+      // what is shown until it answers.
+      const actor = currentUser && (currentUser.username || currentUser.name);
+
       act(
         (prev) => ({
           ...prev,
@@ -291,6 +297,7 @@ const PipelineStrip = React.memo(({ boardId }) => {
           drain: {
             ...prev.drain,
             active: on,
+            actor: actor || (prev.drain && prev.drain.actor),
             since: new Date(serverNow()).toISOString(),
           },
         }),
@@ -308,7 +315,7 @@ const PipelineStrip = React.memo(({ boardId }) => {
         },
       );
     },
-    [act, serverNow],
+    [act, serverNow, currentUser],
   );
 
   const handleDrainOn = useCallback(() => handleDrain(true), [handleDrain]);
