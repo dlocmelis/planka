@@ -306,7 +306,7 @@
     align-items: center;
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 198px);
+    height: calc(100vh - 198px - var(--pipeline-strip-height, 0px));
     outline: none;
     overflow: hidden;
     padding: 40px 2px 8px;
@@ -400,7 +400,7 @@
     border-radius: 3px;
     display: flex;
     flex-direction: column;
-    max-height: calc(100vh - 198px);
+    max-height: calc(100vh - 198px - var(--pipeline-strip-height, 0px));
     overflow: hidden;
   }
 
@@ -409,10 +409,10 @@
   }
 
   .outerWrapperWithFavorites {
-    max-height: calc(100vh - 288px);
+    max-height: calc(100vh - 288px - var(--pipeline-strip-height, 0px));
 
     .headerCollapsed {
-      height: calc(100vh - 288px);
+      height: calc(100vh - 288px - var(--pipeline-strip-height, 0px));
     }
   }
 }

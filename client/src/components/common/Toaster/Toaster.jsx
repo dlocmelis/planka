@@ -13,6 +13,7 @@ import EmptyTrashToast from './EmptyTrashToast';
 import SourceCardNotCopyableToast from './SourceCardNotCopyableToast';
 import SourceCardNotMovableToast from './SourceCardNotMovableToast';
 import CardDependencyRefusedToast from './CardDependencyRefusedToast';
+import PipelineStripToast from './PipelineStripToast';
 
 const TOAST_BY_TYPE = {
   [ToastTypes.FILE_IS_TOO_BIG]: FileIsTooBigToast,
@@ -21,6 +22,7 @@ const TOAST_BY_TYPE = {
   [ToastTypes.SOURCE_CARD_NOT_COPYABLE]: SourceCardNotCopyableToast,
   [ToastTypes.SOURCE_CARD_NOT_MOVABLE]: SourceCardNotMovableToast,
   [ToastTypes.CARD_DEPENDENCY_REFUSED]: CardDependencyRefusedToast,
+  [ToastTypes.PIPELINE_STRIP]: PipelineStripToast,
 };
 
 const Toaster = React.memo(() => (
