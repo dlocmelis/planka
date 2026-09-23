@@ -23,6 +23,7 @@ const mockDragDropContextProps = [];
 const mockDraggableProps = [];
 const mockPopupProps = [];
 const mockToasts = [];
+let mockCurrentUser;
 
 // Keys come back with their values, so a test can read what a chip counted.
 jest.mock('react-i18next', () => {
@@ -62,6 +63,13 @@ jest.mock('../../../lib/popup', () => ({
 jest.mock('react-hot-toast', () => ({
   __esModule: true,
   default: (message) => mockToasts.push(message),
+}));
+
+jest.mock('../../../selectors', () => ({
+  __esModule: true,
+  default: {
+    selectCurrentUser: () => mockCurrentUser,
+  },
 }));
 
 jest.mock('../../../lib/redux-router', () => ({
@@ -210,6 +218,7 @@ beforeEach(() => {
   mockDraggableProps.length = 0;
   mockPopupProps.length = 0;
   mockToasts.length = 0;
+  mockCurrentUser = { id: 'user-1', name: 'Deniss K', username: 'deniss.k' };
 
   fetchCalls = [];
   getAnswer = () => jsonResponse(200, view());
@@ -432,6 +441,43 @@ describe('expanded, with the queue open', () => {
     expect(JSON.parse(posts()[0][1].body)).toEqual({ on: true });
   });
 
+  // The orchestrator credits the drain to the username; the strip says so
+  // before it answers, rather than "by —".
+  test('pausing the pipeline credits the editor at once', async () => {
+    postAnswer = () => new Promise(() => {});
+
+    await renderStrip();
+
+    const confirmation = mockPopupProps.find(
+      ({ title }) => title === 'pipeline.pausePipelineConfirm',
+    );
+
+    await act(async () => {
+      confirmation.onConfirm();
+    });
+    await flush();
+
+    expect(container.querySelector('[data-drain-status]').textContent).toContain(
+      '"actor":"deniss.k"',
+    );
+  });
+
+  test('pausing the pipeline falls back to the name when there is no username', async () => {
+    mockCurrentUser = { id: 'user-1', name: 'Deniss K', username: null };
+    postAnswer = () => new Promise(() => {});
+
+    await renderStrip();
+
+    await act(async () => {
+      mockPopupProps.find(({ title }) => title === 'pipeline.pausePipelineConfirm').onConfirm();
+    });
+    await flush();
+
+    expect(container.querySelector('[data-drain-status]').textContent).toContain(
+      '"actor":"Deniss K"',
+    );
+  });
+
   test('raise and drain controls are hidden from a viewer who cannot edit', async () => {
     getAnswer = () => jsonResponse(200, view({ canEdit: false }));
 
@@ -515,7 +561,7 @@ test('the queue stays shut while a thread is free', async () => {
 });
 
 test('every pipeline string the strip uses is in en-US and ru-RU', () => {
-  const sources = ['PipelineStrip.jsx', 'ThreadBar.jsx', 'QueuePanel.jsx']
+  const sources = ['PipelineStrip.jsx', 'ThreadBar.jsx', 'QueuePanel.jsx', 'MoveStep.jsx']
     .map((file) => fs.readFileSync(path.join(__dirname, file), 'utf8'))
     .join('\n');
   const helpers = fs.readFileSync(path.join(__dirname, '../../../utils/pipeline-strip.js'), 'utf8');
@@ -624,6 +670,47 @@ describe('polling', () => {
     });
     await settle();
     expect(gets()).toHaveLength(1);
+  });
+
+  // A poll whose timer fires while an action's request is pending could be
+  // answered from before the action and paint over the optimistic view.
+  test('no poll is made while an action is pending, and one follows it', async () => {
+    localStorage.setItem('planka_pipelineStrip_expanded', 'true');
+
+    let answerPost;
+    postAnswer = () =>
+      new Promise((resolve) => {
+        answerPost = () => resolve(jsonResponse(200, { drain: { active: true } }));
+      });
+
+    await renderWithFakeTimers();
+    expect(gets()).toHaveLength(1);
+
+    await act(async () => {
+      mockPopupProps.find(({ title }) => title === 'pipeline.pausePipelineConfirm').onConfirm();
+    });
+    await settle();
+    expect(container.querySelector('[data-drain-status]')).not.toBeNull();
+
+    // Two poll intervals pass with the request still pending: the server
+    // would still say the pipeline is not draining.
+    await advance(10000);
+    expect(gets()).toHaveLength(1);
+    expect(container.querySelector('[data-drain-status]')).not.toBeNull();
+
+    getAnswer = () => jsonResponse(200, view({ drain: { active: true, actor: 'deniss.k' } }));
+
+    await act(async () => {
+      answerPost();
+    });
+    await settle();
+
+    expect(gets()).toHaveLength(2);
+    expect(container.querySelector('[data-drain-status]')).not.toBeNull();
+
+    // And polling goes on as before.
+    await advance(5000);
+    expect(gets()).toHaveLength(3);
   });
 
   test('stops asking on a board the pipeline does not drive', async () => {
