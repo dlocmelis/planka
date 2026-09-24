@@ -39,9 +39,10 @@ const AUTH_KEYS = {
   endpoint: 'pipeline.authEndpoint',
 };
 
-// "resets 16:40, in 2h 14m" — or the time alone once it has passed.
-const resetText = (t, iso, nowMs, durationUnits) => {
-  const when = formatWhen(iso, nowMs);
+// "resets 16:40, in 2h 14m" — or the time alone once it has passed. The time
+// and date are written in the viewer's Planka language, not the browser's.
+const resetText = (t, iso, nowMs, durationUnits, locale) => {
+  const when = formatWhen(iso, nowMs, locale);
   const until = secondsUntil(iso, nowMs);
 
   if (until === null) {
@@ -55,7 +56,8 @@ const resetText = (t, iso, nowMs, durationUnits) => {
 // endpoint's own verdict, whether it is benched at a limit, and how old the
 // reading is — from the same tracker the Threads cards render.
 const AccountsTab = React.memo(({ accounts, nowMs, durationUnits }) => {
-  const [t] = useTranslation();
+  const [t, i18n] = useTranslation();
+  const locale = i18n && i18n.language;
 
   return (
     <div className={styles.tab} data-tab-panel="accounts">
@@ -100,7 +102,7 @@ const AccountsTab = React.memo(({ accounts, nowMs, durationUnits }) => {
                   ⛔{' '}
                   {account.limitedUntil
                     ? t('pipeline.limitedUntil', {
-                        when: formatWhen(account.limitedUntil, nowMs),
+                        when: formatWhen(account.limitedUntil, nowMs, locale),
                         duration: formatDuration(limitUntil || 0, durationUnits),
                       })
                     : t('pipeline.limitedUnknown')}
@@ -113,7 +115,7 @@ const AccountsTab = React.memo(({ accounts, nowMs, durationUnits }) => {
             {account.auth === 'subscription' && account.stale && (
               <div className={styles.empty} data-stale>
                 {t('pipeline.readingStale', {
-                  when: formatWhen(account.fetchedAt, nowMs),
+                  when: formatWhen(account.fetchedAt, nowMs, locale),
                   duration: formatDuration(age || 0, durationUnits),
                 })}
               </div>
@@ -143,7 +145,7 @@ const AccountsTab = React.memo(({ accounts, nowMs, durationUnits }) => {
                   <span className={styles.rowDetails}>
                     {window.resetsAt && (
                       <span className={styles.detail}>
-                        {resetText(t, window.resetsAt, nowMs, durationUnits)}
+                        {resetText(t, window.resetsAt, nowMs, durationUnits, locale)}
                       </span>
                     )}
                   </span>
