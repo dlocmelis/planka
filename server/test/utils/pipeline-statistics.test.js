@@ -4,6 +4,7 @@ const {
   FilterError,
   classify,
   compute,
+  createReporterCache,
   creatorOf,
   creatorOptions,
   hasCardFilter,
@@ -14,6 +15,7 @@ const {
   parseReporter,
   reachOf,
   secondsToDoneByCardId,
+  versionOf,
 } = require('../../utils/pipeline-statistics');
 
 const NOW = new Date('2026-09-24T12:00:00.000Z');
@@ -187,6 +189,28 @@ describe('pipeline statistics (board flow)', () => {
     expect(result.since).to.equal(null);
   });
 
+  // The limit the file header documents: Planka writes no action for a move
+  // between boards, and the card's createCard stays on the board it came
+  // from, so the moves on this board are all there is of it here.
+  it('never counts a card moved in from another board as entered, nor times it', () => {
+    const actions = [
+      moved('T', ago(10 * HOUR), 'In Development', 'Ready for Testing'),
+      moved('T', ago(2 * HOUR), 'Ready for Testing', 'Done'),
+    ];
+    const result = compute({ actions, now: NOW });
+
+    expect(period(result, '24h').current).to.include({
+      entered: 0,
+      completed: 1,
+      testingSent: 1,
+      testingAccepted: 1,
+      medianSecondsToDone: null,
+      timedToDone: 0,
+    });
+    expect(missingCreations(actions)).to.deep.equal(['T']);
+    expect(secondsToDoneByCardId(actions).has('T')).to.equal(false);
+  });
+
   it('names the completed cards whose creation lies before the read', () => {
     expect(
       missingCreations([
@@ -278,6 +302,119 @@ describe('pipeline statistics filters', () => {
         { key: 'hq@setlfi.com', name: 'Jon Snow', cards: 1 },
         { key: 'user:8', name: 'Orchestrator Bot', cards: 1 },
       ]);
+    });
+  });
+
+  describe('remembering the Reporter headers', () => {
+    const DEN = { name: 'Deniss Locmelis', email: 'den@setlfi.com' };
+    const JON = { name: 'Jon Snow', email: '' };
+
+    // The board's cards as the light read answers them — no description —
+    // and a readDescriptions that answers from `descriptions` and records
+    // which ids it was asked for.
+    const board = () => {
+      const descriptions = {
+        1: header('Reporter: Deniss Locmelis den@setlfi.com'),
+        2: 'Hand-written card',
+        3: header('Reporter: Jon Snow'),
+      };
+      const updatedAt = { 1: null, 2: null, 3: '2026-09-24T10:00:00.000Z' };
+      const asked = [];
+
+      return {
+        descriptions,
+        updatedAt,
+        asked,
+        cards: () =>
+          Object.keys(descriptions).map((id) => ({
+            id,
+            createdAt: '2026-09-01T00:00:00.000Z',
+            updatedAt: updatedAt[id],
+          })),
+        read: async (ids) => {
+          asked.push(ids.map(String));
+
+          return ids.map((id) => ({
+            id,
+            description: descriptions[id],
+            createdAt: '2026-09-01T00:00:00.000Z',
+            updatedAt: updatedAt[id],
+          }));
+        },
+      };
+    };
+
+    it('reads each description once, and again only for a card written since', async () => {
+      const { reportersOf } = createReporterCache({ maxBoards: 10 });
+      const b = board();
+
+      const first = await reportersOf('board', b.cards(), b.read);
+
+      expect([...first.entries()]).to.deep.equal([
+        ['1', DEN],
+        ['2', null],
+        ['3', JON],
+      ]);
+      expect(b.asked).to.deep.equal([['1', '2', '3']]);
+
+      // The next minute's ask, nothing written: no description is read.
+      await reportersOf('board', b.cards(), b.read);
+      expect(b.asked).to.have.length(1);
+
+      // Card 2 is given a header; its updatedAt moves, and it alone is read.
+      b.descriptions[2] = header('Reporter: Jon Snow');
+      b.updatedAt[2] = '2026-09-24T11:00:00.000Z';
+
+      const third = await reportersOf('board', b.cards(), b.read);
+
+      expect(b.asked[1]).to.deep.equal(['2']);
+      expect(third.get('2')).to.deep.equal(JON);
+    });
+
+    it('parses a card that carries its description, and forgets a deleted one', async () => {
+      const { reportersOf } = createReporterCache({ maxBoards: 10 });
+      const b = board();
+
+      // The keyword filter reads the whole cards: nothing more is asked.
+      const whole = b.cards().map((card) => ({ ...card, description: b.descriptions[card.id] }));
+      const reporters = await reportersOf('board', whole, b.read);
+
+      expect(b.asked).to.deep.equal([]);
+      expect(reporters.get('1')).to.deep.equal(DEN);
+
+      // Card 3 deleted: it is not answered, and not kept.
+      const left = await reportersOf('board', b.cards().slice(0, 2), b.read);
+
+      expect([...left.keys()]).to.deep.equal(['1', '2']);
+      expect(b.asked).to.deep.equal([]);
+    });
+
+    it('keeps the boards asked about most recently', async () => {
+      const { reportersOf } = createReporterCache({ maxBoards: 2 });
+      const b = board();
+
+      await reportersOf('A', b.cards(), b.read);
+      await reportersOf('B', b.cards(), b.read);
+      await reportersOf('A', b.cards(), b.read); // A is now the most recent
+      await reportersOf('C', b.cards(), b.read); // …so B is the one dropped
+      expect(b.asked).to.have.length(3);
+
+      await reportersOf('A', b.cards(), b.read);
+      expect(b.asked).to.have.length(3);
+      await reportersOf('B', b.cards(), b.read);
+      expect(b.asked).to.have.length(4);
+    });
+
+    it('versions a card by when it was last written, to the millisecond', () => {
+      expect(
+        versionOf({ createdAt: new Date('2026-09-01T00:00:00.123Z'), updatedAt: null }),
+      ).to.equal('2026-09-01T00:00:00.123Z');
+      expect(
+        versionOf({
+          createdAt: '2026-09-01T00:00:00.000Z',
+          updatedAt: new Date('2026-09-24T10:00:00.456Z'),
+        }),
+      ).to.equal('2026-09-24T10:00:00.456Z');
     });
   });
 

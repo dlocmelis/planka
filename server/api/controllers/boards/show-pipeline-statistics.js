@@ -8,7 +8,7 @@
  * /boards/{id}/pipeline-statistics:
  *   get:
  *     summary: Get board pipeline statistics
- *     description: Read-only board-flow figures for the Pipeline strip's Statistics tab, computed from the board's action history — cards entered, completed, deployed and reopened, and user-testing sends, acceptances and rejections — for the last 24 hours, 7 days and 30 days, each with the previous period of the same length. Optional query parameters narrow it to some of the board's cards (any of the labels, a keyword, any of the creators, time to done, cost; different filters combine with AND) and replace the three periods with one custom period. Only people who can read the board's actions may read them.
+ *     description: Read-only board-flow figures for the Pipeline strip's Statistics tab, computed from the board's action history — cards entered, completed, deployed and reopened, and user-testing sends, acceptances and rejections — for the last 24 hours, 7 days and 30 days, each with the previous period of the same length. Optional query parameters narrow it to some of the board's cards (any of the labels, a keyword, any of the creators, time to done, cost; different filters combine with AND), answering the ids of the cards they matched, and replace the three periods with one custom period. Only people who can read the board's actions may read them.
  *     tags:
  *       - Boards
  *     operationId: getBoardPipelineStatistics
@@ -100,6 +100,11 @@
  *                       description: 24h, 7d and 30d — or the one custom period — each with its current and previous window
  *                       items:
  *                         type: object
+ *                     cardIds:
+ *                       type: array
+ *                       description: With a card filter only — the ids of the cards it matched, which the tab sends to the orchestrator's GET /_term/pipeline/stats (cards) so the Pipeline half counts the same cards
+ *                       items:
+ *                         type: string
  *                     filterOptions:
  *                       type: object
  *                       properties:
@@ -144,10 +149,54 @@ const FILTER_INPUT_NAMES = [
   'to',
 ];
 
+// The board's Reporter headers, remembered between the tab's once-a-minute
+// asks (pipelineStatistics.createReporterCache): every answer lists the
+// board's creators, and a card's creator is the Reporter its description
+// names, but reading every card with its whole description on every ask was
+// measured at about 45 ms on the Sprint Board. The 50 boards the tab was most
+// recently asked about are kept.
+const reporterCache = pipelineStatistics.createReporterCache({ maxBoards: 50 });
+
+// The board's cards, without their descriptions unless asked for. Waterline
+// cannot leave a column out of a schemaless model (`select` and `omit` both
+// refuse), so the light read is SQL; sails-disk, the tests' datastore, has no
+// SQL, and there the whole cards are read as before.
+const findBoardCards = async (boardId, { withDescriptions }) => {
+  if (!withDescriptions) {
+    try {
+      const { rows } = await sails.sendNativeQuery(
+        'SELECT id, name, creator_user_id, created_at, updated_at FROM card WHERE board_id = $1',
+        [boardId],
+      );
+
+      return rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        creatorUserId: row.creator_user_id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }));
+    } catch (error) {
+      if (error.code !== 'E_NOT_SUPPORTED') {
+        throw error;
+      }
+    }
+  }
+
+  return Card.find({ boardId });
+};
+
 // The board's cards as matchCards reads them. What a filter is not set for is
-// not read: the creator of every card is, for the dropdown's options.
+// not read: the creator of every card is, for the dropdown's options, but the
+// descriptions only when the keyword filter needs them — otherwise each
+// card's Reporter header comes from reporterCache, read again only for a card
+// written since.
 const describeCards = async (board, filters, windowCardIds) => {
-  const cards = await Card.find({ boardId: board.id });
+  const cards = await findBoardCards(board.id, { withDescriptions: !!filters.search });
+
+  const reporters = await reporterCache.reportersOf(board.id, cards, (ids) =>
+    Card.find({ id: ids }),
+  );
 
   const creatorUserIds = _.uniq(cards.map((card) => card.creatorUserId).filter(Boolean));
   const users = creatorUserIds.length === 0 ? [] : await User.find({ id: creatorUserIds });
@@ -155,7 +204,11 @@ const describeCards = async (board, filters, windowCardIds) => {
 
   const described = cards.map((card) => ({
     ...card,
-    creator: pipelineStatistics.creatorOf(card, userById[card.creatorUserId]),
+    creator: pipelineStatistics.creatorOf(
+      card,
+      userById[card.creatorUserId],
+      reporters.get(String(card.id)) || null,
+    ),
   }));
 
   if (filters.labelIds) {
@@ -340,6 +393,10 @@ module.exports = {
     return {
       item: {
         boardId: board.id,
+        // The cards the filters matched, so the tab can ask the orchestrator
+        // for the same cards' pipeline figures (GET /_term/pipeline/stats
+        // ?cards=). Only with a card filter: otherwise it is every card.
+        ...(cardIds && { cardIds: [...cardIds] }),
         ...pipelineStatistics.compute({
           actions,
           creations,
