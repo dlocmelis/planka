@@ -95,9 +95,9 @@ describe('GET /api/boards/:id/pipeline-statistics (controller)', function descri
       name,
       description,
     }).fetch();
-    await CardLabel.create({ id: `${id}1`, cardId: id, labelId }).fetch();
+    await CardLabel.create({ id: `187114860713080060${index}`, cardId: id, labelId }).fetch();
     await CustomFieldValue.create({
-      id: `${id}2`,
+      id: `187114860713080061${index}`,
       cardId: id,
       customFieldGroupId: FIELD_GROUP_ID,
       customFieldId: COST_FIELD_ID,
