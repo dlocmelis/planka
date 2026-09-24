@@ -372,9 +372,9 @@ describe('the collapsed header', () => {
     expect(container.querySelector('[data-chip="tests"]')).toBeNull();
     expect(container.querySelector('[data-chip="deploys"]')).toBeNull();
     expect(container.querySelector('[role="tablist"]')).toBeNull();
-    expect(container.querySelectorAll('[data-thread], [data-pipeline-strip="ok"]')).not.toHaveLength(
-      0,
-    );
+    expect(
+      container.querySelectorAll('[data-thread], [data-pipeline-strip="ok"]'),
+    ).not.toHaveLength(0);
   });
 });
 
@@ -413,9 +413,9 @@ describe('expanded', () => {
     await renderStrip();
 
     expect(panel('deployment')).not.toBeNull();
-    expect(
-      container.querySelector('[data-tab="deployment"]').getAttribute('aria-selected'),
-    ).toBe('true');
+    expect(container.querySelector('[data-tab="deployment"]').getAttribute('aria-selected')).toBe(
+      'true',
+    );
   });
 
   test('a remembered tab the orchestrator cannot fill falls back to Build without forgetting it', async () => {
@@ -434,9 +434,7 @@ describe('expanded', () => {
     await openTab('testing');
 
     const testing = panel('testing');
-    expect(testing.textContent).toContain(
-      'pipeline.testsSummary{"running":2,"waiting":1,"max":3}',
-    );
+    expect(testing.textContent).toContain('pipeline.testsSummary{"running":2,"waiting":1,"max":3}');
 
     const cards = [...testing.querySelectorAll('[data-test-card]')];
     expect(cards.map((card) => card.getAttribute('data-test-card'))).toEqual(['card-1', 'card-2']);
@@ -474,7 +472,9 @@ describe('expanded', () => {
     ]);
     expect(recent[0].querySelector('[data-result]').textContent).toBe('pipeline.resultFail');
     expect(recent[0].textContent).toContain(dur(12, 'm', 5, 's'));
-    expect(recent[0].textContent).toContain(`pipeline.queuedPart{"duration":"${dur(2, 'm', 0, 's')}"}`);
+    expect(recent[0].textContent).toContain(
+      `pipeline.queuedPart{"duration":"${dur(2, 'm', 0, 's')}"}`,
+    );
     expect(recent[0].textContent).toContain('pipeline.countTests{"count":812}');
     expect(recent[0].textContent).toContain('pipeline.failedCount{"count":3}');
     expect(recent[0].textContent).toContain('pipeline.attempts{"count":2}');
@@ -565,9 +565,9 @@ describe('expanded', () => {
 
     const accountsPanel = panel('accounts');
     const a = accountsPanel.querySelector('[data-account="claude-a"]');
-    expect([...a.querySelectorAll('[data-window]')].map((w) => w.getAttribute('data-window'))).toEqual(
-      ['5h', 'week', 'week_fable'],
-    );
+    expect(
+      [...a.querySelectorAll('[data-window]')].map((w) => w.getAttribute('data-window')),
+    ).toEqual(['5h', 'week', 'week_fable']);
     const fiveHour = a.querySelector('[data-window="5h"]');
     expect(fiveHour.textContent).toContain('42%');
     expect(fiveHour.textContent).toContain('pipeline.resetsIn');
@@ -580,7 +580,9 @@ describe('expanded', () => {
 
     const b = accountsPanel.querySelector('[data-account="claude-b"]');
     expect(b.querySelector('[data-limited]').textContent).toContain('pipeline.limitedUntil');
-    expect(b.querySelector('[data-limited]').textContent).toContain(`"duration":"${dur(1, 'h', 0, 'm')}"`);
+    expect(b.querySelector('[data-limited]').textContent).toContain(
+      `"duration":"${dur(1, 'h', 0, 'm')}"`,
+    );
     expect(b.textContent).toContain('pipeline.limitedNoThreads');
     expect(b.querySelector('[data-stale]').textContent).toContain('pipeline.readingStale');
     expect(b.querySelectorAll('[data-window]')).toHaveLength(0);

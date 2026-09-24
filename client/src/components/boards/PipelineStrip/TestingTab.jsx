@@ -44,7 +44,7 @@ const countText = (t, unit, done, total) => {
   return t(packages ? 'pipeline.countPackages' : 'pipeline.countTests', { count: done });
 };
 
-const Profile = ({ profile }) => {
+function Profile({ profile }) {
   const [t] = useTranslation();
 
   if (!PROFILE_KEYS[profile]) {
@@ -60,7 +60,7 @@ const Profile = ({ profile }) => {
       {t(PROFILE_KEYS[profile])}
     </Label>
   );
-};
+}
 
 Profile.propTypes = {
   profile: PropTypes.string,
@@ -161,9 +161,7 @@ const TestingTab = React.memo(({ tests, nowMs, durationUnits, onOpenCard }) => {
           </span>
         )}
       </div>
-      {recent.length === 0 && (
-        <div className={styles.empty}>{t('pipeline.recentStagesNone')}</div>
-      )}
+      {recent.length === 0 && <div className={styles.empty}>{t('pipeline.recentStagesNone')}</div>}
       {recent.map((run, index) => {
         const ago = secondsSince(run.finishedAt, nowMs);
 
@@ -205,9 +203,7 @@ const TestingTab = React.memo(({ tests, nowMs, durationUnits, onOpenCard }) => {
                 </span>
               )}
               {run.unit && run.tests > 0 && (
-                <span className={styles.detail}>
-                  {countText(t, run.unit, run.tests, 0)}
-                </span>
+                <span className={styles.detail}>{countText(t, run.unit, run.tests, 0)}</span>
               )}
               {run.failed > 0 && (
                 <span className={styles.detail}>

@@ -30,7 +30,7 @@ const DEPLOY_RESULT_KEYS = {
   auth: 'pipeline.deployResultAuth',
 };
 
-const CardLink = ({ card, onOpenCard }) => {
+function CardLink({ card, onOpenCard }) {
   const [t] = useTranslation();
 
   return (
@@ -38,7 +38,7 @@ const CardLink = ({ card, onOpenCard }) => {
       {card.name || t('pipeline.untitledCard')}
     </button>
   );
-};
+}
 
 CardLink.propTypes = {
   card: PropTypes.object.isRequired, // eslint-disable-line react/forbid-prop-types
@@ -73,7 +73,7 @@ const DeploymentTab = React.memo(({ deploys, nowMs, durationUnits, onOpenCard })
       )}
       {lanes.length === 0 && <div className={styles.empty}>{t('pipeline.deployNone')}</div>}
       {lanes.map((lane) => {
-        const current = lane.current;
+        const { current } = lane;
         const riders = (current && current.riders) || [];
         const waitingCards = lane.waiting || [];
         const recent = lane.recent || [];
