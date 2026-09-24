@@ -14,14 +14,18 @@ import { Provider } from 'react-redux';
 import { createStore } from 'redux';
 
 import PipelineStrip from './PipelineStrip';
+import { formatDay } from '../../../utils/pipeline-strip';
 
 // Keys come back with their values, so a test can read what was counted.
+// The viewer's Planka language, which a test may change.
+let mockLanguage = 'en-US';
+
 jest.mock('react-i18next', () => {
   const t = (key, values) =>
     values && typeof values === 'object' ? `${key}${JSON.stringify(values)}` : key;
 
   return {
-    useTranslation: () => [t, { language: 'en-US' }],
+    useTranslation: () => [t, { language: mockLanguage }],
   };
 });
 
@@ -413,6 +417,24 @@ test('the pipeline figures, the stage table and the sessions by kind are shown',
   const e2e = panel().querySelector('[data-session-kind="e2e"]');
   expect(e2e.textContent).toContain('pipeline.statsKindSpend{"spend":"$0.00"}');
   expect(e2e.textContent).not.toContain('statsKindDetail');
+});
+
+test("the history note writes its date in the viewer's Planka language, not the browser's", async () => {
+  mockLanguage = 'de-DE';
+
+  try {
+    await renderStrip();
+    await openStatistics();
+  } finally {
+    mockLanguage = 'en-US';
+  }
+
+  const german = formatDay('2026-09-24T08:00:00Z', 'de-DE');
+  // The two must differ, or this test could not tell them apart.
+  expect(german).not.toBe(formatDay('2026-09-24T08:00:00Z', 'en-US'));
+  expect(
+    panel().querySelector('[data-since-note="pipeline.statsGateSince"]').textContent,
+  ).toContain(`"date":"${german}"`);
 });
 
 test('an orchestrator without the statistics route still shows the board flow', async () => {

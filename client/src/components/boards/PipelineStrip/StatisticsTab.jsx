@@ -331,7 +331,7 @@ HalfState.propTypes = {
 
 // A history that starts inside the periods on screen says so.
 function SinceNote({ since, stats, textKey }) {
-  const [t] = useTranslation();
+  const [t, i18n] = useTranslation();
   const date = historyStartsInside(since, stats);
 
   if (!date) {
@@ -341,7 +341,7 @@ function SinceNote({ since, stats, textKey }) {
   return (
     <div className={styles.statsNote} data-since-note={textKey}>
       <Icon name="info circle" />
-      {t(textKey, { date: formatDay(date) })}
+      {t(textKey, { date: formatDay(date, i18n && i18n.language) })}
     </div>
   );
 }

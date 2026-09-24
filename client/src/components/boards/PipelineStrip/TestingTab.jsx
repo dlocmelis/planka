@@ -73,7 +73,7 @@ Profile.defaultProps = {
 // The smoke-test gate: every stage running or waiting for a container slot,
 // grouped by card, and below it the stages that finished most recently.
 const TestingTab = React.memo(({ tests, nowMs, durationUnits, onOpenCard }) => {
-  const [t] = useTranslation();
+  const [t, i18n] = useTranslation();
 
   const groups = groupStagesByCard(tests.stages);
   const recent = tests.recent || [];
@@ -157,7 +157,9 @@ const TestingTab = React.memo(({ tests, nowMs, durationUnits, onOpenCard }) => {
         {tests.recordedSince && (
           <span className={styles.detail}>
             {' '}
-            {t('pipeline.recordedSince', { date: formatDay(tests.recordedSince) })}
+            {t('pipeline.recordedSince', {
+              date: formatDay(tests.recordedSince, i18n && i18n.language),
+            })}
           </span>
         )}
       </div>
