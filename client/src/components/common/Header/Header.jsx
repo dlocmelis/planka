@@ -36,7 +36,7 @@ const Header = React.memo(() => {
   const withFavoritesToggler = useSelector(
     // TODO: use selector instead?
     (state) =>
-      selectors.selectPath(state).projectId === undefined &&
+      selectors.selectIsHomePage(state) &&
       selectors.selectFavoriteProjectIdsForCurrentUser(state).length > 0,
   );
 
