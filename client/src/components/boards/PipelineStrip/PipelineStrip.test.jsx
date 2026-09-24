@@ -561,7 +561,15 @@ test('the queue stays shut while a thread is free', async () => {
 });
 
 test('every pipeline string the strip uses is in en-US and ru-RU', () => {
-  const sources = ['PipelineStrip.jsx', 'ThreadBar.jsx', 'QueuePanel.jsx', 'MoveStep.jsx']
+  const sources = [
+    'PipelineStrip.jsx',
+    'ThreadBar.jsx',
+    'QueuePanel.jsx',
+    'MoveStep.jsx',
+    'TestingTab.jsx',
+    'DeploymentTab.jsx',
+    'AccountsTab.jsx',
+  ]
     .map((file) => fs.readFileSync(path.join(__dirname, file), 'utf8'))
     .join('\n');
   const helpers = fs.readFileSync(path.join(__dirname, '../../../utils/pipeline-strip.js'), 'utf8');
@@ -579,7 +587,7 @@ test('every pipeline string the strip uses is in en-US and ru-RU', () => {
   });
   ['e2e', 'regular', 'express'].forEach((type) => keys.add(`buildType_${type}`));
 
-  expect(keys.size).toBeGreaterThan(40);
+  expect(keys.size).toBeGreaterThan(100);
 
   [enUS, ruRU].forEach((locale) => {
     const missing = [...keys].filter((key) => !locale.translation.pipeline[key]);
