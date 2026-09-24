@@ -614,7 +614,7 @@ export default {
     },
 
     pipeline: {
-      accountThreads: '{{count}} threads',
+      accountThreads: 'threads: {{count}}',
       accountsNone: 'No Claude accounts',
       ago: '{{duration}} ago',
       alreadyAtCeiling:
