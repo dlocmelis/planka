@@ -163,10 +163,15 @@ const getJson = async (url, { headers, signal } = {}) => {
 
 // The pipeline half: gate, deploy and session statistics from the
 // orchestrator (GET /_term/pipeline/stats), under the strip's own sign-in.
-export const fetchPipelineStats = async (boardId, { signal } = {}) => {
-  const body = await getJson(`${PIPELINE_PATH}/stats?board=${encodeURIComponent(boardId)}`, {
-    signal,
-  });
+export const fetchPipelineStats = async (boardId, { signal, cards } = {}) => {
+  const body = await getJson(
+    `${PIPELINE_PATH}/stats?board=${encodeURIComponent(boardId)}${
+      cards === undefined ? '' : `&cards=${encodeURIComponent(cards)}`
+    }`,
+    {
+      signal,
+    },
+  );
 
   return body && body.pipeline === true ? body : null;
 };

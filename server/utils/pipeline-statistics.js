@@ -518,10 +518,9 @@ const parseReporter = (description) => {
 // "Den Loc" — is one person, and a reporter who is also the Planka user who
 // created other cards is that one person too. A reporter with no address is
 // keyed by name; a user with none by id. null when nobody is known (the
-// creating user was deleted).
-const creatorOf = (card, user) => {
-  const reporter = parseReporter(card.description);
-
+// creating user was deleted). reporter is parseReporter's answer for the
+// card, when the caller has it already.
+const creatorOf = (card, user, reporter = parseReporter(card.description)) => {
   if (reporter) {
     return reporter.email
       ? { key: reporter.email.toLowerCase(), name: reporter.name }
@@ -535,6 +534,74 @@ const creatorOf = (card, user) => {
   const name = user.name || user.username || user.email || String(user.id);
 
   return user.email ? { key: user.email.toLowerCase(), name } : { key: `user:${user.id}`, name };
+};
+
+// A version of a card that moves whenever the card is written: its
+// updatedAt (Card's beforeUpdate stamps it on every Card.update and
+// Card.updateOne), else its createdAt.
+const versionOf = (card) => {
+  const at = card.updatedAt || card.createdAt;
+
+  if (at instanceof Date) {
+    return at.toISOString();
+  }
+
+  return at ? String(at) : '';
+};
+
+// Remembers the Reporter header of each board's cards (parseReporter), so the
+// Statistics tab's once-a-minute answer need not read every card's whole
+// description to list the board's creators: a card's header is read again
+// only when its version (versionOf) has moved. `maxBoards` boards are kept,
+// the one asked about longest ago dropped first.
+//
+// reportersOf(boardId, cards, readDescriptions) answers a Map of card id to
+// its reporter (or null). `cards` carry id, createdAt and updatedAt, and a
+// card that also carries its description is parsed from it;
+// readDescriptions(ids) is asked for the cards whose header is not known at
+// their version, and answers them with id, description, createdAt, updatedAt.
+const createReporterCache = ({ maxBoards }) => {
+  const byBoardId = new Map();
+
+  const reportersOf = async (boardId, cards, readDescriptions) => {
+    const known = byBoardId.get(boardId) || new Map();
+    const entries = new Map();
+    const unread = [];
+
+    cards.forEach((card) => {
+      const id = String(card.id);
+      const version = versionOf(card);
+      const entry = known.get(id);
+
+      if (card.description !== undefined) {
+        entries.set(id, { version, reporter: parseReporter(card.description) });
+      } else if (entry && entry.version === version) {
+        entries.set(id, entry);
+      } else {
+        unread.push(card.id);
+      }
+    });
+
+    if (unread.length > 0) {
+      (await readDescriptions(unread)).forEach((card) => {
+        entries.set(String(card.id), {
+          version: versionOf(card),
+          reporter: parseReporter(card.description),
+        });
+      });
+    }
+
+    byBoardId.delete(boardId);
+    byBoardId.set(boardId, entries);
+
+    if (byBoardId.size > maxBoards) {
+      byBoardId.delete(byBoardId.keys().next().value);
+    }
+
+    return new Map([...entries].map(([id, { reporter }]) => [id, reporter]));
+  };
+
+  return { reportersOf };
 };
 
 // The creators on the board, for the filter's dropdown: each with the name
@@ -659,6 +726,7 @@ module.exports = {
   REACH_SECONDS,
   classify,
   compute,
+  createReporterCache,
   creatorOf,
   creatorOptions,
   hasCardFilter,
@@ -669,4 +737,5 @@ module.exports = {
   parseReporter,
   reachOf,
   secondsToDoneByCardId,
+  versionOf,
 };

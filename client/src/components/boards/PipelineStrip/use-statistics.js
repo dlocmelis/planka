@@ -3,10 +3,10 @@
  * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { fetchBoardStatistics, fetchPipelineStats } from './api';
-import { STATS_POLL_MS } from '../../../utils/pipeline-strip';
+import { STATS_POLL_MS, statsCardFilterQuery } from '../../../utils/pipeline-strip';
 
 // One half of the Statistics tab: its figures, or why there are none.
 //   loading     — not answered yet
@@ -34,41 +34,23 @@ const settle = (promise) =>
         : { status: HalfStatuses.ERROR, data: null, error: error ? error.message : '' },
   );
 
-// The Statistics tab's figures: both halves are asked when the tab is shown,
-// then once a minute while it stays shown and the page is visible. A half that
-// fails keeps its last answer on screen rather than blanking it. boardQuery is
-// the board-flow filters (statsFilterQuery): a change asks again at once, and
-// the minute's poll keeps asking with them.
-export default (boardId, accessToken, active, boardQuery = '') => {
-  const [board, setBoard] = useState(initialHalf);
-  const [pipeline, setPipeline] = useState(initialHalf);
+// A half that fails keeps its last answer on screen rather than blanking it.
+const keep = (setter) => (next) => {
+  if (!next) {
+    return;
+  }
 
-  useEffect(() => {
-    setBoard(initialHalf);
-    setPipeline(initialHalf);
-  }, [boardId]);
-
-  // Figures asked with other filters are not these filters' figures: they are
-  // not kept on screen while the new ones are asked, nor after they fail.
-  useEffect(() => {
-    setBoard(initialHalf);
-  }, [boardQuery]);
-
-  const keep = useCallback(
-    (setter) => (next) => {
-      if (!next) {
-        return;
-      }
-
-      setter((prev) =>
-        next.status === HalfStatuses.ERROR && prev.status === HalfStatuses.OK
-          ? { ...prev, error: next.error }
-          : next,
-      );
-    },
-    [],
+  setter((prev) =>
+    next.status === HalfStatuses.ERROR && prev.status === HalfStatuses.OK
+      ? { ...prev, error: next.error }
+      : next,
   );
+};
 
+// Asks `ask(signal)` now and then once a minute while `active` and the page
+// is visible, handing each answer to `onAnswer`. Nothing is asked while
+// `active` is false.
+const usePoll = (active, ask, onAnswer) => {
   useEffect(() => {
     if (!active) {
       return undefined;
@@ -85,19 +67,14 @@ export default (boardId, accessToken, active, boardQuery = '') => {
       }
 
       controller = typeof AbortController === 'undefined' ? null : new AbortController();
-      const signal = controller ? controller.signal : undefined;
 
-      const [boardAnswer, pipelineAnswer] = await Promise.all([
-        settle(fetchBoardStatistics(boardId, accessToken, { signal, query: boardQuery })),
-        settle(fetchPipelineStats(boardId, { signal })),
-      ]);
+      const answer = await settle(ask(controller ? controller.signal : undefined));
 
       if (cancelled) {
         return;
       }
 
-      keep(setBoard)(boardAnswer);
-      keep(setPipeline)(pipelineAnswer);
+      onAnswer(answer);
 
       timer = setTimeout(tick, STATS_POLL_MS);
     };
@@ -112,7 +89,85 @@ export default (boardId, accessToken, active, boardQuery = '') => {
         controller.abort();
       }
     };
-  }, [boardId, accessToken, active, boardQuery, keep]);
+  }, [active, ask, onAnswer]);
+};
 
-  return { board, pipeline };
+// The Statistics tab's figures: each half is asked when the tab is shown, then
+// once a minute while it stays shown and the page is visible, and each on its
+// own — a filter change asks Board flow again without asking the pipeline
+// half again unless its cards changed.
+//
+// boardQuery is the board-flow filters (statsFilterQuery). A card filter in
+// it narrows the pipeline half too: Planka answers the ids of the cards it
+// matched (cardIds), and the orchestrator is asked for those cards' figures —
+// so, with a card filter, the pipeline half waits for Board flow's answer. A
+// custom period alone leaves the pipeline half as it is: it has no dates of
+// its own to swap. A Planka answer without cardIds (one that predates them)
+// leaves the pipeline half the whole board's.
+export default (boardId, accessToken, active, boardQuery = '') => {
+  const [board, setBoard] = useState(initialHalf);
+  const [pipeline, setPipeline] = useState(initialHalf);
+
+  const cardQuery = useMemo(() => statsCardFilterQuery(boardQuery), [boardQuery]);
+
+  // The cards the pipeline half counts, as the `cards` parameter: null for
+  // every card, undefined while Board flow has not said which.
+  const [cards, setCards] = useState(() => (cardQuery ? undefined : null));
+
+  useEffect(() => {
+    setBoard(initialHalf);
+    setPipeline(initialHalf);
+  }, [boardId]);
+
+  // Figures asked with other filters are not these filters' figures: they are
+  // not kept on screen while the new ones are asked, nor after they fail.
+  useEffect(() => {
+    setBoard(initialHalf);
+  }, [boardQuery]);
+
+  useEffect(() => {
+    setPipeline(initialHalf);
+    setCards(cardQuery ? undefined : null);
+  }, [cardQuery]);
+
+  // Which cards Board flow's answer to THESE filters matched — an answer to
+  // the filters before is not it — or undefined while there is none.
+  const answered = board.status === HalfStatuses.OK && board.query === boardQuery;
+  const answeredCards =
+    answered && Array.isArray(board.data.cardIds) ? board.data.cardIds.join(',') : null;
+
+  useEffect(() => {
+    if (cardQuery && answered) {
+      setCards(answeredCards);
+    }
+  }, [cardQuery, answered, answeredCards]);
+
+  const askBoard = useCallback(
+    (signal) => fetchBoardStatistics(boardId, accessToken, { signal, query: boardQuery }),
+    [boardId, accessToken, boardQuery],
+  );
+
+  const askPipeline = useCallback(
+    (signal) => fetchPipelineStats(boardId, { signal, cards: cards === null ? undefined : cards }),
+    [boardId, cards],
+  );
+
+  // Each answer is marked with the filters it answered.
+  const onBoard = useMemo(
+    () => (next) => keep(setBoard)(next && { ...next, query: boardQuery }),
+    [boardQuery],
+  );
+  const onPipeline = useMemo(() => keep(setPipeline), []);
+
+  usePoll(active, askBoard, onBoard);
+  usePoll(active && cards !== undefined, askPipeline, onPipeline);
+
+  // Board flow could not say which cards pass: the pipeline half cannot be
+  // asked for them, and says why rather than wait for ever.
+  const pipelineHalf =
+    cards === undefined && board.status === HalfStatuses.ERROR
+      ? { status: HalfStatuses.ERROR, data: null, error: board.error }
+      : pipeline;
+
+  return { board, pipeline: pipelineHalf };
 };

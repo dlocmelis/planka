@@ -32,10 +32,12 @@ import {
   sessionKinds,
   sessionTotals,
   sessionsOf,
+  statsCardFilterQuery,
   statsFilterQuery,
   statsPeriod,
   statsPeriodKeys,
   statsRange,
+  withBoardLabels,
   writeStatsFilters,
 } from '../../../utils/pipeline-strip';
 import useStatistics, { HalfStatuses } from './use-statistics';
@@ -486,9 +488,11 @@ SessionTable.propTypes = {
 // The Board flow filters: what the inputs hold, and what was last asked for.
 // The keyword and number boxes wait for typing to pause before they ask; a
 // pick from a list, a date and Clear ask at once. What was asked for is
-// remembered for the board, in this browser.
-function useStatsFilters(boardId) {
-  const [filters, setFilters] = useState(() => readStatsFilters(boardId));
+// remembered for the board, in this browser — less any label that is not the
+// board's any more (withBoardLabels), whether it went before the tab was
+// opened or while it is.
+function useStatsFilters(boardId, labels) {
+  const [filters, setFilters] = useState(() => withBoardLabels(readStatsFilters(boardId), labels));
   const [applied, setApplied] = useState(filters);
 
   useEffect(() => {
@@ -518,8 +522,24 @@ function useStatsFilters(boardId) {
     [filters],
   );
 
+  useEffect(() => {
+    const kept = withBoardLabels(filters, labels);
+
+    if (kept !== filters) {
+      change({ labelIds: kept.labelIds }, { immediate: true });
+    }
+  }, [filters, labels, change]);
+
   return { filters, applied, change };
 }
+
+// What the filters do not reach, said under them: the pipeline figures keep
+// their own periods whatever the dates, and an orchestrator that cannot keep
+// its figures to some cards answers the whole board's.
+const FILTER_NOTE_KEYS = {
+  dates: 'pipeline.statsFilterDatesBoardOnly',
+  cards: 'pipeline.statsFiltersBoardOnly',
+};
 
 const RANGE_ERROR_KEYS = {
   incomplete: 'pipeline.statsFilterRangeIncomplete',
@@ -543,8 +563,10 @@ const boundsText = (t, min, max, format) => {
 };
 
 // What the Board flow heading says is filtered, e.g.
-// `bug, ui · “login” · Deniss Locmelis · 2 h – 10 h · $1.00 – $5.00 · 1 Sep – 15 Sep`.
-const describeFilters = (t, filters, { labels, creators, locale }) => {
+// `bug, ui · “login” · Deniss Locmelis · 2 h – 10 h · $1.00 – $5.00 · 1 Sep – 15 Sep`
+// — and, withDates false, what the Pipeline heading says: the same but the
+// dates, which it does not follow.
+const describeFilters = (t, filters, { labels, creators, locale, withDates = true }) => {
   const labelById = new Map(labels.map((label) => [label.id, label]));
   const creatorByKey = new Map(creators.map((creator) => [creator.key, creator]));
   const range = statsRange(filters);
@@ -564,7 +586,8 @@ const describeFilters = (t, filters, { labels, creators, locale }) => {
       t('pipeline.statsFilterHoursValue', { hours }),
     ),
     boundsText(t, filters.costMin, filters.costMax, (usd) => formatUsd(usd, locale)),
-    range &&
+    withDates &&
+      range &&
       !range.error &&
       formatStatsRange({ current: { from: range.from, to: range.to } }, locale),
   ]
@@ -573,7 +596,7 @@ const describeFilters = (t, filters, { labels, creators, locale }) => {
 };
 
 // The filter bar above Board flow.
-function FilterBar({ filters, change, labels, creators }) {
+function FilterBar({ filters, change, labels, creators, notes }) {
   const [t] = useTranslation();
 
   const labelOptions = labels.map((label) => ({
@@ -695,10 +718,12 @@ function FilterBar({ filters, change, labels, creators }) {
           {t(RANGE_ERROR_KEYS[range.error], { days: STATS_MAX_RANGE_DAYS })}
         </div>
       )}
-      <div className={styles.statsNote} data-filters-note>
-        <Icon name="info circle" />
-        {t('pipeline.statsFiltersBoardOnly')}
-      </div>
+      {notes.map((note) => (
+        <div key={note} className={styles.statsNote} data-filters-note={note}>
+          <Icon name="info circle" />
+          {t(FILTER_NOTE_KEYS[note])}
+        </div>
+      ))}
     </div>
   );
 }
@@ -708,6 +733,7 @@ FilterBar.propTypes = {
   change: PropTypes.func.isRequired,
   labels: PropTypes.array.isRequired, // eslint-disable-line react/forbid-prop-types
   creators: PropTypes.array.isRequired, // eslint-disable-line react/forbid-prop-types
+  notes: PropTypes.arrayOf(PropTypes.string).isRequired,
 };
 
 const NO_LABELS = [];
@@ -715,16 +741,17 @@ const NO_LABELS = [];
 // The Statistics tab: this board's flow, from Planka's own history, and the
 // pipeline's gate, deploys, agent sessions and spend, from the orchestrator —
 // each for the last 24 hours, 7 days and 30 days beside the period before.
-// Board flow can be narrowed by the filter bar above it, and its periods
-// swapped for dates of the viewer's own; the pipeline half is the whole
-// board's either way.
+// The filter bar narrows both halves to the cards it matches (use-statistics
+// asks the orchestrator for the cards Planka matched); its dates swap Board
+// flow's periods for the viewer's own, and the pipeline half keeps its three.
 function BoardStatistics({ boardId, durationUnits }) {
   const [t, i18n] = useTranslation();
   const accessToken = useSelector(selectors.selectAccessToken);
   const labels = useSelector(selectors.selectLabelsForCurrentBoard) || NO_LABELS;
 
-  const { filters, applied, change } = useStatsFilters(boardId);
+  const { filters, applied, change } = useStatsFilters(boardId, labels);
   const query = useMemo(() => statsFilterQuery(applied), [applied]);
+  const cardFiltered = statsCardFilterQuery(query) !== '';
 
   const { board, pipeline } = useStatistics(boardId, accessToken, true, query);
 
@@ -744,13 +771,27 @@ function BoardStatistics({ boardId, durationUnits }) {
     }
   }, [answeredCreators]);
 
-  const summary = query
-    ? describeFilters(t, applied, { labels, creators, locale: i18n && i18n.language })
+  const describeOptions = { labels, creators, locale: i18n && i18n.language };
+  const summary = query ? describeFilters(t, applied, describeOptions) : '';
+  const cardSummary = cardFiltered
+    ? describeFilters(t, applied, { ...describeOptions, withDates: false })
     : '';
+
+  const range = statsRange(applied);
+  const notes = [
+    range && !range.error && 'dates',
+    cardFiltered && pipelineStats && !pipelineStats.filtered && 'cards',
+  ].filter(Boolean);
 
   return (
     <div className={styles.tab} data-tab-panel="statistics">
-      <FilterBar filters={filters} change={change} labels={labels} creators={creators} />
+      <FilterBar
+        filters={filters}
+        change={change}
+        labels={labels}
+        creators={creators}
+        notes={notes}
+      />
       <div className={styles.sectionTitle} data-stats-title>
         {summary
           ? t('pipeline.statsBoardTitleFiltered', { filters: summary })
@@ -773,8 +814,10 @@ function BoardStatistics({ boardId, durationUnits }) {
       ) : (
         <HalfState half={board} unavailableKey="pipeline.statsBoardUnavailable" />
       )}
-      <div className={classNames(styles.section, styles.sectionTitle)}>
-        {t('pipeline.statsPipelineTitle')}
+      <div className={classNames(styles.section, styles.sectionTitle)} data-pipeline-title>
+        {pipelineStats && pipelineStats.filtered && cardSummary
+          ? t('pipeline.statsPipelineTitleFiltered', { filters: cardSummary })
+          : t('pipeline.statsPipelineTitle')}
       </div>
       {pipelineStats ? (
         <>

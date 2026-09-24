@@ -18,9 +18,11 @@ import {
   sessionKinds,
   sessionTotals,
   sessionsOf,
+  statsCardFilterQuery,
   statsFilterQuery,
   statsPeriod,
   statsRange,
+  withBoardLabels,
 } from './pipeline-strip';
 
 const statsWindow = (sessions = []) => ({ sessions });
@@ -162,5 +164,32 @@ describe('Board flow filters', () => {
     expect(normalizeStatsFilters({ labelIds: 'x', creators: ['a', 3, ''], search: 7 })).toEqual(
       filters({ creators: ['a'] }),
     );
+  });
+});
+
+describe('what the Pipeline half follows', () => {
+  test('the card filters of a board-flow query, without its dates', () => {
+    expect(statsCardFilterQuery('')).toBe('');
+    expect(statsCardFilterQuery(undefined)).toBe('');
+    expect(
+      statsCardFilterQuery('from=2026-09-01T00%3A00%3A00.000Z&to=2026-09-02T00%3A00%3A00.000Z'),
+    ).toBe('');
+    expect(
+      statsCardFilterQuery(
+        'labelIds=1001%2C1002&search=login&from=2026-09-01T00%3A00%3A00.000Z&to=x',
+      ),
+    ).toBe('labelIds=1001%2C1002&search=login');
+  });
+
+  test('a stored label that is not the board any more is dropped', () => {
+    const labels = [{ id: '1001' }, { id: '1002' }];
+    const filters = { ...EMPTY_STATS_FILTERS, labelIds: ['1001', '999', '1002'], search: 'x' };
+
+    expect(withBoardLabels(filters, labels)).toEqual({ ...filters, labelIds: ['1001', '1002'] });
+    expect(withBoardLabels(filters, [])).toEqual({ ...filters, labelIds: [] });
+
+    // Nothing to drop: the very same filters, so nothing is asked again.
+    const known = { ...filters, labelIds: ['1002'] };
+    expect(withBoardLabels(known, labels)).toBe(known);
   });
 });
