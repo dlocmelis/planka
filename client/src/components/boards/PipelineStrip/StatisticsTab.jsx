@@ -267,7 +267,15 @@ function StatsTable({ name, rows, stats, durationUnits }) {
 
 StatsTable.propTypes = {
   name: PropTypes.string.isRequired,
-  rows: PropTypes.arrayOf(PropTypes.object).isRequired,
+  rows: PropTypes.arrayOf(
+    PropTypes.shape({
+      key: PropTypes.string.isRequired,
+      title: PropTypes.string.isRequired,
+      kind: PropTypes.string,
+      value: PropTypes.func.isRequired,
+      better: PropTypes.string,
+    }),
+  ).isRequired,
   stats: PropTypes.object.isRequired, // eslint-disable-line react/forbid-prop-types
   durationUnits: PropTypes.object.isRequired, // eslint-disable-line react/forbid-prop-types
 };
