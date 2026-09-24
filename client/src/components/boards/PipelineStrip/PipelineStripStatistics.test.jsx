@@ -46,10 +46,12 @@ jest.mock('react-hot-toast', () => ({
 }));
 
 const mockUser = { id: 'user-1', name: 'Deniss', username: 'deniss' };
-const mockLabels = [
+const LABELS = [
   { id: '1001', name: 'bug', color: 'berry-red' },
   { id: '1002', name: 'ui', color: 'lagoon-blue' },
 ];
+// The board's labels as the selector answers them; a test may delete one.
+let mockLabels = LABELS;
 
 jest.mock('../../../selectors', () => ({
   __esModule: true,
@@ -236,6 +238,7 @@ const cell = (table, stat, periodIndex) => {
 const callsTo = (url) => fetchCalls.filter(([called]) => called === url);
 
 beforeEach(() => {
+  mockLabels = LABELS;
   localStorage.clear();
   localStorage.setItem('planka_pipelineStrip_expanded', 'true');
   jest.useFakeTimers({ doNotFake: ['setTimeout', 'clearTimeout'], now: Date.parse(NOW) });
@@ -520,20 +523,29 @@ describe('Board flow filters', () => {
       to: localDay(2026, 9, 16),
     });
 
-    // The orchestrator is never asked with a filter.
+    // This Planka answer names no cards (one that predates cardIds): the
+    // orchestrator is asked for the whole board's figures…
     fetchCalls
       .map(([url]) => url)
       .filter((url) => url.startsWith('/_term/pipeline/stats'))
       .forEach((url) => expect(url).toBe(STATS_URL));
 
-    // The heading says what is filtered, and the note says what is not.
+    // …and answered, not left loading for cards an older answer named…
+    expect(panel().querySelector('[data-stats="pipeline"]')).not.toBeNull();
+
+    // …the heading says what is filtered, and the notes say what is not.
     const title = panel().querySelector('[data-stats-title]').textContent;
     expect(title).toContain('pipeline.statsBoardTitleFiltered');
     expect(title).toContain('bug, ui');
     expect(title).toContain('Deniss Locmelis');
     expect(title).toContain('pipeline.statsFilterQuoted{\\"text\\":\\"login\\"}');
-    expect(panel().querySelector('[data-filters-note]').textContent).toContain(
-      'pipeline.statsFiltersBoardOnly',
+    expect(
+      [...panel().querySelectorAll('[data-filters-note]')].map((note) =>
+        note.getAttribute('data-filters-note'),
+      ),
+    ).toEqual(['dates', 'cards']);
+    expect(panel().querySelector('[data-pipeline-title]').textContent).toBe(
+      'pipeline.statsPipelineTitle',
     );
   });
 
@@ -687,5 +699,160 @@ describe('Board flow filters', () => {
       { creators: 'den@setlfi.com' },
       { creators: 'den@setlfi.com' },
     ]);
+  });
+
+  describe('the Pipeline half', () => {
+    const STATS_PREFIX = '/_term/pipeline/stats';
+
+    // The pipeline requests, as the `cards` each carried (null: every card).
+    const pipelineRequests = () =>
+      fetchCalls
+        .map(([url]) => url)
+        .filter((url) => url.startsWith(STATS_PREFIX))
+        .map((url) => new URLSearchParams(url.split('?')[1]).get('cards'));
+
+    // Planka answers a label filter with the cards it matched, and the
+    // orchestrator says it kept its figures to them.
+    const answerCards = (query, cardIds) => {
+      answers[`${PLANKA_URL}?${query}`] = () =>
+        jsonResponse(200, { item: { ...boardStats(), cardIds } });
+      answers[`${STATS_URL}&cards=${encodeURIComponent(cardIds.join(','))}`] = () =>
+        jsonResponse(200, { ...pipelineStats(), filtered: true });
+    };
+
+    test('a card filter keeps the pipeline figures to the cards Board flow matched', async () => {
+      answerCards('labelIds=1001', ['1871291001461540187', '1871277819460323289']);
+
+      await renderStrip();
+      await openStatistics();
+
+      expect(pipelineRequests()).toEqual([null]);
+
+      pick('labelIds', 'bug');
+      await flush();
+      await flush();
+
+      expect(pipelineRequests()).toEqual([null, '1871291001461540187,1871277819460323289']);
+      expect(panel().querySelector('[data-pipeline-title]').textContent).toBe(
+        'pipeline.statsPipelineTitleFiltered{"filters":"bug"}',
+      );
+      expect(panel().querySelector('[data-stats="pipeline"]')).not.toBeNull();
+      expect(panel().querySelector('[data-filters-note]')).toBeNull();
+
+      // No card matched: the orchestrator is asked for none, not for all.
+      answerCards('labelIds=1002', []);
+      click(panel().querySelector('[data-filter-clear]'));
+      await flush();
+      pick('labelIds', 'ui');
+      await flush();
+      await flush();
+
+      expect(pipelineRequests()).toEqual([
+        null,
+        '1871291001461540187,1871277819460323289',
+        null,
+        '',
+      ]);
+    });
+
+    test('the dates and the minute refresh do not ask the pipeline half again', async () => {
+      localStorage.setItem(FILTERS_KEY, JSON.stringify({ labelIds: ['1001'] }));
+      answerCards('labelIds=1001', ['11', '12']);
+      answers[
+        `${PLANKA_URL}?${new URLSearchParams({
+          labelIds: '1001',
+          from: localDay(2026, 9, 1),
+          to: localDay(2026, 9, 16),
+        })}`
+      ] = () => jsonResponse(200, { item: { ...boardStats(), cardIds: ['11', '12'] } });
+
+      await renderStrip();
+      await openStatistics();
+
+      // With a card filter, the pipeline half is asked once Board flow has
+      // said which cards — and only then.
+      expect(pipelineRequests()).toEqual(['11,12']);
+
+      const asked = boardRequests().length;
+      type(filter('from'), '2026-09-01');
+      type(filter('to'), '2026-09-15');
+      await flush();
+      await flush();
+
+      expect(boardRequests().length).toBeGreaterThan(asked);
+      expect(pipelineRequests()).toEqual(['11,12']);
+      expect(panel().querySelector('[data-filters-note="dates"]').textContent).toContain(
+        'pipeline.statsFilterDatesBoardOnly',
+      );
+      // The pipeline heading leaves the dates out: it does not follow them.
+      expect(panel().querySelector('[data-pipeline-title]').textContent).toBe(
+        'pipeline.statsPipelineTitleFiltered{"filters":"bug"}',
+      );
+    });
+
+    test('a Board flow that cannot answer leaves the pipeline half saying why', async () => {
+      localStorage.setItem(FILTERS_KEY, JSON.stringify({ labelIds: ['1001'] }));
+      answers[`${PLANKA_URL}?labelIds=1001`] = () =>
+        jsonResponse(500, { message: 'database down' });
+
+      await renderStrip();
+      await openStatistics();
+
+      expect(pipelineRequests()).toEqual([]);
+      expect(panel().querySelector('[data-stats="pipeline"]')).toBeNull();
+      expect(panel().textContent).not.toContain('pipeline.statsLoading');
+      expect(
+        panel().textContent.split('pipeline.statsFailed{"error":"database down"}'),
+      ).toHaveLength(3);
+    });
+
+    test('Clear asks the orchestrator for every card again', async () => {
+      localStorage.setItem(FILTERS_KEY, JSON.stringify({ labelIds: ['1001'] }));
+      answerCards('labelIds=1001', ['11']);
+
+      await renderStrip();
+      await openStatistics();
+
+      click(panel().querySelector('[data-filter-clear]'));
+      await flush();
+      await flush();
+
+      expect(pipelineRequests()).toEqual(['11', null]);
+      expect(panel().querySelector('[data-pipeline-title]').textContent).toBe(
+        'pipeline.statsPipelineTitle',
+      );
+    });
+  });
+
+  describe('a label deleted since it was picked', () => {
+    test('is dropped from the remembered filters before anything is asked', async () => {
+      localStorage.setItem(FILTERS_KEY, JSON.stringify({ labelIds: ['1001', '999'] }));
+
+      await renderStrip();
+      await openStatistics();
+
+      expect(boardRequests()).toEqual([{ labelIds: '1001' }]);
+      expect(panel().querySelector('[data-stats-title]').textContent).not.toContain('999');
+      expect(JSON.parse(localStorage.getItem(FILTERS_KEY)).labelIds).toEqual(['1001']);
+    });
+
+    test('is dropped when it is deleted with the tab open', async () => {
+      localStorage.setItem(FILTERS_KEY, JSON.stringify({ labelIds: ['1001', '1002'] }));
+
+      await renderStrip();
+      await openStatistics();
+
+      expect(lastBoardRequest()).toEqual({ labelIds: '1001,1002' });
+
+      mockLabels = LABELS.filter((label) => label.id !== '1002');
+      // A new state, so the selector is asked again.
+      act(() => {
+        store.replaceReducer((state) => ({ ...state }));
+      });
+      await flush();
+
+      expect(lastBoardRequest()).toEqual({ labelIds: '1001' });
+      expect(panel().querySelector('[data-stats-title]').textContent).not.toContain('1002');
+    });
   });
 });

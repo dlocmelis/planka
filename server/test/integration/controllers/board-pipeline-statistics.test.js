@@ -324,6 +324,57 @@ describe('GET /api/boards/:id/pipeline-statistics (controller)', function descri
       });
     });
 
+    it('answers the ids of the cards a card filter matched, and none without one', async () => {
+      const cardIdsOf = async (query) => {
+        const response = await getStatistics(BOARD_ID, authHeaderByName.member, query);
+
+        expect(response.status, JSON.stringify(response.body)).to.equal(200);
+
+        return response.body.item.cardIds;
+      };
+
+      expect(await cardIdsOf({ labelIds: BUG_LABEL_ID })).to.deep.equal([CARD_A_ID]);
+      expect(await cardIdsOf({ search: 'filter' })).to.deep.equal([CARD_B_ID]);
+      expect(
+        (await cardIdsOf({ creators: `${REPORTER_KEY},${MEMBER_KEY}` })).slice().sort(),
+      ).to.deep.equal([CARD_A_ID, CARD_B_ID]);
+      expect(await cardIdsOf({ costMin: '100' })).to.deep.equal([]);
+      // Every card, or only a custom period: there is no card set to send.
+      expect(await cardIdsOf({})).to.equal(undefined);
+      expect(
+        await cardIdsOf({
+          from: new Date(Date.now() - 10 * HOUR).toISOString(),
+          to: new Date().toISOString(),
+        }),
+      ).to.equal(undefined);
+    });
+
+    it('lists a creator by the header the card has now, once it is edited', async () => {
+      const creatorsNow = async () =>
+        (await getStatistics(BOARD_ID, authHeaderByName.member)).body.item.filterOptions.creators;
+
+      expect((await creatorsNow()).map((creator) => creator.key)).to.include(MEMBER_KEY);
+
+      await Card.qm.updateOne(
+        { id: CARD_B_ID },
+        { description: '**Setlfi ticket**\n\nReporter: Jon Snow hq@setlfi.com\n\n---\n\nB' },
+      );
+
+      try {
+        expect(await creatorsNow()).to.deep.equal([
+          { key: REPORTER_KEY, name: 'Deniss Locmelis', cards: 1 },
+          { key: 'hq@setlfi.com', name: 'Jon Snow', cards: 1 },
+        ]);
+      } finally {
+        await Card.qm.updateOne(
+          { id: CARD_B_ID },
+          { description: cardRecords[CARD_B_ID].description },
+        );
+      }
+
+      expect((await creatorsNow()).map((creator) => creator.key)).to.include(MEMBER_KEY);
+    });
+
     it('counts only the cards with any of the labels', async () => {
       expect(await dayOf({ labelIds: BUG_LABEL_ID })).to.include(ONLY_A);
       expect(await dayOf({ labelIds: UI_LABEL_ID })).to.include(ONLY_B);

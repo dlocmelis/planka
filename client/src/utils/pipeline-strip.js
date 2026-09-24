@@ -765,6 +765,29 @@ export const statsFilterQuery = (filters) => {
   return params.toString();
 };
 
+// The part of a board-flow query (statsFilterQuery) that narrows the CARDS —
+// everything but the custom period — or '' when it does not. It is what the
+// pipeline half follows: the orchestrator's figures are kept to the cards
+// Board flow matched, but have no dates of their own to swap.
+export const statsCardFilterQuery = (query) => {
+  const params = new URLSearchParams(query || '');
+
+  params.delete('from');
+  params.delete('to');
+
+  return params.toString();
+};
+
+// The filters without the labels that are not the board's any more: a label
+// deleted since it was picked would show as its bare id and could not be
+// removed from the dropdown, which lists the board's labels only.
+export const withBoardLabels = (filters, labels) => {
+  const labelIds = new Set(labels.map((label) => label.id));
+  const kept = filters.labelIds.filter((id) => labelIds.has(id));
+
+  return kept.length === filters.labelIds.length ? filters : { ...filters, labelIds: kept };
+};
+
 export const hasStatsFilters = (filters) =>
   Object.keys(EMPTY_STATS_FILTERS).some((key) =>
     Array.isArray(filters[key]) ? filters[key].length > 0 : !!String(filters[key]).trim(),
