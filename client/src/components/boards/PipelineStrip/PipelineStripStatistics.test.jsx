@@ -755,7 +755,7 @@ describe('Board flow filters', () => {
       ]);
     });
 
-    test('the dates and the minute refresh do not ask the pipeline half again', async () => {
+    test('a change of dates asks Board flow again but not the pipeline half', async () => {
       localStorage.setItem(FILTERS_KEY, JSON.stringify({ labelIds: ['1001'] }));
       answerCards('labelIds=1001', ['11', '12']);
       answers[
