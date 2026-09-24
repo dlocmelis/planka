@@ -748,8 +748,6 @@ export default {
       statsFilterCreatorOption: '{{name}} ({{cards}})',
       statsFilterCreators: 'Creators',
       statsFilterDates: 'Dates',
-      statsFilterDatesBoardOnly:
-        'Dates apply to Board flow only; the Pipeline figures keep their last 24 h, 7 days and 30 days',
       statsFilterDuration: 'Time to done, h',
       statsFilterFrom: 'From',
       statsFilterHoursValue: '{{hours}} h',
@@ -763,8 +761,6 @@ export default {
       statsFilterRangeOrder: 'The start date is after the end date',
       statsFilterRangeTooLong: 'A custom period can be at most {{days}} days long',
       statsFilterTo: 'To',
-      statsFiltersBoardOnly:
-        'This orchestrator cannot filter the Pipeline figures; they are for the whole board',
       statsGateFlaked: 'Flaky re-runs',
       statsGatePassRate: 'Test gate pass rate',
       statsGateRuns: 'Test gate stage runs',
@@ -777,6 +773,10 @@ export default {
       statsPeriod24h: 'Last 24 h',
       statsPeriod30d: 'Last 30 days',
       statsPeriod7d: 'Last 7 days',
+      statsPipelineCannotFilterCards:
+        'This orchestrator cannot keep the Pipeline figures to these cards; they are for the whole board',
+      statsPipelineCannotFilterDates:
+        'This orchestrator cannot keep the Pipeline figures to these dates; they are for the last 24 h, 7 days and 30 days',
       statsPipelineTitle: 'Pipeline',
       statsPipelineTitleFiltered: 'Pipeline, filtered: {{filters}}',
       statsPipelineUnavailable: 'This orchestrator keeps no pipeline statistics',
