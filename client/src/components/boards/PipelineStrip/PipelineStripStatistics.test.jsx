@@ -46,12 +46,17 @@ jest.mock('react-hot-toast', () => ({
 }));
 
 const mockUser = { id: 'user-1', name: 'Deniss', username: 'deniss' };
+const mockLabels = [
+  { id: '1001', name: 'bug', color: 'berry-red' },
+  { id: '1002', name: 'ui', color: 'lagoon-blue' },
+];
 
 jest.mock('../../../selectors', () => ({
   __esModule: true,
   default: {
     selectCurrentUser: () => mockUser,
     selectAccessToken: () => 'planka-token',
+    selectLabelsForCurrentBoard: () => mockLabels,
   },
 }));
 
@@ -127,11 +132,17 @@ const boardFlow = (key, side, index) => {
   };
 };
 
+const CREATORS = [
+  { key: 'den@setlfi.com', name: 'Deniss Locmelis', cards: 12 },
+  { key: 'planka-bot@setlfi.com', name: 'Orchestrator Bot', cards: 40 },
+];
+
 const boardStats = () => ({
   boardId: BOARD_ID,
   now: NOW,
   since: '2026-07-21T22:26:29Z',
   periods: periodsOf(boardFlow),
+  filterOptions: { creators: CREATORS },
 });
 
 const pipelineWindow = (key, side) => {
@@ -237,7 +248,12 @@ beforeEach(() => {
   fetchCalls = [];
   global.fetch = jest.fn((url, init) => {
     fetchCalls.push([url, init]);
-    return Promise.resolve(answers[url] ? answers[url]() : jsonResponse(404, {}));
+
+    // A filtered board-flow request is answered as the unfiltered one unless
+    // a test says otherwise.
+    const answer = answers[url] || (url.startsWith(`${PLANKA_URL}?`) && answers[PLANKA_URL]);
+
+    return Promise.resolve(answer ? answer() : jsonResponse(404, {}));
   });
 
   store = createStore((state) => state || {});
@@ -412,4 +428,264 @@ test('a board half that cannot be read says why, and the pipeline half still sho
   expect(panel().querySelector('[data-stats="board"]')).toBeNull();
   expect(panel().textContent).toContain('pipeline.statsFailed{"error":"database down"}');
   expect(panel().querySelector('[data-stats="pipeline"]')).not.toBeNull();
+});
+
+describe('Board flow filters', () => {
+  const FILTERS_KEY = `planka_pipelineStrip_statsFilters_${BOARD_ID}`;
+
+  // The board-flow requests, as the parameters each one carried.
+  const boardRequests = () =>
+    fetchCalls
+      .map(([url]) => url)
+      .filter((url) => url === PLANKA_URL || url.startsWith(`${PLANKA_URL}?`))
+      .map((url) => Object.fromEntries(new URLSearchParams(url.split('?')[1] || '')));
+
+  const lastBoardRequest = () => boardRequests()[boardRequests().length - 1];
+
+  const filter = (name) => panel().querySelector(`[data-filter="${name}"]`);
+
+  // Types into a box as a person does: React hears an input event.
+  const type = (input, value) => {
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  };
+
+  const pick = (name, text) => {
+    const option = [...filter(name).querySelectorAll('[role="option"]')].find((item) =>
+      item.textContent.includes(text),
+    );
+
+    click(option);
+  };
+
+  const waitForTypingToPause = async () => {
+    await act(async () => {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 450);
+      });
+    });
+    await flush();
+  };
+
+  const localDay = (year, month, day) => new Date(year, month - 1, day).toISOString();
+
+  test('every filter becomes a parameter of the board-flow request, and only that one', async () => {
+    await renderStrip();
+    await openStatistics();
+
+    // Nothing filtered: the request is exactly the unfiltered one.
+    expect(callsTo(PLANKA_URL)).toHaveLength(1);
+
+    pick('labelIds', 'bug');
+    pick('labelIds', 'ui');
+    await flush();
+    expect(lastBoardRequest()).toEqual({ labelIds: '1001,1002' });
+
+    // The creators are the ones the answer listed.
+    pick('creators', 'Deniss Locmelis');
+    await flush();
+    expect(lastBoardRequest()).toEqual({ labelIds: '1001,1002', creators: 'den@setlfi.com' });
+
+    // The keyword and number boxes wait for the typing to pause.
+    const asked = boardRequests().length;
+    type(filter('search'), 'log');
+    type(filter('search'), 'login');
+    type(filter('durationMinHours'), '1.5');
+    type(filter('durationMaxHours'), '48');
+    type(filter('costMin'), '1');
+    type(filter('costMax'), '12.5');
+    await flush();
+    expect(boardRequests()).toHaveLength(asked);
+
+    await waitForTypingToPause();
+    expect(boardRequests()).toHaveLength(asked + 1);
+    expect(lastBoardRequest()).toEqual({
+      labelIds: '1001,1002',
+      creators: 'den@setlfi.com',
+      search: 'login',
+      durationMin: '5400',
+      durationMax: '172800',
+      costMin: '1',
+      costMax: '12.5',
+    });
+
+    // Local days, the "to" day included whole.
+    type(filter('from'), '2026-09-01');
+    type(filter('to'), '2026-09-15');
+    await flush();
+    expect(lastBoardRequest()).toMatchObject({
+      from: localDay(2026, 9, 1),
+      to: localDay(2026, 9, 16),
+    });
+
+    // The orchestrator is never asked with a filter.
+    fetchCalls
+      .map(([url]) => url)
+      .filter((url) => url.startsWith('/_term/pipeline/stats'))
+      .forEach((url) => expect(url).toBe(STATS_URL));
+
+    // The heading says what is filtered, and the note says what is not.
+    const title = panel().querySelector('[data-stats-title]').textContent;
+    expect(title).toContain('pipeline.statsBoardTitleFiltered');
+    expect(title).toContain('bug, ui');
+    expect(title).toContain('Deniss Locmelis');
+    expect(title).toContain('pipeline.statsFilterQuoted{\\"text\\":\\"login\\"}');
+    expect(panel().querySelector('[data-filters-note]').textContent).toContain(
+      'pipeline.statsFiltersBoardOnly',
+    );
+  });
+
+  test('a date range makes Board flow one column, and the pipeline keeps its three', async () => {
+    const custom = {
+      key: 'custom',
+      seconds: 15 * 86400,
+      current: {
+        from: localDay(2026, 9, 1),
+        to: localDay(2026, 9, 16),
+        ...boardFlow('custom', 'current', 0),
+      },
+      previous: {
+        from: localDay(2026, 8, 17),
+        to: localDay(2026, 9, 1),
+        ...boardFlow('custom', 'previous', 0),
+      },
+    };
+
+    answers[PLANKA_URL] = () => jsonResponse(200, { item: boardStats() });
+
+    await renderStrip();
+    await openStatistics();
+
+    answers[
+      `${PLANKA_URL}?${new URLSearchParams({ from: localDay(2026, 9, 1), to: localDay(2026, 9, 16) })}`
+    ] = () => jsonResponse(200, { item: { ...boardStats(), periods: [custom] } });
+
+    type(filter('from'), '2026-09-01');
+    type(filter('to'), '2026-09-15');
+    await flush();
+    await flush();
+
+    const headers = (table) =>
+      [...panel().querySelectorAll(`[data-stats="${table}"] thead th`)].map((th) => th.textContent);
+
+    expect(headers('board')).toEqual(['', 'Sep 1 – Sep 15']);
+    expect(cell('board', 'completed', 0).text).toContain('12');
+    expect(cell('board', 'completed', 0).direction).toBe('up');
+    expect(headers('pipeline')).toEqual([
+      '',
+      'pipeline.statsPeriod24h',
+      'pipeline.statsPeriod7d',
+      'pipeline.statsPeriod30d',
+    ]);
+    expect(panel().querySelector('[data-stats-title]').textContent).toContain('Sep 1 – Sep 15');
+  });
+
+  test('a date range that cannot be asked for is said, and not sent', async () => {
+    await renderStrip();
+    await openStatistics();
+
+    type(filter('from'), '2026-09-15');
+    type(filter('to'), '2026-09-01');
+    await flush();
+
+    expect(panel().querySelector('[data-range-error="order"]')).not.toBeNull();
+    expect(lastBoardRequest()).toEqual({});
+
+    type(filter('from'), '2025-09-01');
+    type(filter('to'), '2026-09-15');
+    await flush();
+
+    expect(panel().querySelector('[data-range-error="length"]').textContent).toContain(
+      'pipeline.statsFilterRangeTooLong{"days":366}',
+    );
+    expect(lastBoardRequest()).toEqual({});
+  });
+
+  test('the filters are remembered for the board, and Clear forgets them', async () => {
+    localStorage.setItem(
+      FILTERS_KEY,
+      JSON.stringify({ labelIds: ['1002'], search: 'deploy', costMax: '5' }),
+    );
+    // Another board's filters are its own.
+    localStorage.setItem(
+      'planka_pipelineStrip_statsFilters_board-2',
+      JSON.stringify({ search: 'other board' }),
+    );
+
+    await renderStrip();
+    await openStatistics();
+
+    // The first request already carries them, and the inputs show them.
+    expect(boardRequests()).toEqual([{ labelIds: '1002', search: 'deploy', costMax: '5' }]);
+    expect(filter('search').value).toBe('deploy');
+    expect(filter('costMax').value).toBe('5');
+
+    click(panel().querySelector('[data-filter-clear]'));
+    await flush();
+
+    expect(lastBoardRequest()).toEqual({});
+    expect(filter('search').value).toBe('');
+    expect(localStorage.getItem(FILTERS_KEY)).toBeNull();
+    expect(panel().querySelector('[data-stats-title]').textContent).toBe(
+      'pipeline.statsBoardTitle',
+    );
+    expect(panel().querySelector('[data-filter-clear]').disabled).toBe(true);
+  });
+
+  test('a filter the server refuses shows why, not the figures asked without it', async () => {
+    await renderStrip();
+    await openStatistics();
+
+    expect(panel().querySelector('[data-stats="board"]')).not.toBeNull();
+
+    answers[`${PLANKA_URL}?labelIds=1001`] = () =>
+      jsonResponse(400, { code: 'E_INVALID_FILTER', message: 'labelIds must be label ids' });
+
+    pick('labelIds', 'bug');
+    await flush();
+    await flush();
+
+    expect(panel().querySelector('[data-stats="board"]')).toBeNull();
+    expect(panel().textContent).toContain(
+      'pipeline.statsFailed{"error":"labelIds must be label ids"}',
+    );
+  });
+
+  test('the one-minute refresh keeps asking with the filters', async () => {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify({ creators: ['den@setlfi.com'] }));
+    jest.useFakeTimers({ now: Date.parse(NOW) });
+
+    const settle = async () => {
+      await act(async () => {
+        for (let i = 0; i < 10; i += 1) {
+          await Promise.resolve(); // eslint-disable-line no-await-in-loop
+        }
+      });
+    };
+
+    act(() => {
+      root.render(
+        <Provider store={store}>
+          <PipelineStrip boardId={BOARD_ID} />
+        </Provider>,
+      );
+    });
+    await settle();
+    click(container.querySelector('[role="tab"][data-tab="statistics"]'));
+    await settle();
+
+    expect(boardRequests()).toEqual([{ creators: 'den@setlfi.com' }]);
+
+    await act(async () => {
+      jest.advanceTimersByTime(60000);
+    });
+    await settle();
+
+    expect(boardRequests()).toEqual([
+      { creators: 'den@setlfi.com' },
+      { creators: 'den@setlfi.com' },
+    ]);
+  });
 });

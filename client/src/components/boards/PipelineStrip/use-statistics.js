@@ -36,8 +36,10 @@ const settle = (promise) =>
 
 // The Statistics tab's figures: both halves are asked when the tab is shown,
 // then once a minute while it stays shown and the page is visible. A half that
-// fails keeps its last answer on screen rather than blanking it.
-export default (boardId, accessToken, active) => {
+// fails keeps its last answer on screen rather than blanking it. boardQuery is
+// the board-flow filters (statsFilterQuery): a change asks again at once, and
+// the minute's poll keeps asking with them.
+export default (boardId, accessToken, active, boardQuery = '') => {
   const [board, setBoard] = useState(initialHalf);
   const [pipeline, setPipeline] = useState(initialHalf);
 
@@ -45,6 +47,12 @@ export default (boardId, accessToken, active) => {
     setBoard(initialHalf);
     setPipeline(initialHalf);
   }, [boardId]);
+
+  // Figures asked with other filters are not these filters' figures: they are
+  // not kept on screen while the new ones are asked, nor after they fail.
+  useEffect(() => {
+    setBoard(initialHalf);
+  }, [boardQuery]);
 
   const keep = useCallback(
     (setter) => (next) => {
@@ -80,7 +88,7 @@ export default (boardId, accessToken, active) => {
       const signal = controller ? controller.signal : undefined;
 
       const [boardAnswer, pipelineAnswer] = await Promise.all([
-        settle(fetchBoardStatistics(boardId, accessToken, { signal })),
+        settle(fetchBoardStatistics(boardId, accessToken, { signal, query: boardQuery })),
         settle(fetchPipelineStats(boardId, { signal })),
       ]);
 
@@ -104,7 +112,7 @@ export default (boardId, accessToken, active) => {
         controller.abort();
       }
     };
-  }, [boardId, accessToken, active, keep]);
+  }, [boardId, accessToken, active, boardQuery, keep]);
 
   return { board, pipeline };
 };

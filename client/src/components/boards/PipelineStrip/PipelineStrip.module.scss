@@ -760,6 +760,51 @@ $phone: 600px;
     gap: 2px;
   }
 
+  // The Board flow filter bar: labels, keyword, creators, time to done, cost
+  // and dates, wrapping onto as many lines as the strip needs.
+  .statsFilterBlock {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .statsFilters {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+
+  .statsFilterGroup {
+    align-items: center;
+    display: inline-flex;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .statsFilterSearch,
+  .statsFilterNumber,
+  .statsFilterDate {
+    background: #fff;
+    border: 1px solid rgba(34, 36, 38, 0.15);
+    border-radius: 3px;
+    color: rgba(0, 0, 0, 0.87);
+    font: inherit;
+    padding: 4px 6px;
+  }
+
+  .statsFilterSearch {
+    min-width: 160px;
+  }
+
+  .statsFilterNumber {
+    width: 72px;
+  }
+
+  .statsFilterSelect {
+    min-width: 170px !important;
+  }
+
   @media (max-width: $narrow) {
     .row {
       grid-template-areas:

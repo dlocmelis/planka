@@ -19,6 +19,11 @@
 // column names, and a board that does not use them simply counts zero. The
 // names are compared trimmed and case-insensitively, as the orchestrator's
 // equalList does.
+//
+// A viewer may narrow the figures to some of the board's cards — by label,
+// keyword, creator, time to done and cost — and swap the three periods for
+// one of their own (parseFilters, matchCards below). Only the input changes:
+// the rules that count it are the ones above.
 
 const DAY_SECONDS = 24 * 60 * 60;
 
@@ -27,6 +32,9 @@ const PERIODS = [
   { key: '7d', seconds: 7 * DAY_SECONDS },
   { key: '30d', seconds: 30 * DAY_SECONDS },
 ];
+
+// The key of the one period a read over a custom from - to has.
+const CUSTOM_PERIOD_KEY = 'custom';
 
 // How far back a read must go: the longest period and the one before it.
 const REACH_SECONDS = 2 * PERIODS[PERIODS.length - 1].seconds;
@@ -212,15 +220,47 @@ const missingCreations = (actions) => {
   return [...completed].filter((cardId) => !created.has(cardId));
 };
 
-// actions: this board's createCard and moveCard actions since
-// now - REACH_SECONDS, any order. creations: older createCard actions of the
-// cards completed in that time (missingCreations). since: the board's oldest
-// action, when its history begins.
-const compute = ({ actions, creations = [], now, since = null }) => {
+// The periods a read counts: 24h, 7d and 30d back from now, or the one custom
+// period [from, to) a viewer picked, beside the period of the same length just
+// before it.
+const periodsOf = (nowMs, range) => {
+  if (range) {
+    const seconds = (range.toMs - range.fromMs) / 1000;
+
+    return [{ key: CUSTOM_PERIOD_KEY, seconds, endMs: range.toMs }];
+  }
+
+  return PERIODS.map(({ key, seconds }) => ({ key, seconds, endMs: nowMs }));
+};
+
+// When a read must start and end: two of its longest period back from its end.
+const reachOf = (now, range = null) => {
+  if (range) {
+    return {
+      from: new Date(2 * range.fromMs - range.toMs),
+      to: new Date(range.toMs),
+    };
+  }
+
+  return {
+    from: new Date(timeOf(now) - REACH_SECONDS * 1000),
+    to: null,
+  };
+};
+
+// actions: this board's createCard and moveCard actions over the read's reach
+// (reachOf), any order. creations: older createCard actions of the cards
+// completed in that time (missingCreations). since: the board's oldest
+// action, when its history begins. range: a custom period ({ fromMs, toMs },
+// parseFilters) in place of 24h, 7d and 30d. cardIds: when set, only actions
+// on these cards count (matchCards) — the counting rules themselves are the
+// same either way.
+const compute = ({ actions, creations = [], now, since = null, range = null, cardIds = null }) => {
   const nowMs = timeOf(now);
   const createdAtByCardId = new Map();
+  const counted = (action) => !cardIds || cardIds.has(String(action.cardId));
 
-  [...creations, ...actions].forEach((action) => {
+  [...creations, ...actions].filter(counted).forEach((action) => {
     if (action.type !== 'createCard') {
       return;
     }
@@ -234,6 +274,7 @@ const compute = ({ actions, creations = [], now, since = null }) => {
   });
 
   const facts = actions
+    .filter(counted)
     .map((action) => ({
       at: timeOf(action.createdAt),
       cardId: String(action.cardId),
@@ -247,23 +288,385 @@ const compute = ({ actions, creations = [], now, since = null }) => {
   return {
     now: new Date(nowMs).toISOString(),
     since: sinceMs === null ? null : new Date(sinceMs).toISOString(),
-    periods: PERIODS.map(({ key, seconds }) => {
+    periods: periodsOf(nowMs, range).map(({ key, seconds, endMs }) => {
       const span = seconds * 1000;
 
       return {
         key,
         seconds,
-        current: windowOf(facts, createdAtByCardId, nowMs - span, nowMs),
-        previous: windowOf(facts, createdAtByCardId, nowMs - 2 * span, nowMs - span),
+        current: windowOf(facts, createdAtByCardId, endMs - span, endMs),
+        previous: windowOf(facts, createdAtByCardId, endMs - 2 * span, endMs - span),
       };
     }),
   };
 };
 
+// ─── Filters ────────────────────────────────────────────────────────────────
+//
+// A viewer may narrow Board flow to some of the board's cards. The filters
+// only choose WHICH cards' actions compute() counts; how it counts them is
+// the same as without them. Different filters combine with AND; the values of
+// one filter (labels, creators) combine with OR, as Planka's own board filter
+// does.
+
+// The per-card field the orchestrator writes a card's spend into
+// (devteam-orchestrator, internal/board/board.go FieldEstCost), as text such
+// as "$1.97" — or "unpriced", which is no cost at all.
+const COST_FIELD_NAME = 'Est. Cost (USD)';
+
+const MAX_RANGE_SECONDS = 366 * DAY_SECONDS;
+const MAX_SEARCH_LENGTH = 256;
+const MAX_LIST_LENGTH = 100;
+
+const ID_REGEX = /^[0-9]+$/;
+const NUMBER_REGEX = /^\d+(\.\d+)?$/;
+// An ISO 8601 instant with its zone, as Date#toISOString writes it: a bare
+// date or a local time would be read in the SERVER's zone, not the viewer's.
+const INSTANT_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
+const listOf = (value) =>
+  (value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+class FilterError extends Error {}
+
+// The query of GET /api/boards/:id/pipeline-statistics, read into the filters
+// and the custom period. Every parameter is optional and a blank one is
+// unset; one that is set but not understood throws FilterError, so a typo is
+// a 400 rather than a quietly unfiltered answer.
+const parseFilters = (query = {}) => {
+  const filters = {};
+  const text = (name) => {
+    const value = query[name];
+
+    if (value === undefined || value === null) {
+      return '';
+    }
+
+    if (typeof value !== 'string') {
+      throw new FilterError(`${name} must be a string`);
+    }
+
+    return value.trim();
+  };
+
+  const labelIds = listOf(text('labelIds'));
+
+  if (labelIds.length > 0) {
+    if (labelIds.length > MAX_LIST_LENGTH || !labelIds.every((id) => ID_REGEX.test(id))) {
+      throw new FilterError('labelIds must be a comma-separated list of label ids');
+    }
+
+    filters.labelIds = labelIds;
+  }
+
+  const search = text('search');
+
+  if (search) {
+    if (search.length > MAX_SEARCH_LENGTH) {
+      throw new FilterError(`search must be at most ${MAX_SEARCH_LENGTH} characters`);
+    }
+
+    filters.search = search.toLowerCase();
+  }
+
+  const creators = listOf(text('creators'));
+
+  if (creators.length > 0) {
+    if (creators.length > MAX_LIST_LENGTH) {
+      throw new FilterError(`creators must list at most ${MAX_LIST_LENGTH} creators`);
+    }
+
+    filters.creators = creators.map((key) => key.toLowerCase());
+  }
+
+  const bounds = (minName, maxName, key) => {
+    const [min, max] = [minName, maxName].map((name) => {
+      const value = text(name);
+
+      if (!value) {
+        return null;
+      }
+
+      if (!NUMBER_REGEX.test(value)) {
+        throw new FilterError(`${name} must be a number of at least 0`);
+      }
+
+      return Number(value);
+    });
+
+    if (min !== null && max !== null && min > max) {
+      throw new FilterError(`${minName} must not be above ${maxName}`);
+    }
+
+    if (min !== null || max !== null) {
+      filters[key] = { min, max };
+    }
+  };
+
+  bounds('durationMin', 'durationMax', 'duration');
+  bounds('costMin', 'costMax', 'cost');
+
+  const [from, to] = ['from', 'to'].map(text);
+  let range = null;
+
+  if (from || to) {
+    if (!from || !to) {
+      throw new FilterError('from and to must be given together');
+    }
+
+    const [fromMs, toMs] = [from, to].map((value) =>
+      INSTANT_REGEX.test(value) ? Date.parse(value) : NaN,
+    );
+
+    if (Number.isNaN(fromMs) || Number.isNaN(toMs)) {
+      throw new FilterError('from and to must be ISO 8601 instants');
+    }
+
+    if (fromMs >= toMs) {
+      throw new FilterError('from must be before to');
+    }
+
+    if (toMs - fromMs > MAX_RANGE_SECONDS * 1000) {
+      throw new FilterError(
+        `the period from - to must be at most ${MAX_RANGE_SECONDS / DAY_SECONDS} days`,
+      );
+    }
+
+    range = { fromMs, toMs };
+  }
+
+  return { filters, range };
+};
+
+// Whether any filter narrows the cards (the custom period alone does not).
+const hasCardFilter = (filters) => Object.keys(filters || {}).length > 0;
+
+// The ticket's reporter, from the header the setl support feature writes at
+// the top of a card's description (setl, data/core/support/planka.go
+// CardHeader):
+//
+//     **Setlfi ticket**
+//
+//     Reporter: Deniss Locmelis den@setlfi.com
+//     ...
+//
+//     ---
+//
+// These are the rules of client/src/utils/setlfi-reporter.js
+// (parseReporterFromCardDescription), transcribed because the client's module
+// is not loadable here: the header must OPEN the description (either opener),
+// and the reporter line counts only above its closing rule, so a
+// "Reporter: ..." typed into the body — or into a spec pasted on a card —
+// names nobody. Returns { name, email } or null.
+const REPORTER_HEADER_OPENERS = ['**Setlfi ticket**', '--- Setlfi ---'];
+const REPORTER_LINE_PREFIX = 'Reporter:';
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const isHeaderRule = (trimmed) => trimmed.length >= 3 && trimmed.replace(/-/g, '') === '';
+
+const parseReporter = (description) => {
+  if (typeof description !== 'string') {
+    return null;
+  }
+
+  const trimmed = description.replace(/^\s+/, '');
+
+  if (!REPORTER_HEADER_OPENERS.some((opener) => trimmed.startsWith(opener))) {
+    return null;
+  }
+
+  const lines = trimmed.split('\n');
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const line = lines[i].trim();
+
+    if (isHeaderRule(line)) {
+      return null;
+    }
+
+    if (line.startsWith(REPORTER_LINE_PREFIX)) {
+      // A Markdown editor may have turned the address into a mailto link:
+      // `[a@b.c](mailto:a@b.c)` reads as `a@b.c`, `<a@b.c>` likewise.
+      const rest = line
+        .slice(REPORTER_LINE_PREFIX.length)
+        .replace(/\[([^\]]*)\]\(mailto:[^)]*\)/g, '$1')
+        .replace(/<([^>\s]+@[^>\s]+)>/g, '$1')
+        .trim();
+
+      if (!rest) {
+        return null;
+      }
+
+      const parts = rest.split(/\s+/);
+      const last = parts[parts.length - 1];
+      const email = EMAIL_REGEX.test(last) ? last : '';
+      const name = (email ? parts.slice(0, -1).join(' ') : rest).trim();
+
+      return { name: name || email, email };
+    }
+  }
+
+  return null;
+};
+
+// Who a card is by: its reporter when the description names one, otherwise
+// the Planka user who created it. People are keyed by their address,
+// lowercased, so the same address under several names — "Deniss Locmelis",
+// "Den Loc" — is one person, and a reporter who is also the Planka user who
+// created other cards is that one person too. A reporter with no address is
+// keyed by name; a user with none by id. null when nobody is known (the
+// creating user was deleted).
+const creatorOf = (card, user) => {
+  const reporter = parseReporter(card.description);
+
+  if (reporter) {
+    return reporter.email
+      ? { key: reporter.email.toLowerCase(), name: reporter.name }
+      : { key: `name:${reporter.name.toLowerCase()}`, name: reporter.name };
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  const name = user.name || user.username || user.email || String(user.id);
+
+  return user.email ? { key: user.email.toLowerCase(), name } : { key: `user:${user.id}`, name };
+};
+
+// The creators on the board, for the filter's dropdown: each with the name
+// most of their cards carry, busiest first.
+const creatorOptions = (creators) => {
+  const byKey = new Map();
+
+  creators.filter(Boolean).forEach(({ key, name }) => {
+    if (!byKey.has(key)) {
+      byKey.set(key, { key, cards: 0, names: new Map() });
+    }
+
+    const entry = byKey.get(key);
+
+    entry.cards += 1;
+    entry.names.set(name, (entry.names.get(name) || 0) + 1);
+  });
+
+  return [...byKey.values()]
+    .map(({ key, cards, names }) => {
+      const [name] = [...names.entries()].sort(
+        ([a, aCount], [b, bCount]) => bCount - aCount || a.localeCompare(b),
+      )[0];
+
+      return { key, name, cards };
+    })
+    .sort((a, b) => b.cards - a.cards || a.name.localeCompare(b.name));
+};
+
+// The dollars in the cost field's text: "$1.97" is 1.97, "$1,234.50" is
+// 1234.5; "unpriced", a blank or anything without a number is null.
+const parseCost = (content) => {
+  if (typeof content !== 'string') {
+    return null;
+  }
+
+  const match = content.replace(/,/g, '').match(/\d+(\.\d+)?/);
+
+  return match ? Number(match[0]) : null;
+};
+
+// Seconds from each card entering the board to its FIRST completion — the
+// measure of the median row (windowOf), over a card's whole history rather
+// than one window. A card whose creation the history does not hold has no
+// known start and gets no figure, as it is left out of the median. actions:
+// the cards' createCard and moveCard actions, any order.
+const secondsToDoneByCardId = (actions) => {
+  const createdAt = new Map();
+  const firstDoneAt = new Map();
+
+  actions.forEach((action) => {
+    const at = timeOf(action.createdAt);
+    const cardId = String(action.cardId);
+
+    if (at === null) {
+      return;
+    }
+
+    let times = null;
+
+    if (action.type === 'createCard') {
+      times = createdAt;
+    } else if (classify(action).completed) {
+      times = firstDoneAt;
+    }
+
+    if (times && (!times.has(cardId) || at < times.get(cardId))) {
+      times.set(cardId, at);
+    }
+  });
+
+  const seconds = new Map();
+
+  firstDoneAt.forEach((doneAt, cardId) => {
+    const startAt = createdAt.get(cardId);
+
+    if (startAt !== undefined && startAt <= doneAt) {
+      seconds.set(cardId, (doneAt - startAt) / 1000);
+    }
+  });
+
+  return seconds;
+};
+
+const within = (value, { min, max }) =>
+  value !== null &&
+  value !== undefined &&
+  (min === null || value >= min) &&
+  (max === null || value <= max);
+
+// The ids of the cards that pass every filter. cards: the board's cards as
+// { id, name, description, labelIds, creator (creatorOf), costUsd (parseCost),
+// secondsToDone }; a figure a filter is not set for may be left out.
+const matchCards = (cards, filters) => {
+  const { labelIds, search, creators, duration, cost } = filters;
+  const labelIdSet = labelIds && new Set(labelIds.map(String));
+  const creatorSet = creators && new Set(creators);
+
+  return new Set(
+    cards
+      .filter(
+        (card) =>
+          (!labelIdSet || (card.labelIds || []).some((id) => labelIdSet.has(String(id)))) &&
+          (!search ||
+            [card.name, card.description].some(
+              (value) => typeof value === 'string' && value.toLowerCase().includes(search),
+            )) &&
+          (!creatorSet || (!!card.creator && creatorSet.has(card.creator.key))) &&
+          (!duration || within(card.secondsToDone, duration)) &&
+          (!cost || within(card.costUsd, cost)),
+      )
+      .map((card) => String(card.id)),
+  );
+};
+
 module.exports = {
+  COST_FIELD_NAME,
+  CUSTOM_PERIOD_KEY,
+  FilterError,
+  MAX_RANGE_SECONDS,
   PERIODS,
   REACH_SECONDS,
   classify,
   compute,
+  creatorOf,
+  creatorOptions,
+  hasCardFilter,
+  matchCards,
   missingCreations,
+  parseCost,
+  parseFilters,
+  parseReporter,
+  reachOf,
+  secondsToDoneByCardId,
 };

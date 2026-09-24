@@ -465,6 +465,16 @@ export const usageLevel = (window) => {
 // {periods: [{key, seconds, current, previous}]} in this order.
 export const STATS_PERIODS = ['24h', '7d', '30d'];
 
+// The one period Planka answers in their place when the viewer picks dates.
+export const STATS_CUSTOM_PERIOD = 'custom';
+
+// The period keys a statistics answer holds, in its order: the three above,
+// or the custom period alone.
+export const statsPeriodKeys = (stats) =>
+  stats && stats.periods && stats.periods.length > 0
+    ? stats.periods.map((period) => period.key)
+    : STATS_PERIODS;
+
 // The statistics poll: they are read over two months of history and move by
 // the minute at most.
 export const STATS_POLL_MS = 60000;
@@ -536,7 +546,7 @@ export const deltaTone = (direction, better) => {
 // the history covers every period shown, the 30 days before the last 30
 // included.
 export const historyStartsInside = (since, stats) => {
-  const month = statsPeriod(stats, '30d');
+  const month = statsPeriod(stats, '30d') || statsPeriod(stats, STATS_CUSTOM_PERIOD);
 
   if (!since || !month) {
     return null;
@@ -606,3 +616,196 @@ export const formatUsd = (value, locale) =>
     maximumFractionDigits: 2,
     minimumFractionDigits: 2,
   }).format(Number(value) || 0);
+
+// ─── Board flow filters ─────────────────────────────────────────────────────
+//
+// The Statistics tab can narrow Board flow to some of the board's cards and
+// swap its three periods for dates of the viewer's own; Planka does the
+// narrowing (GET /api/boards/:id/pipeline-statistics, whose parameters are
+// read by parseFilters in server/utils/pipeline-statistics.js). The filters
+// are kept as the inputs hold them — hours, dollars and local days as typed
+// — and turned into the request's parameters by statsFilterQuery.
+
+export const EMPTY_STATS_FILTERS = {
+  labelIds: [],
+  search: '',
+  creators: [],
+  durationMinHours: '',
+  durationMaxHours: '',
+  costMin: '',
+  costMax: '',
+  from: '',
+  to: '',
+};
+
+// The server refuses a custom period longer than this.
+export const STATS_MAX_RANGE_DAYS = 366;
+
+// How long the keyword and number boxes wait for typing to pause before they
+// ask.
+export const STATS_FILTER_DEBOUNCE_MS = 400;
+
+const STATS_FILTERS_KEY_PREFIX = 'planka_pipelineStrip_statsFilters_';
+
+const DAY_REGEX = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+const stringList = (value) =>
+  Array.isArray(value) ? value.filter((item) => typeof item === 'string' && item) : [];
+
+// Whatever was stored, as filters: an unknown or damaged value is dropped
+// rather than trusted.
+export const normalizeStatsFilters = (value) => {
+  const source = value && typeof value === 'object' ? value : {};
+
+  return Object.keys(EMPTY_STATS_FILTERS).reduce(
+    (filters, key) => ({
+      ...filters,
+      [key]: Array.isArray(EMPTY_STATS_FILTERS[key])
+        ? stringList(source[key])
+        : (typeof source[key] === 'string' && source[key]) || '',
+    }),
+    {},
+  );
+};
+
+// The start of a local day ("2026-09-01", as a date input holds it), or null.
+const localDayStart = (day, offsetDays = 0) => {
+  const match = DAY_REGEX.exec(day || '');
+
+  if (!match) {
+    return null;
+  }
+
+  const at = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + offsetDays);
+
+  return Number.isNaN(at.getTime()) ? null : at;
+};
+
+// The custom period the date inputs pick: from the start of the "from" day to
+// the end of the "to" day, which it includes — [from, day after to). null
+// when neither is set; { error } when it cannot be asked for.
+export const statsRange = (filters) => {
+  if (!filters.from && !filters.to) {
+    return null;
+  }
+
+  const from = localDayStart(filters.from);
+  const to = localDayStart(filters.to, 1);
+
+  if (!from || !to) {
+    return { error: 'incomplete' };
+  }
+
+  if (from.getTime() >= to.getTime()) {
+    return { error: 'order' };
+  }
+
+  // Counted in calendar days, so a clock change inside the period does not
+  // push a 366-day pick an hour over the server's cap.
+  const [fromDay, toDay] = [from, to].map((at) =>
+    Date.UTC(at.getFullYear(), at.getMonth(), at.getDate()),
+  );
+
+  if ((toDay - fromDay) / 86400000 > STATS_MAX_RANGE_DAYS) {
+    return { error: 'length' };
+  }
+
+  return { from: from.toISOString(), to: to.toISOString() };
+};
+
+// A number box's value, or null when it is blank or not a number of at least
+// zero (a number input hands over '' for what it cannot read).
+const bound = (value) => {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return null;
+  }
+
+  const number = Number(value);
+
+  return Number.isFinite(number) && number >= 0 ? number : null;
+};
+
+// The query string of the board-flow request, without its "?": empty when
+// nothing is filtered, so the request is exactly the unfiltered one. A date
+// range that cannot be asked for (statsRange's error) is left out; the tab
+// says why.
+export const statsFilterQuery = (filters) => {
+  const params = new URLSearchParams();
+
+  if (filters.labelIds.length > 0) {
+    params.set('labelIds', filters.labelIds.join(','));
+  }
+
+  if (filters.search.trim()) {
+    params.set('search', filters.search.trim());
+  }
+
+  if (filters.creators.length > 0) {
+    params.set('creators', filters.creators.join(','));
+  }
+
+  [
+    ['durationMin', bound(filters.durationMinHours), 3600],
+    ['durationMax', bound(filters.durationMaxHours), 3600],
+    ['costMin', bound(filters.costMin), 1],
+    ['costMax', bound(filters.costMax), 1],
+  ].forEach(([name, value, scale]) => {
+    if (value !== null) {
+      params.set(name, String(Math.round(value * scale * 100) / 100));
+    }
+  });
+
+  const range = statsRange(filters);
+
+  if (range && !range.error) {
+    params.set('from', range.from);
+    params.set('to', range.to);
+  }
+
+  return params.toString();
+};
+
+export const hasStatsFilters = (filters) =>
+  Object.keys(EMPTY_STATS_FILTERS).some((key) =>
+    Array.isArray(filters[key]) ? filters[key].length > 0 : !!String(filters[key]).trim(),
+  );
+
+// The filters are remembered per board, in this browser.
+export const readStatsFilters = (boardId) => {
+  try {
+    const value = localStorage.getItem(`${STATS_FILTERS_KEY_PREFIX}${boardId}`);
+
+    return value ? normalizeStatsFilters(JSON.parse(value)) : EMPTY_STATS_FILTERS;
+  } catch {
+    return EMPTY_STATS_FILTERS;
+  }
+};
+
+export const writeStatsFilters = (boardId, filters) => {
+  try {
+    const key = `${STATS_FILTERS_KEY_PREFIX}${boardId}`;
+
+    if (hasStatsFilters(filters)) {
+      localStorage.setItem(key, JSON.stringify(filters));
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Storage disabled: the filters last for this page only.
+  }
+};
+
+// A custom period as its column says it: "1 Sep – 15 Sep", the last day the
+// one it includes (the period ends at the start of the day after).
+export const formatStatsRange = (period, locale) => {
+  if (!period || !period.current) {
+    return '';
+  }
+
+  const toMs = Date.parse(period.current.to);
+
+  return `${formatDay(period.current.from, locale)} – ${formatDay(
+    Number.isNaN(toMs) ? '' : new Date(toMs - 1).toISOString(),
+    locale,
+  )}`;
+};
