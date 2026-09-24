@@ -6,12 +6,7 @@
 import { createSelector } from 'redux-orm';
 
 import orm from '../orm';
-import {
-  selectIsFavoritesEnabled,
-  selectIsHiddenProjectsVisible,
-  selectProjectsOrder,
-  selectProjectsSearch,
-} from './core';
+import { selectIsHiddenProjectsVisible, selectProjectsOrder, selectProjectsSearch } from './core';
 import { isLocalId } from '../utils/local-id';
 import { isUserAdminOrProjectOwner } from '../utils/record-helpers';
 import { STATIC_USER_BY_ID } from '../constants/StaticUsers';
@@ -321,26 +316,6 @@ export const selectNotificationServiceIdsForCurrentUser = createSelector(
   },
 );
 
-export const selectIsFavoritesActiveForCurrentUser = createSelector(
-  orm,
-  (state) => selectCurrentUserId(state),
-  (state) => selectIsFavoritesEnabled(state),
-  ({ User }, id, isFavoritesEnabled) => {
-    if (!id) {
-      return false;
-    }
-
-    const userModel = User.withId(id);
-
-    if (!userModel) {
-      return false;
-    }
-
-    // TODO: use selectFavoriteProjectIdsForCurrentUser instead
-    return isFavoritesEnabled && userModel.getFavoriteProjectsModelArray().length > 0;
-  },
-);
-
 export default {
   makeSelectUserById,
   selectUserById,
@@ -359,5 +334,4 @@ export default {
   selectBoardIdsForCurrentUser,
   selectNotificationIdsForCurrentUser,
   selectNotificationServiceIdsForCurrentUser,
-  selectIsFavoritesActiveForCurrentUser,
 };

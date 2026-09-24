@@ -32,9 +32,12 @@ const Header = React.memo(() => {
   const isFavoritesEnabled = useSelector(selectors.selectIsFavoritesEnabled);
   const isEditModeEnabled = useSelector(selectors.selectIsEditModeEnabled);
 
+  // The favorites bar is only shown on the home page, so the toggler is too
   const withFavoritesToggler = useSelector(
     // TODO: use selector instead?
-    (state) => selectors.selectFavoriteProjectIdsForCurrentUser(state).length > 0,
+    (state) =>
+      selectors.selectPath(state).projectId === undefined &&
+      selectors.selectFavoriteProjectIdsForCurrentUser(state).length > 0,
   );
 
   const { withEditModeToggler, canEditProject } = useSelector((state) => {
