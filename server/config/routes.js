@@ -229,6 +229,7 @@ module.exports.routes = {
   'POST /api/cards/:cardId/voice/speech': 'voice/speak',
 
   'GET /api/boards/:boardId/actions': 'actions/index-in-board',
+  'GET /api/boards/:id/pipeline-statistics': 'boards/show-pipeline-statistics',
   'GET /api/cards/:cardId/actions': 'actions/index-in-card',
 
   'GET /api/notifications': 'notifications/index',
