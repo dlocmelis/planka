@@ -236,6 +236,54 @@ describe('expanded', () => {
     expect(container.textContent).toContain('pipeline.queueTitle');
   });
 
+  test('Build: draws the threads, held card, drain and queue from the keys the orchestrator sends', async () => {
+    await renderStrip();
+
+    // The overflow thread runs a job, so it counts as busy by its jobId
+    // whatever its state; the limited one does not.
+    expect(chipText('threads')).toBe('pipeline.threadsBusy{"busy":2,"total":3}');
+    expect(chipText('queue')).toBe('pipeline.queueCount{"count":3}');
+    expect(chipText('paused')).toBe('⏸ pipeline.pausedCount{"count":1}');
+    expect(chipText('draining')).toBe('pipeline.draining');
+
+    const busy = container.querySelector('[data-thread="CA1"]');
+    expect(busy.textContent).toContain('Threaded ticket');
+    expect(busy.textContent).toContain('37%');
+    expect(busy.textContent).toContain('3/8');
+    expect(busy.textContent).toContain('In Development · Dev');
+    // stageStart is an hour before the answer's now, pipelineStart three.
+    expect(busy.textContent).toContain(dur(1, 'h', 0, 'm'));
+    expect(busy.textContent).toContain(dur(3, 'h', 0, 'm'));
+    expect(busy.className).toContain('threadPaused');
+
+    const overflow = container.querySelector('[data-thread="CA2"]');
+    expect(overflow).not.toBeNull();
+    expect(overflow.textContent).toContain('Question ticket');
+    expect(container.querySelector('[data-thread="CB1"]')).toBeNull();
+
+    expect(container.querySelector('[data-paused-row]').textContent).toContain(
+      `alice · ${dur(10, 'm', 0, 's')}`,
+    );
+    expect(container.querySelector('[data-drain-status]').textContent).toContain(
+      `pipeline.drainingSince{"actor":"deniss","age":"${dur(30, 'm', 0, 's')}"}`,
+    );
+
+    const toggle = [...container.querySelectorAll('button[aria-expanded]')].find((button) =>
+      button.textContent.includes('pipeline.queueTitle'),
+    );
+    if (toggle.getAttribute('aria-expanded') !== 'true') {
+      click(toggle);
+    }
+    const jobs = [...container.querySelectorAll('[data-job]')];
+    expect(jobs.map((job) => job.getAttribute('data-job'))).toEqual([
+      'job-q-1',
+      'job-q-p',
+      'job-q-2',
+    ]);
+    expect(jobs[0].textContent).toContain('Very High');
+    expect(jobs[2].textContent).toContain(dur(25, 'm', 0, 's'));
+  });
+
   test('remembers the last tab opened, across a reload', async () => {
     await renderStrip();
     await openTab('deployment');
