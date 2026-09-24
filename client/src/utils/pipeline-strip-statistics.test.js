@@ -22,6 +22,7 @@ import {
   statsFilterQuery,
   statsPeriod,
   statsRange,
+  statsRangeQuery,
   withBoardLabels,
 } from './pipeline-strip';
 
@@ -179,6 +180,41 @@ describe('what the Pipeline half follows', () => {
         'labelIds=1001%2C1002&search=login&from=2026-09-01T00%3A00%3A00.000Z&to=x',
       ),
     ).toBe('labelIds=1001%2C1002&search=login');
+  });
+
+  test('the dates of a board-flow query, as they are, without its card filters', () => {
+    const from = '2026-08-31T21:00:00.000Z';
+    const to = '2026-09-15T21:00:00.000Z';
+
+    expect(statsRangeQuery('')).toBe('');
+    expect(statsRangeQuery(undefined)).toBe('');
+    expect(statsRangeQuery('labelIds=1001&search=login')).toBe('');
+    expect(
+      new URLSearchParams(
+        statsRangeQuery(`labelIds=1001&${new URLSearchParams({ from, to })}&costMax=5`),
+      ).toString(),
+    ).toBe(new URLSearchParams({ from, to }).toString());
+    // Half a range is no range: statsFilterQuery never writes one, and the
+    // orchestrator would refuse it.
+    expect(statsRangeQuery(`from=${encodeURIComponent(from)}`)).toBe('');
+  });
+
+  test('session kinds of a custom period are ordered by its own sessions', () => {
+    const custom = {
+      periods: [
+        {
+          key: 'custom',
+          current: statsWindow([
+            { kind: 'build', sessions: 3, failed: 0, spendUsd: 1 },
+            { kind: 'review', sessions: 9, failed: 1, spendUsd: 20 },
+          ]),
+          previous: statsWindow([{ kind: 'deploy', sessions: 50, failed: 0, spendUsd: 1 }]),
+        },
+      ],
+    };
+
+    // Not alphabetical, and not by the previous window.
+    expect(sessionKinds(custom)).toEqual(['review', 'build', 'deploy']);
   });
 
   test('a stored label that is not the board any more is dropped', () => {
