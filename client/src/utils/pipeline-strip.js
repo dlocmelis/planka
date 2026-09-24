@@ -465,7 +465,8 @@ export const usageLevel = (window) => {
 // {periods: [{key, seconds, current, previous}]} in this order.
 export const STATS_PERIODS = ['24h', '7d', '30d'];
 
-// The one period Planka answers in their place when the viewer picks dates.
+// The one period both halves answer in their place when the viewer picks
+// dates (Planka for Board flow, the orchestrator for the pipeline half).
 export const STATS_CUSTOM_PERIOD = 'custom';
 
 // The period keys a statistics answer holds, in its order: the three above,
@@ -563,7 +564,8 @@ export const historyStartsInside = (since, stats) => {
 };
 
 // The kinds of agent session any period saw, busiest over the last 30 days
-// first, so every row of the table lines up across the periods.
+// (or the custom period) first, so every row of the table lines up across the
+// periods.
 export const sessionKinds = (stats) => {
   const totals = {};
 
@@ -575,7 +577,7 @@ export const sessionKinds = (stats) => {
     });
   });
 
-  const month = statsPeriod(stats, '30d');
+  const month = statsPeriod(stats, '30d') || statsPeriod(stats, STATS_CUSTOM_PERIOD);
 
   if (month) {
     (month.current.sessions || []).forEach(({ kind, sessions }) => {
@@ -766,9 +768,8 @@ export const statsFilterQuery = (filters) => {
 };
 
 // The part of a board-flow query (statsFilterQuery) that narrows the CARDS —
-// everything but the custom period — or '' when it does not. It is what the
-// pipeline half follows: the orchestrator's figures are kept to the cards
-// Board flow matched, but have no dates of their own to swap.
+// everything but the custom period — or '' when it does not. The pipeline
+// half follows it through the cards Board flow matched (its answer's cardIds).
 export const statsCardFilterQuery = (query) => {
   const params = new URLSearchParams(query || '');
 
@@ -776,6 +777,22 @@ export const statsCardFilterQuery = (query) => {
   params.delete('to');
 
   return params.toString();
+};
+
+// The custom period of a board-flow query (statsFilterQuery) — its from and
+// to, as they are — or '' when it has none. The pipeline half is asked for the
+// same period (the orchestrator's GET /_term/pipeline/stats takes the same
+// from and to), so both halves count the same days.
+export const statsRangeQuery = (query) => {
+  const params = new URLSearchParams(query || '');
+  const range = new URLSearchParams();
+
+  if (params.has('from') && params.has('to')) {
+    range.set('from', params.get('from'));
+    range.set('to', params.get('to'));
+  }
+
+  return range.toString();
 };
 
 // The filters without the labels that are not the board's any more: a label

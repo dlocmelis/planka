@@ -653,8 +653,6 @@ export default {
       statsFilterCreatorOption: '{{name}} ({{cards}})',
       statsFilterCreators: 'Авторы',
       statsFilterDates: 'Даты',
-      statsFilterDatesBoardOnly:
-        'Даты применяются только к потоку доски; показатели конвейера — за последние 24 ч, 7 и 30 дней',
       statsFilterDuration: 'Время до готовности, ч',
       statsFilterFrom: 'С',
       statsFilterHoursValue: '{{hours}} ч',
@@ -668,8 +666,6 @@ export default {
       statsFilterRangeOrder: 'Начальная дата позже конечной',
       statsFilterRangeTooLong: 'Свой период может быть не длиннее {{days}} дней',
       statsFilterTo: 'По',
-      statsFiltersBoardOnly:
-        'Этот оркестратор не умеет фильтровать показатели конвейера; они — по всей доске',
       statsGateFlaked: 'Нестабильных перезапусков',
       statsGatePassRate: 'Доля успешных прогонов тестов',
       statsGateRuns: 'Прогонов стадий тестов',
@@ -682,6 +678,10 @@ export default {
       statsPeriod24h: 'За 24 ч',
       statsPeriod30d: 'За 30 дней',
       statsPeriod7d: 'За 7 дней',
+      statsPipelineCannotFilterCards:
+        'Этот оркестратор не умеет ограничивать показатели конвейера этими карточками; они — по всей доске',
+      statsPipelineCannotFilterDates:
+        'Этот оркестратор не умеет ограничивать показатели конвейера этими датами; они — за последние 24 ч, 7 и 30 дней',
       statsPipelineTitle: 'Конвейер',
       statsPipelineTitleFiltered: 'Конвейер, фильтр: {{filters}}',
       statsPipelineUnavailable: 'Этот оркестратор не ведёт статистику конвейера',

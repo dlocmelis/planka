@@ -163,11 +163,13 @@ const getJson = async (url, { headers, signal } = {}) => {
 
 // The pipeline half: gate, deploy and session statistics from the
 // orchestrator (GET /_term/pipeline/stats), under the strip's own sign-in.
-export const fetchPipelineStats = async (boardId, { signal, cards } = {}) => {
+// `cards` keeps the figures to those cards (comma-separated ids), `range` is
+// a custom period as statsRangeQuery writes it ('from=…&to=…').
+export const fetchPipelineStats = async (boardId, { signal, cards, range } = {}) => {
   const body = await getJson(
     `${PIPELINE_PATH}/stats?board=${encodeURIComponent(boardId)}${
       cards === undefined ? '' : `&cards=${encodeURIComponent(cards)}`
-    }`,
+    }${range ? `&${range}` : ''}`,
     {
       signal,
     },

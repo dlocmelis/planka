@@ -6,7 +6,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { fetchBoardStatistics, fetchPipelineStats } from './api';
-import { STATS_POLL_MS, statsCardFilterQuery } from '../../../utils/pipeline-strip';
+import {
+  STATS_POLL_MS,
+  statsCardFilterQuery,
+  statsRangeQuery,
+} from '../../../utils/pipeline-strip';
 
 // One half of the Statistics tab: its figures, or why there are none.
 //   loading     — not answered yet
@@ -94,25 +98,44 @@ const usePoll = (active, ask, onAnswer) => {
 
 // The Statistics tab's figures: each half is asked when the tab is shown, then
 // once a minute while it stays shown and the page is visible, and each on its
-// own — a filter change asks Board flow again without asking the pipeline
-// half again unless its cards changed.
+// own — a filter change asks the pipeline half again only when what it
+// answers depends on that filter.
 //
-// boardQuery is the board-flow filters (statsFilterQuery). A card filter in
-// it narrows the pipeline half too: Planka answers the ids of the cards it
-// matched (cardIds), and the orchestrator is asked for those cards' figures —
-// so, with a card filter, the pipeline half waits for Board flow's answer. A
-// custom period alone leaves the pipeline half as it is: it has no dates of
-// its own to swap. A Planka answer without cardIds (one that predates them)
-// leaves the pipeline half the whole board's.
+// boardQuery is the board-flow filters (statsFilterQuery), and the pipeline
+// half follows all of them. A card filter narrows it through the cards Board
+// flow matched: Planka answers their ids (cardIds), and the orchestrator is
+// asked for those cards' figures — so, with a card filter, the pipeline half
+// waits for Board flow's answer to the very same filters, dates included (a
+// time-to-done filter matches the cards seen in the period read). A custom
+// period is sent to the orchestrator as it is (statsRangeQuery), which then
+// answers the same one period Board flow does. A Planka answer without
+// cardIds (one that predates them) leaves the pipeline half the whole
+// board's; an orchestrator that predates the dates answers its three periods,
+// and the tab says so.
 export default (boardId, accessToken, active, boardQuery = '') => {
   const [board, setBoard] = useState(initialHalf);
   const [pipeline, setPipeline] = useState(initialHalf);
 
   const cardQuery = useMemo(() => statsCardFilterQuery(boardQuery), [boardQuery]);
+  const range = useMemo(() => statsRangeQuery(boardQuery), [boardQuery]);
+
+  // What the pipeline half's answer depends on: with a card filter, every
+  // filter (the cards come from Board flow's answer to all of them); without
+  // one, only the dates.
+  const pipelineQuery = cardQuery ? boardQuery : range;
+
+  // The cards Board flow matched, with the filters it matched them for.
+  const [matched, setMatched] = useState(null);
 
   // The cards the pipeline half counts, as the `cards` parameter: null for
-  // every card, undefined while Board flow has not said which.
-  const [cards, setCards] = useState(() => (cardQuery ? undefined : null));
+  // every card, undefined while Board flow has not said which for THESE
+  // filters — never the cards of the filters before, which a change of dates
+  // alone would otherwise send with the new dates.
+  let cards = null;
+
+  if (cardQuery) {
+    cards = matched && matched.query === boardQuery ? matched.cards : undefined;
+  }
 
   useEffect(() => {
     setBoard(initialHalf);
@@ -127,8 +150,7 @@ export default (boardId, accessToken, active, boardQuery = '') => {
 
   useEffect(() => {
     setPipeline(initialHalf);
-    setCards(cardQuery ? undefined : null);
-  }, [cardQuery]);
+  }, [pipelineQuery]);
 
   // Which cards Board flow's answer to THESE filters matched — an answer to
   // the filters before is not it — or undefined while there is none.
@@ -138,9 +160,9 @@ export default (boardId, accessToken, active, boardQuery = '') => {
 
   useEffect(() => {
     if (cardQuery && answered) {
-      setCards(answeredCards);
+      setMatched({ query: boardQuery, cards: answeredCards });
     }
-  }, [cardQuery, answered, answeredCards]);
+  }, [cardQuery, boardQuery, answered, answeredCards]);
 
   const askBoard = useCallback(
     (signal) => fetchBoardStatistics(boardId, accessToken, { signal, query: boardQuery }),
@@ -148,8 +170,9 @@ export default (boardId, accessToken, active, boardQuery = '') => {
   );
 
   const askPipeline = useCallback(
-    (signal) => fetchPipelineStats(boardId, { signal, cards: cards === null ? undefined : cards }),
-    [boardId, cards],
+    (signal) =>
+      fetchPipelineStats(boardId, { signal, cards: cards === null ? undefined : cards, range }),
+    [boardId, cards, range],
   );
 
   // Each answer is marked with the filters it answered.
