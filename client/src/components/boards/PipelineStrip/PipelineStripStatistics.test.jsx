@@ -256,9 +256,13 @@ beforeEach(() => {
   global.fetch = jest.fn((url, init) => {
     fetchCalls.push([url, init]);
 
-    // A filtered board-flow request is answered as the unfiltered one unless
-    // a test says otherwise.
-    const answer = answers[url] || (url.startsWith(`${PLANKA_URL}?`) && answers[PLANKA_URL]);
+    // A filtered request is answered as the unfiltered one unless a test says
+    // otherwise — for the orchestrator, as one that predates the parameters
+    // does: its whole-board figures for 24h, 7d and 30d.
+    const answer =
+      answers[url] ||
+      (url.startsWith(`${PLANKA_URL}?`) && answers[PLANKA_URL]) ||
+      (url.startsWith(`${STATS_URL}&`) && answers[STATS_URL]);
 
     return Promise.resolve(answer ? answer() : jsonResponse(404, {}));
   });
@@ -496,6 +500,29 @@ describe('Board flow filters', () => {
 
   const localDay = (year, month, day) => new Date(year, month - 1, day).toISOString();
 
+  // 1 Sep – 15 Sep as the tab sends it: local days, the 15th included whole.
+  const SEPT = { from: localDay(2026, 9, 1), to: localDay(2026, 9, 16) };
+
+  // A custom period of 1 Sep – 15 Sep, with `make`'s figures (boardFlow or
+  // pipelineWindow) — for the pipeline, its 7d figures, stages included.
+  const septemberOf = (make, figuresKey = 'custom') => ({
+    key: 'custom',
+    seconds: 15 * 86400,
+    current: { ...SEPT, ...make(figuresKey, 'current', 0) },
+    previous: { from: localDay(2026, 8, 17), to: SEPT.from, ...make(figuresKey, 'previous', 0) },
+  });
+
+  const headers = (table) =>
+    [...panel().querySelectorAll(`[data-stats="${table}"] thead th`)].map((th) => th.textContent);
+
+  const pipelineUrls = () =>
+    fetchCalls.map(([url]) => url).filter((url) => url.startsWith('/_term/pipeline/stats'));
+
+  const notes = () =>
+    [...panel().querySelectorAll('[data-filters-note]')].map((note) =>
+      note.getAttribute('data-filters-note'),
+    );
+
   test('every filter becomes a parameter of the board-flow request, and only that one', async () => {
     await renderStrip();
     await openStatistics();
@@ -546,74 +573,82 @@ describe('Board flow filters', () => {
     });
 
     // This Planka answer names no cards (one that predates cardIds): the
-    // orchestrator is asked for the whole board's figures…
-    fetchCalls
-      .map(([url]) => url)
-      .filter((url) => url.startsWith('/_term/pipeline/stats'))
-      .forEach((url) => expect(url).toBe(STATS_URL));
+    // orchestrator is asked for the whole board's figures over the dates…
+    pipelineUrls().forEach((url) =>
+      expect(new URLSearchParams(url.split('?')[1]).has('cards')).toBe(false),
+    );
+    expect(pipelineUrls()[pipelineUrls().length - 1]).toBe(
+      `${STATS_URL}&${new URLSearchParams(SEPT)}`,
+    );
 
     // …and answered, not left loading for cards an older answer named…
     expect(panel().querySelector('[data-stats="pipeline"]')).not.toBeNull();
 
-    // …the heading says what is filtered, and the notes say what is not.
+    // …the heading says what is filtered, and — this orchestrator predating
+    // both — the notes say the pipeline figures follow neither the cards nor
+    // the dates, and its heading claims no filter.
     const title = panel().querySelector('[data-stats-title]').textContent;
     expect(title).toContain('pipeline.statsBoardTitleFiltered');
     expect(title).toContain('bug, ui');
     expect(title).toContain('Deniss Locmelis');
     expect(title).toContain('pipeline.statsFilterQuoted{\\"text\\":\\"login\\"}');
-    expect(
-      [...panel().querySelectorAll('[data-filters-note]')].map((note) =>
-        note.getAttribute('data-filters-note'),
-      ),
-    ).toEqual(['dates', 'cards']);
+    expect(notes()).toEqual(['dates', 'cards']);
+    expect(panel().querySelector('[data-filters-note="dates"]').textContent).toBe(
+      'pipeline.statsPipelineCannotFilterDates',
+    );
     expect(panel().querySelector('[data-pipeline-title]').textContent).toBe(
       'pipeline.statsPipelineTitle',
     );
-  });
-
-  test('a date range makes Board flow one column, and the pipeline keeps its three', async () => {
-    const custom = {
-      key: 'custom',
-      seconds: 15 * 86400,
-      current: {
-        from: localDay(2026, 9, 1),
-        to: localDay(2026, 9, 16),
-        ...boardFlow('custom', 'current', 0),
-      },
-      previous: {
-        from: localDay(2026, 8, 17),
-        to: localDay(2026, 9, 1),
-        ...boardFlow('custom', 'previous', 0),
-      },
-    };
-
-    answers[PLANKA_URL] = () => jsonResponse(200, { item: boardStats() });
-
-    await renderStrip();
-    await openStatistics();
-
-    answers[
-      `${PLANKA_URL}?${new URLSearchParams({ from: localDay(2026, 9, 1), to: localDay(2026, 9, 16) })}`
-    ] = () => jsonResponse(200, { item: { ...boardStats(), periods: [custom] } });
-
-    type(filter('from'), '2026-09-01');
-    type(filter('to'), '2026-09-15');
-    await flush();
-    await flush();
-
-    const headers = (table) =>
-      [...panel().querySelectorAll(`[data-stats="${table}"] thead th`)].map((th) => th.textContent);
-
-    expect(headers('board')).toEqual(['', 'Sep 1 – Sep 15']);
-    expect(cell('board', 'completed', 0).text).toContain('12');
-    expect(cell('board', 'completed', 0).direction).toBe('up');
     expect(headers('pipeline')).toEqual([
       '',
       'pipeline.statsPeriod24h',
       'pipeline.statsPeriod7d',
       'pipeline.statsPeriod30d',
     ]);
+  });
+
+  test('a date range makes both halves one column, and the pipeline is asked for it', async () => {
+    await renderStrip();
+    await openStatistics();
+
+    answers[`${PLANKA_URL}?${new URLSearchParams(SEPT)}`] = () =>
+      jsonResponse(200, { item: { ...boardStats(), periods: [septemberOf(boardFlow)] } });
+    answers[`${STATS_URL}&${new URLSearchParams(SEPT)}`] = () =>
+      jsonResponse(200, { ...pipelineStats(), periods: [septemberOf(pipelineWindow, '7d')] });
+
+    type(filter('from'), '2026-09-01');
+    type(filter('to'), '2026-09-15');
+    await flush();
+    await flush();
+
+    expect(headers('board')).toEqual(['', 'Sep 1 – Sep 15']);
+    expect(cell('board', 'completed', 0).text).toContain('12');
+    expect(cell('board', 'completed', 0).direction).toBe('up');
     expect(panel().querySelector('[data-stats-title]').textContent).toContain('Sep 1 – Sep 15');
+
+    // With no card filter the pipeline half is asked for the same days at
+    // once, and every one of its tables shows that one period.
+    expect(pipelineUrls()).toEqual([STATS_URL, `${STATS_URL}&${new URLSearchParams(SEPT)}`]);
+    expect(headers('pipeline')).toEqual(['', 'Sep 1 – Sep 15']);
+    expect(cell('pipeline', 'gateRuns', 0).text).toContain('10');
+    expect(headers('sessions')).toEqual(['', 'Sep 1 – Sep 15']);
+    expect(
+      panel().querySelectorAll('[data-stats="sessions"] [data-session-kind="build"] td'),
+    ).toHaveLength(1);
+    expect(
+      [...panel().querySelectorAll('[data-stage-period]')].map((button) => [
+        button.getAttribute('data-stage-period'),
+        button.textContent,
+      ]),
+    ).toEqual([['custom', 'Sep 1 – Sep 15']]);
+    expect(panel().querySelector('[data-stage-row="setl-web:unit1"]')).not.toBeNull();
+
+    // Both halves follow the dates: the Pipeline heading says so, and no note
+    // says otherwise.
+    expect(panel().querySelector('[data-pipeline-title]').textContent).toBe(
+      'pipeline.statsPipelineTitleFiltered{"filters":"Sep 1 – Sep 15"}',
+    );
+    expect(notes()).toEqual([]);
   });
 
   test('a date range that cannot be asked for is said, and not sent', async () => {
@@ -777,16 +812,20 @@ describe('Board flow filters', () => {
       ]);
     });
 
-    test('a change of dates asks Board flow again but not the pipeline half', async () => {
+    test('a change of dates asks the pipeline half for them, with the cards matched over them', async () => {
       localStorage.setItem(FILTERS_KEY, JSON.stringify({ labelIds: ['1001'] }));
       answerCards('labelIds=1001', ['11', '12']);
-      answers[
-        `${PLANKA_URL}?${new URLSearchParams({
-          labelIds: '1001',
-          from: localDay(2026, 9, 1),
-          to: localDay(2026, 9, 16),
-        })}`
-      ] = () => jsonResponse(200, { item: { ...boardStats(), cardIds: ['11', '12'] } });
+      // Over 1 Sep – 15 Sep the label matches one card of the two.
+      answers[`${PLANKA_URL}?${new URLSearchParams({ labelIds: '1001', ...SEPT })}`] = () =>
+        jsonResponse(200, {
+          item: { ...boardStats(), cardIds: ['12'], periods: [septemberOf(boardFlow)] },
+        });
+      answers[`${STATS_URL}&cards=12&${new URLSearchParams(SEPT)}`] = () =>
+        jsonResponse(200, {
+          ...pipelineStats(),
+          filtered: true,
+          periods: [septemberOf(pipelineWindow, '7d')],
+        });
 
       await renderStrip();
       await openStatistics();
@@ -795,20 +834,21 @@ describe('Board flow filters', () => {
       // said which cards — and only then.
       expect(pipelineRequests()).toEqual(['11,12']);
 
-      const asked = boardRequests().length;
       type(filter('from'), '2026-09-01');
       type(filter('to'), '2026-09-15');
       await flush();
       await flush();
 
-      expect(boardRequests().length).toBeGreaterThan(asked);
-      expect(pipelineRequests()).toEqual(['11,12']);
-      expect(panel().querySelector('[data-filters-note="dates"]').textContent).toContain(
-        'pipeline.statsFilterDatesBoardOnly',
-      );
-      // The pipeline heading leaves the dates out: it does not follow them.
+      // Asked again for the dates, with the cards Board flow matched over
+      // them — never with the cards of the filters before.
+      expect(pipelineUrls()).toEqual([
+        `${STATS_URL}&cards=11%2C12`,
+        `${STATS_URL}&cards=12&${new URLSearchParams(SEPT)}`,
+      ]);
+      expect(headers('pipeline')).toEqual(['', 'Sep 1 – Sep 15']);
+      expect(notes()).toEqual([]);
       expect(panel().querySelector('[data-pipeline-title]').textContent).toBe(
-        'pipeline.statsPipelineTitleFiltered{"filters":"bug"}',
+        'pipeline.statsPipelineTitleFiltered{"filters":"bug · Sep 1 – Sep 15"}',
       );
     });
 

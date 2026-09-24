@@ -17,7 +17,6 @@ import {
   STATS_CUSTOM_PERIOD,
   STATS_FILTER_DEBOUNCE_MS,
   STATS_MAX_RANGE_DAYS,
-  STATS_PERIODS,
   compareCounts,
   compareRates,
   deltaTone,
@@ -357,11 +356,14 @@ SinceNote.defaultProps = {
   since: undefined,
 };
 
-// The per-stage table, for one period at a time.
+// The per-stage table, for one period at a time: 24h, 7d or 30d, or the
+// custom period alone.
 function StageTable({ stats, durationUnits }) {
-  const [t] = useTranslation();
-  const [periodKey, setPeriodKey] = useState('7d');
+  const [t, i18n] = useTranslation();
+  const [pickedKey, setPeriodKey] = useState('7d');
 
+  const periodKeys = statsPeriodKeys(stats);
+  const periodKey = periodKeys.includes(pickedKey) ? pickedKey : periodKeys[0];
   const period = statsPeriod(stats, periodKey);
   const stages = (period && period.current.gate.stages) || [];
 
@@ -370,7 +372,7 @@ function StageTable({ stats, durationUnits }) {
       <div className={styles.statsHeading}>
         <span className={styles.sectionTitle}>{t('pipeline.statsStagesTitle')}</span>
         <span className={styles.statsSwitch} role="group">
-          {STATS_PERIODS.map((key) => (
+          {periodKeys.map((key) => (
             <button
               key={key}
               type="button"
@@ -379,7 +381,9 @@ function StageTable({ stats, durationUnits }) {
               data-stage-period={key}
               onClick={() => setPeriodKey(key)}
             >
-              {t(PERIOD_KEYS[key])}
+              {key === STATS_CUSTOM_PERIOD
+                ? formatStatsRange(statsPeriod(stats, key), i18n && i18n.language)
+                : t(PERIOD_KEYS[key])}
             </button>
           ))}
         </span>
@@ -457,8 +461,13 @@ function SessionTable({ stats, durationUnits }) {
             <th scope="row" className={styles.rowStage}>
               {kind}
             </th>
-            {STATS_PERIODS.map((key) => {
+            {statsPeriodKeys(stats).map((key) => {
               const period = statsPeriod(stats, key);
+
+              if (!period) {
+                return <td key={key}>—</td>;
+              }
+
               const current = sessionsOf(period.current, kind);
               const previous = sessionsOf(period.previous, kind);
               const failed = ratio(current.failed, current.sessions);
@@ -533,12 +542,13 @@ function useStatsFilters(boardId, labels) {
   return { filters, applied, change };
 }
 
-// What the filters do not reach, said under them: the pipeline figures keep
-// their own periods whatever the dates, and an orchestrator that cannot keep
-// its figures to some cards answers the whole board's.
+// What the filters do not reach, said under them. Both halves follow every
+// filter, so this is said only of an orchestrator that predates one: it
+// answers the whole board's figures (no `filtered`), or its three periods
+// rather than the dates' (no custom period).
 const FILTER_NOTE_KEYS = {
-  dates: 'pipeline.statsFilterDatesBoardOnly',
-  cards: 'pipeline.statsFiltersBoardOnly',
+  dates: 'pipeline.statsPipelineCannotFilterDates',
+  cards: 'pipeline.statsPipelineCannotFilterCards',
 };
 
 const RANGE_ERROR_KEYS = {
@@ -564,28 +574,38 @@ const boundsText = (t, min, max, format) => {
 
 // What the Board flow heading says is filtered, e.g.
 // `bug, ui · “login” · Deniss Locmelis · 2 h – 10 h · $1.00 – $5.00 · 1 Sep – 15 Sep`
-// — and, withDates false, what the Pipeline heading says: the same but the
-// dates, which it does not follow.
-const describeFilters = (t, filters, { labels, creators, locale, withDates = true }) => {
+// — and what the Pipeline heading says: the same, less what the orchestrator
+// did not follow (withCards, withDates false).
+const describeFilters = (
+  t,
+  filters,
+  { labels, creators, locale, withCards = true, withDates = true },
+) => {
   const labelById = new Map(labels.map((label) => [label.id, label]));
   const creatorByKey = new Map(creators.map((creator) => [creator.key, creator]));
   const range = statsRange(filters);
 
+  const cardParts = withCards
+    ? [
+        filters.labelIds
+          .map((id) => {
+            const label = labelById.get(id);
+            return label ? label.name || label.color : id;
+          })
+          .join(', '),
+        filters.search.trim() && t('pipeline.statsFilterQuoted', { text: filters.search.trim() }),
+        filters.creators
+          .map((key) => (creatorByKey.has(key) ? creatorByKey.get(key).name : key))
+          .join(', '),
+        boundsText(t, filters.durationMinHours, filters.durationMaxHours, (hours) =>
+          t('pipeline.statsFilterHoursValue', { hours }),
+        ),
+        boundsText(t, filters.costMin, filters.costMax, (usd) => formatUsd(usd, locale)),
+      ]
+    : [];
+
   return [
-    filters.labelIds
-      .map((id) => {
-        const label = labelById.get(id);
-        return label ? label.name || label.color : id;
-      })
-      .join(', '),
-    filters.search.trim() && t('pipeline.statsFilterQuoted', { text: filters.search.trim() }),
-    filters.creators
-      .map((key) => (creatorByKey.has(key) ? creatorByKey.get(key).name : key))
-      .join(', '),
-    boundsText(t, filters.durationMinHours, filters.durationMaxHours, (hours) =>
-      t('pipeline.statsFilterHoursValue', { hours }),
-    ),
-    boundsText(t, filters.costMin, filters.costMax, (usd) => formatUsd(usd, locale)),
+    ...cardParts,
     withDates &&
       range &&
       !range.error &&
@@ -742,8 +762,8 @@ const NO_LABELS = [];
 // pipeline's gate, deploys, agent sessions and spend, from the orchestrator —
 // each for the last 24 hours, 7 days and 30 days beside the period before.
 // The filter bar narrows both halves to the cards it matches (use-statistics
-// asks the orchestrator for the cards Planka matched); its dates swap Board
-// flow's periods for the viewer's own, and the pipeline half keeps its three.
+// asks the orchestrator for the cards Planka matched), and its dates swap both
+// halves' three periods for the viewer's own.
 function BoardStatistics({ boardId, durationUnits }) {
   const [t, i18n] = useTranslation();
   const accessToken = useSelector(selectors.selectAccessToken);
@@ -773,14 +793,26 @@ function BoardStatistics({ boardId, durationUnits }) {
 
   const describeOptions = { labels, creators, locale: i18n && i18n.language };
   const summary = query ? describeFilters(t, applied, describeOptions) : '';
-  const cardSummary = cardFiltered
-    ? describeFilters(t, applied, { ...describeOptions, withDates: false })
-    : '';
 
+  // What the orchestrator followed: the cards when it says it kept to them,
+  // the dates when it answered their period.
   const range = statsRange(applied);
+  const dated = !!range && !range.error;
+  const pipelineCards = cardFiltered && !!pipelineStats && !!pipelineStats.filtered;
+  const pipelineDates =
+    dated && !!pipelineStats && !!statsPeriod(pipelineStats, STATS_CUSTOM_PERIOD);
+  const pipelineSummary =
+    pipelineCards || pipelineDates
+      ? describeFilters(t, applied, {
+          ...describeOptions,
+          withCards: pipelineCards,
+          withDates: pipelineDates,
+        })
+      : '';
+
   const notes = [
-    range && !range.error && 'dates',
-    cardFiltered && pipelineStats && !pipelineStats.filtered && 'cards',
+    dated && pipelineStats && !pipelineDates && 'dates',
+    cardFiltered && pipelineStats && !pipelineCards && 'cards',
   ].filter(Boolean);
 
   return (
@@ -815,8 +847,8 @@ function BoardStatistics({ boardId, durationUnits }) {
         <HalfState half={board} unavailableKey="pipeline.statsBoardUnavailable" />
       )}
       <div className={classNames(styles.section, styles.sectionTitle)} data-pipeline-title>
-        {pipelineStats && pipelineStats.filtered && cardSummary
-          ? t('pipeline.statsPipelineTitleFiltered', { filters: cardSummary })
+        {pipelineSummary
+          ? t('pipeline.statsPipelineTitleFiltered', { filters: pipelineSummary })
           : t('pipeline.statsPipelineTitle')}
       </div>
       {pipelineStats ? (
