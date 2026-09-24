@@ -258,7 +258,6 @@ module.exports = {
       if (error instanceof pipelineStatistics.FilterError) {
         // The shape of Sails' own E_MISSING_OR_INVALID_PARAMS answer, whose
         // `message` the tab shows (getJson in the client's PipelineStrip/api.js).
-        // eslint-disable-next-line no-throw-literal
         throw { invalidFilter: { code: 'E_INVALID_FILTER', message: error.message } };
       }
 
