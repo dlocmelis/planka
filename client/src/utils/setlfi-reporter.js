@@ -49,6 +49,15 @@
  * `@[<name>](reporter)` anywhere is mirrored as visible to the reporter and
  * appears on their /feedback page. REPORTER_MENTION_ID is that sentinel, and it
  * cannot collide with a real user: Planka ids are numeric snowflakes.
+ *
+ * A THIRD copy of the markup lives in the devteam orchestrator:
+ * internal/techlead/reporter.go (reporterMentionID) writes
+ * `@[<name>](reporter)` on the bot's reply to a customer's Feedback comment,
+ * so the reply reaches the customer the same way this dropdown's mention does.
+ * Change the spelling here, in setl's visibility.go and in reporter.go
+ * together (setl's docs/support-api-contract.md lists all three). A copy
+ * changed on its own fails nothing and quietly stops the customer from
+ * being answered.
  */
 
 // The header block, exactly as setl writes it. Only an opener and the reporter
