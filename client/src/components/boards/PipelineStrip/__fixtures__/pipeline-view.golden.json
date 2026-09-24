@@ -4,17 +4,109 @@
   "now": "2026-09-24T12:00:00Z",
   "threads": [
     {
-      "name": "A1",
+      "name": "CA1",
+      "account": "claude-b",
+      "state": "busy",
+      "jobId": "job-t-1",
+      "kind": "dev",
+      "role": "Dev",
+      "cardId": "card-t",
+      "cardName": "Threaded ticket",
+      "cardBoardId": "100",
+      "cardType": "Feature",
+      "buildType": "express",
+      "column": "In Development",
+      "progress": {
+        "done": 3,
+        "total": 8,
+        "percent": 37,
+        "known": true
+      },
+      "stageStart": "2026-09-24T11:00:00Z",
+      "pipelineStart": "2026-09-24T09:00:00Z",
+      "jobStart": "2026-09-24T11:45:00Z",
+      "paused": true
+    },
+    {
+      "name": "CA2",
       "account": "claude-a",
-      "state": "idle"
+      "state": "overflow",
+      "jobId": "job-o-1",
+      "kind": "clarify",
+      "role": "Clarify",
+      "cardId": "card-ov",
+      "cardName": "Question ticket",
+      "cardBoardId": "200",
+      "buildType": "e2e",
+      "column": "In Review",
+      "jobStart": "2026-09-24T11:58:00Z"
+    },
+    {
+      "name": "CB1",
+      "account": "claude-b",
+      "state": "limited"
     }
   ],
-  "queue": [],
-  "paused": [],
+  "queue": [
+    {
+      "jobId": "job-q-1",
+      "cardId": "card-q1",
+      "name": "Watched ticket",
+      "cardBoardId": "100",
+      "kind": "dev",
+      "role": "Dev",
+      "stage": "In Development",
+      "priority": "Very High",
+      "priorityRank": 2,
+      "waitingSeconds": 90,
+      "queuedAt": "2026-09-24T11:58:30Z",
+      "e2e": true
+    },
+    {
+      "jobId": "job-q-p",
+      "cardId": "card-qp",
+      "name": "Account pool",
+      "cardBoardId": "100",
+      "kind": "ops",
+      "role": "Ops",
+      "priority": "High",
+      "priorityRank": 1,
+      "waitingSeconds": 300,
+      "queuedAt": "2026-09-24T11:55:00Z",
+      "managesPool": true
+    },
+    {
+      "jobId": "job-q-2",
+      "cardId": "card-q2",
+      "name": "Waiting ticket",
+      "cardBoardId": "100",
+      "kind": "review",
+      "role": "Review",
+      "stage": "In Review",
+      "priority": "Normal",
+      "priorityRank": 0,
+      "waitingSeconds": 1500,
+      "queuedAt": "2026-09-24T11:35:00Z"
+    }
+  ],
+  "paused": [
+    {
+      "cardId": "card-t",
+      "name": "Threaded ticket",
+      "cardBoardId": "100",
+      "by": "alice",
+      "at": "2026-09-24T11:50:00Z",
+      "note": "waiting on legal",
+      "column": "In Development"
+    }
+  ],
   "drain": {
-    "active": false
+    "active": true,
+    "actor": "deniss",
+    "since": "2026-09-24T11:30:00Z",
+    "stale": true
   },
-  "dispatching": true,
+  "dispatching": false,
   "canEdit": true,
   "canPause": true,
   "tests": {
