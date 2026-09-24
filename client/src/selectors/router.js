@@ -83,8 +83,13 @@ export const selectPath = createReduxOrmSelector(
   },
 );
 
+// The home page is every route that is not inside a project: an unavailable project or
+// board still resolves `projectId` to null, so only a missing key means the home page.
+export const selectIsHomePage = (state) => selectPath(state).projectId === undefined;
+
 export default {
   selectPathname,
   selectPathsMatch,
   selectPath,
+  selectIsHomePage,
 };

@@ -16,6 +16,7 @@ const mockEmptyIds = [];
 const mockFavoriteProjectIds = ['project-1'];
 
 let mockPath;
+let mockIsHomePage;
 
 jest.mock('react-router', () => ({
   Link: ({ children }) => children,
@@ -34,7 +35,7 @@ jest.mock('../../../selectors', () => ({
     selectNotificationIdsForCurrentUser: () => mockEmptyIds,
     selectIsFavoritesEnabled: () => true,
     selectIsEditModeEnabled: () => false,
-    selectPath: () => mockPath,
+    selectIsHomePage: () => mockIsHomePage,
     selectFavoriteProjectIdsForCurrentUser: () => mockFavoriteProjectIds,
     selectIsCurrentUserManagerForCurrentProject: () => false,
   },
@@ -78,6 +79,7 @@ afterEach(() => {
 describe('Header favorites toggler', () => {
   test('is shown on the home page', () => {
     mockPath = {};
+    mockIsHomePage = true;
     renderHeader();
 
     expect(findFavoritesToggler()).not.toBeNull();
@@ -85,6 +87,7 @@ describe('Header favorites toggler', () => {
 
   test('is hidden on a board page, where the favorites bar is not shown', () => {
     mockPath = { projectId: 'project-1', boardId: 'board-1' };
+    mockIsHomePage = false;
     renderHeader();
 
     expect(findFavoritesToggler()).toBeNull();

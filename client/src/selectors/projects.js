@@ -7,7 +7,7 @@ import { createSelector } from 'redux-orm';
 
 import orm from '../orm';
 import { selectIsFavoritesEnabled } from './core';
-import { selectPath } from './router';
+import { selectIsHomePage, selectPath } from './router';
 import { selectCurrentUserId } from './users';
 import { isLocalId } from '../utils/local-id';
 
@@ -317,9 +317,9 @@ export const selectIsFavoritesActiveForCurrentUser = createSelector(
   orm,
   (state) => selectCurrentUserId(state),
   (state) => selectIsFavoritesEnabled(state),
-  (state) => selectPath(state).projectId,
-  ({ User }, id, isFavoritesEnabled, projectId) => {
-    if (!id || projectId !== undefined) {
+  (state) => selectIsHomePage(state),
+  ({ User }, id, isFavoritesEnabled, isHomePage) => {
+    if (!id || !isHomePage) {
       return false;
     }
 
