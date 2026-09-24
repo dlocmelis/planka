@@ -1,0 +1,269 @@
+{
+  "pipeline": true,
+  "boardId": "100",
+  "now": "2026-09-24T12:00:00Z",
+  "threads": [
+    {
+      "name": "A1",
+      "account": "claude-a",
+      "state": "idle"
+    }
+  ],
+  "queue": [],
+  "paused": [],
+  "drain": {
+    "active": false
+  },
+  "dispatching": true,
+  "canEdit": true,
+  "canPause": true,
+  "tests": {
+    "maxContainers": 3,
+    "running": 2,
+    "waiting": 1,
+    "stages": [
+      {
+        "cardId": "card-1",
+        "cardName": "Scoped ticket",
+        "cardBoardId": "100",
+        "branch": "build/card-1-scoped-ticket",
+        "repo": "setl",
+        "stage": "setl:unit",
+        "profile": "scoped",
+        "status": "queued",
+        "since": "2026-09-24T11:46:00Z"
+      },
+      {
+        "cardId": "card-2",
+        "cardName": "Approved ticket",
+        "cardBoardId": "100",
+        "branch": "build/card-2-approved-ticket",
+        "repo": "setl-web",
+        "stage": "setl-web:unit1",
+        "profile": "full",
+        "status": "running",
+        "since": "2026-09-24T11:50:00Z",
+        "container": "dt-gate-card-2-1",
+        "unit": "test",
+        "done": 120,
+        "total": 480,
+        "failed": 2,
+        "percent": 25
+      },
+      {
+        "cardId": "card-2",
+        "cardName": "Approved ticket",
+        "cardBoardId": "100",
+        "branch": "build/card-2-approved-ticket",
+        "repo": "setl",
+        "stage": "setl:vet",
+        "profile": "full",
+        "status": "running",
+        "since": "2026-09-24T11:59:00Z",
+        "container": "dt-gate-card-2-2"
+      }
+    ],
+    "recent": [
+      {
+        "cardId": "card-3",
+        "cardName": "Merged ticket",
+        "cardBoardId": "100",
+        "repo": "setl",
+        "stage": "setl:race",
+        "profile": "full",
+        "status": "fail",
+        "finishedAt": "2026-09-24T11:40:00Z",
+        "durationSeconds": 725,
+        "queuedSeconds": 120,
+        "unit": "test",
+        "tests": 812,
+        "failed": 3,
+        "attempts": 2
+      },
+      {
+        "cardId": "card-3",
+        "cardName": "Merged ticket",
+        "cardBoardId": "100",
+        "repo": "setl-web",
+        "stage": "setl-web:unit2",
+        "profile": "scoped",
+        "status": "ok",
+        "finishedAt": "2026-09-24T11:30:00Z",
+        "durationSeconds": 300,
+        "attempts": 2,
+        "flaked": true
+      },
+      {
+        "cardId": "card-4",
+        "cardName": "Broken ticket",
+        "cardBoardId": "100",
+        "repo": "setl",
+        "stage": "setl:unit",
+        "profile": "scoped",
+        "status": "error",
+        "finishedAt": "2026-09-24T11:20:00Z",
+        "durationSeconds": 4,
+        "attempts": 1,
+        "error": "could not start the container"
+      }
+    ],
+    "recordedSince": "2026-09-24T08:00:00Z"
+  },
+  "deploys": {
+    "deploying": 1,
+    "waiting": 2,
+    "lanes": [
+      {
+        "repo": "setl",
+        "current": {
+          "cardId": "card-d",
+          "name": "Deploying ticket",
+          "cardBoardId": "100",
+          "riders": [
+            {
+              "cardId": "card-r1",
+              "name": "Rider one",
+              "cardBoardId": "100"
+            },
+            {
+              "cardId": "card-r2",
+              "name": "Rider two",
+              "cardBoardId": "100"
+            }
+          ],
+          "since": "2026-09-24T11:50:00Z",
+          "jobId": "dep-card-d-1",
+          "jobState": "running",
+          "jobStart": "2026-09-24T11:52:00Z",
+          "thread": "CA2",
+          "priority": "High",
+          "progress": {
+            "done": 2,
+            "total": 4,
+            "percent": 60,
+            "known": true
+          }
+        },
+        "waiting": [
+          {
+            "cardId": "card-w1",
+            "name": "Urgent",
+            "cardBoardId": "100",
+            "priority": "Very High",
+            "priorityRank": 2,
+            "queuedAt": "2026-09-24T11:55:00Z",
+            "waitingSeconds": 300
+          },
+          {
+            "cardId": "card-w2",
+            "name": "Ordinary",
+            "cardBoardId": "100",
+            "priority": "Normal",
+            "priorityRank": 0,
+            "queuedAt": "2026-09-24T11:40:00Z",
+            "waitingSeconds": 1200
+          }
+        ],
+        "recent": [
+          {
+            "cardId": "card-o",
+            "name": "Shipped",
+            "cardBoardId": "100",
+            "jobId": "dep-card-o-1",
+            "status": "ok",
+            "attempts": 1,
+            "finishedAt": "2026-09-24T10:00:00Z",
+            "durationSeconds": 480
+          },
+          {
+            "cardId": "card-f",
+            "name": "Did not ship",
+            "cardBoardId": "100",
+            "jobId": "dep-card-f-1",
+            "status": "empty-result",
+            "attempts": 2,
+            "finishedAt": "2026-09-24T09:00:00Z",
+            "durationSeconds": 60
+          }
+        ]
+      },
+      {
+        "repo": "setl-web",
+        "waiting": [],
+        "recent": []
+      }
+    ],
+    "selfRedeploy": {
+      "cards": [
+        {
+          "cardId": "card-o",
+          "name": "Shipped",
+          "cardBoardId": "100"
+        }
+      ],
+      "stagedAt": "2026-09-24T11:56:00Z",
+      "unit": "orch-swap-1"
+    }
+  },
+  "accounts": [
+    {
+      "name": "claude-a",
+      "auth": "subscription",
+      "threads": 6,
+      "windows": [
+        {
+          "key": "5h",
+          "percent": 42,
+          "resetsAt": "2026-09-24T14:14:00Z",
+          "status": "ok"
+        },
+        {
+          "key": "week",
+          "percent": 81,
+          "resetsAt": "2026-09-27T09:00:00Z",
+          "status": "warning"
+        },
+        {
+          "key": "week_fable",
+          "percent": 12,
+          "resetsAt": "2026-09-27T09:00:00Z"
+        }
+      ],
+      "status": "warning",
+      "fetchedAt": "2026-09-24T11:50:00Z"
+    },
+    {
+      "name": "claude-b",
+      "auth": "subscription",
+      "threads": 0,
+      "windows": [],
+      "fetchedAt": "2026-09-24T06:00:00Z",
+      "stale": true,
+      "limited": true,
+      "limitedSince": "2026-09-24T10:00:00Z",
+      "limitedUntil": "2026-09-24T13:00:00Z",
+      "limitWindow": "5-hour"
+    },
+    {
+      "name": "claude-c",
+      "auth": "api-key",
+      "threads": 2,
+      "windows": []
+    },
+    {
+      "name": "claude-d",
+      "auth": "endpoint",
+      "endpointHost": "llm.example.com",
+      "threads": 1,
+      "windows": [
+        {
+          "key": "5h",
+          "percent": 100,
+          "status": "refused"
+        }
+      ],
+      "status": "refused",
+      "fetchedAt": "2026-09-24T11:58:00Z"
+    }
+  ]
+}
