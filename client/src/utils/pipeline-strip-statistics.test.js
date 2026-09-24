@@ -5,17 +5,22 @@
 
 import {
   Directions,
+  EMPTY_STATS_FILTERS,
   STATS_PERIODS,
   compareCounts,
   compareRates,
   deltaTone,
   formatUsd,
   historyStartsInside,
+  normalizeStatsFilters,
   ratio,
+  readStatsFilters,
   sessionKinds,
   sessionTotals,
   sessionsOf,
+  statsFilterQuery,
   statsPeriod,
+  statsRange,
 } from './pipeline-strip';
 
 const statsWindow = (sessions = []) => ({ sessions });
@@ -117,5 +122,45 @@ describe('statistics', () => {
     expect(formatUsd(1234.5, 'en-US')).toBe('$1,234.50');
     expect(formatUsd(0.004, 'en-US')).toBe('$0.00');
     expect(formatUsd(undefined, 'en-US')).toBe('$0.00');
+  });
+});
+
+describe('Board flow filters', () => {
+  const filters = (patch) => ({ ...EMPTY_STATS_FILTERS, ...patch });
+
+  test('nothing filtered asks exactly the unfiltered request', () => {
+    expect(statsFilterQuery(EMPTY_STATS_FILTERS)).toBe('');
+    // Blank and unreadable boxes are not filters.
+    expect(statsFilterQuery(filters({ search: '   ', costMin: '', durationMaxHours: '-2' }))).toBe(
+      '',
+    );
+  });
+
+  test('a custom period counts calendar days, the last one included', () => {
+    expect(statsRange(filters({ from: '2026-09-01', to: '2026-09-01' }))).toEqual({
+      from: new Date(2026, 8, 1).toISOString(),
+      to: new Date(2026, 8, 2).toISOString(),
+    });
+    // 366 calendar days are allowed whatever clock change falls inside them.
+    expect(statsRange(filters({ from: '2025-09-01', to: '2026-09-01' })).error).toBeUndefined();
+    expect(statsRange(filters({ from: '2025-09-01', to: '2026-09-02' }))).toEqual({
+      error: 'length',
+    });
+    expect(statsRange(filters({ from: '2026-09-01' }))).toEqual({ error: 'incomplete' });
+    expect(statsRange(filters({}))).toBeNull();
+  });
+
+  test('damaged remembered filters are dropped, not trusted', () => {
+    global.localStorage = { getItem: () => '{not json' };
+
+    try {
+      expect(readStatsFilters('b')).toEqual(EMPTY_STATS_FILTERS);
+    } finally {
+      delete global.localStorage;
+    }
+
+    expect(normalizeStatsFilters({ labelIds: 'x', creators: ['a', 3, ''], search: 7 })).toEqual(
+      filters({ creators: ['a'] }),
+    );
   });
 });

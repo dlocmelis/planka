@@ -173,10 +173,13 @@ export const fetchPipelineStats = async (boardId, { signal } = {}) => {
 
 // The board-flow half: Planka's own GET /api/boards/:id/pipeline-statistics.
 // The /api middleware reads the bearer token from the Authorization header,
-// not from a cookie, so it is sent here as the sagas send it.
-export const fetchBoardStatistics = async (boardId, accessToken, { signal } = {}) => {
+// not from a cookie, so it is sent here as the sagas send it. `query` is the
+// tab's filters (statsFilterQuery), empty when nothing is filtered.
+export const fetchBoardStatistics = async (boardId, accessToken, { signal, query } = {}) => {
   const body = await getJson(
-    `${Config.BASE_PATH}/api/boards/${encodeURIComponent(boardId)}/pipeline-statistics`,
+    `${Config.BASE_PATH}/api/boards/${encodeURIComponent(boardId)}/pipeline-statistics${
+      query ? `?${query}` : ''
+    }`,
     {
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
       signal,
