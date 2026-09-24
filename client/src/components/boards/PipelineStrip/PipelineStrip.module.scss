@@ -509,7 +509,7 @@ $phone: 600px;
     margin-top: 4px;
   }
 
-  // Tabs: Build, Testing, Deployment, Accounts.
+  // Tabs: Build, Testing, Deployment, Accounts, Statistics.
 
   .tabs {
     border-top: 1px solid rgba(255, 255, 255, 0.12);
@@ -687,6 +687,79 @@ $phone: 600px;
     color: #fff !important;
   }
 
+  // The Statistics tab: one column per period, each figure with how it moved.
+
+  .statsTable {
+    border-collapse: collapse;
+    width: 100%;
+
+    th,
+    td {
+      padding: 2px 8px;
+      text-align: start;
+      vertical-align: top;
+    }
+
+    thead th {
+      color: rgba(255, 255, 255, 0.7);
+      font-weight: 600;
+    }
+
+    tbody th {
+      font-weight: 400;
+      white-space: nowrap;
+    }
+
+    tbody tr + tr {
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+  }
+
+  .statsCell {
+    white-space: nowrap;
+  }
+
+  .statsValue {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+
+  .statsDelta {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 11px;
+    margin-inline-start: 6px;
+  }
+
+  .statsDeltaGood {
+    color: lighten($busy, 20%);
+  }
+
+  .statsDeltaBad {
+    color: lighten($limited, 25%);
+  }
+
+  .statsSub {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 11px;
+  }
+
+  .statsNote {
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 12px;
+  }
+
+  .statsHeading {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+
+  .statsSwitch {
+    display: inline-flex;
+    gap: 2px;
+  }
+
   @media (max-width: $narrow) {
     .row {
       grid-template-areas:
@@ -766,6 +839,12 @@ $phone: 600px;
         "details"
         "extra";
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    // Four columns do not fit a phone: the table scrolls sideways instead.
+    .statsTable {
+      display: block;
+      overflow-x: auto;
     }
   }
 }

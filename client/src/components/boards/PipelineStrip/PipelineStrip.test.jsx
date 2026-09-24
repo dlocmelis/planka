@@ -569,6 +569,7 @@ test('every pipeline string the strip uses is in en-US and ru-RU', () => {
     'TestingTab.jsx',
     'DeploymentTab.jsx',
     'AccountsTab.jsx',
+    'StatisticsTab.jsx',
   ]
     .map((file) => fs.readFileSync(path.join(__dirname, file), 'utf8'))
     .join('\n');

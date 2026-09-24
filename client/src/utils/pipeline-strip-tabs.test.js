@@ -33,6 +33,7 @@ describe('tabs', () => {
       Tabs.TESTING,
       Tabs.DEPLOYMENT,
       Tabs.ACCOUNTS,
+      Tabs.STATISTICS,
     ]);
   });
 
@@ -44,7 +45,9 @@ describe('tabs', () => {
   test('the remembered tab is shown when offered, Build otherwise', () => {
     expect(activeTab(Tabs.DEPLOYMENT, fullView)).toBe(Tabs.DEPLOYMENT);
     expect(activeTab(Tabs.DEPLOYMENT, { threads: [] })).toBe(Tabs.BUILD);
-    expect(activeTab('statistics', fullView)).toBe(Tabs.BUILD);
+    expect(activeTab(Tabs.STATISTICS, fullView)).toBe(Tabs.STATISTICS);
+    expect(activeTab(Tabs.STATISTICS, { threads: [] })).toBe(Tabs.BUILD);
+    expect(activeTab('history', fullView)).toBe(Tabs.BUILD);
     expect(activeTab(null, fullView)).toBe(Tabs.BUILD);
   });
 });

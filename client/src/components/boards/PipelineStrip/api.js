@@ -8,6 +8,8 @@
 // internal/cardterm/pipeline.go). It is called same-origin, so the board's
 // sign-in cookies are what authenticate the viewer; nothing else is sent.
 
+import Config from '../../../constants/Config';
+
 export const PIPELINE_PATH = '/_term/pipeline';
 
 export const cardTerminalUrl = (cardId) => `/_term/card/${encodeURIComponent(cardId)}`;
@@ -117,3 +119,69 @@ export const resumeCard = (cardId) => post('resume', { cardId });
 
 // Flips the pipeline's Restart control switch. Answers {drain}.
 export const setDrain = (on) => post('drain', { on });
+
+// The Statistics tab's two halves. Each answers the figures, or null when that
+// half is not there to read (an orchestrator that predates the route, or a
+// viewer the board does not answer), and throws PipelineError when it could not
+// be asked.
+
+const getJson = async (url, { headers, signal } = {}) => {
+  let response;
+
+  try {
+    response = await fetch(url, {
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        ...headers,
+      },
+      signal,
+    });
+  } catch (error) {
+    if (error && error.name === 'AbortError') {
+      throw error;
+    }
+
+    throw new PipelineError(error ? error.message : 'network error');
+  }
+
+  if ([401, 403, 404].includes(response.status)) {
+    return null;
+  }
+
+  const body = await readJson(response);
+
+  if (!response.ok) {
+    throw new PipelineError(
+      (body && (body.error || body.message)) || `the server answered ${response.status}`,
+      response.status,
+    );
+  }
+
+  return body;
+};
+
+// The pipeline half: gate, deploy and session statistics from the
+// orchestrator (GET /_term/pipeline/stats), under the strip's own sign-in.
+export const fetchPipelineStats = async (boardId, { signal } = {}) => {
+  const body = await getJson(`${PIPELINE_PATH}/stats?board=${encodeURIComponent(boardId)}`, {
+    signal,
+  });
+
+  return body && body.pipeline === true ? body : null;
+};
+
+// The board-flow half: Planka's own GET /api/boards/:id/pipeline-statistics.
+// The /api middleware reads the bearer token from the Authorization header,
+// not from a cookie, so it is sent here as the sagas send it.
+export const fetchBoardStatistics = async (boardId, accessToken, { signal } = {}) => {
+  const body = await getJson(
+    `${Config.BASE_PATH}/api/boards/${encodeURIComponent(boardId)}/pipeline-statistics`,
+    {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      signal,
+    },
+  );
+
+  return body && body.item ? body.item : null;
+};
