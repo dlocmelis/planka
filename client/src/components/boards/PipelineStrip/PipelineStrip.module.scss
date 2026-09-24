@@ -509,7 +509,197 @@ $phone: 600px;
     margin-top: 4px;
   }
 
+  // Tabs: Build, Testing, Deployment, Accounts.
+
+  .tabs {
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 4px 12px 0;
+  }
+
+  .tabButton {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+    padding: 4px 10px;
+
+    &:hover,
+    &:focus-visible {
+      color: #fff;
+      outline: none;
+    }
+  }
+
+  .tabButtonActive {
+    border-bottom-color: #fff;
+    color: #fff;
+  }
+
+  .tab {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .tabSummary {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .group {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+
+    > .link {
+      align-self: flex-start;
+      font-weight: 700;
+    }
+  }
+
+  .subsection {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 2px;
+  }
+
+  .section {
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    margin-top: 4px;
+    padding-top: 6px;
+  }
+
+  .notice {
+    background: rgba(242, 113, 28, 0.35);
+    border-radius: 3px;
+    padding: 4px 8px;
+  }
+
+  // One row of a tab: name | bar | details, wrapping like a thread does.
+
+  .row {
+    align-items: center;
+    display: grid;
+    gap: 2px 10px;
+    grid-template-areas:
+      "name bar details"
+      ". extra extra";
+    grid-template-columns: 110px minmax(160px, 1fr) auto;
+  }
+
+  .rowWaiting .bar {
+    background: repeating-linear-gradient(
+      -45deg,
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.12) 4px,
+      rgba(255, 255, 255, 0.04) 4px,
+      rgba(255, 255, 255, 0.04) 8px
+    );
+  }
+
+  .rowName {
+    font-weight: 700;
+    grid-area: name;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rowBar {
+    grid-area: bar;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rowDetails {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    grid-area: details;
+    justify-content: flex-end;
+  }
+
+  .rowExtra {
+    color: rgba(255, 255, 255, 0.85);
+    grid-area: extra;
+  }
+
+  .rowStage {
+    font-family: monospace;
+  }
+
+  .container {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 11px;
+  }
+
+  .accountHeader {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+    margin-top: 4px;
+  }
+
+  .accountTitle {
+    font-weight: 700;
+  }
+
+  .chipFull {
+    background: $stage-review !important;
+    color: #fff !important;
+  }
+
+  .chipDeploying {
+    background: $stage-deploy !important;
+    color: #fff !important;
+  }
+
+  .resultOk,
+  .usageOk {
+    background: $busy !important;
+    color: #fff !important;
+  }
+
+  .resultFail,
+  .usageRefused {
+    background: $limited !important;
+    color: #fff !important;
+  }
+
+  .resultError,
+  .usageWarning {
+    background: $paused !important;
+    color: rgba(0, 0, 0, 0.87) !important;
+  }
+
+  .resultSkipped {
+    background: rgba(255, 255, 255, 0.25) !important;
+    color: #fff !important;
+  }
+
   @media (max-width: $narrow) {
+    .row {
+      grid-template-areas:
+        "name bar"
+        ". details"
+        ". extra";
+      grid-template-columns: 110px minmax(0, 1fr);
+    }
+
+    .rowDetails {
+      justify-content: flex-start;
+    }
+
     .thread {
       grid-template-areas:
         "name bar"
@@ -567,6 +757,15 @@ $phone: 600px;
 
     .queuePosition {
       display: none;
+    }
+
+    .row {
+      grid-template-areas:
+        "name"
+        "bar"
+        "details"
+        "extra";
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 }

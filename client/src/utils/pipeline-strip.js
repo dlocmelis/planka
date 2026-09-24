@@ -304,3 +304,150 @@ export const POLL_EXPANDED_MS = 5000;
 export const POLL_COLLAPSED_MS = 30000;
 
 export const pollInterval = (expanded) => (expanded ? POLL_EXPANDED_MS : POLL_COLLAPSED_MS);
+
+// The expanded strip's tabs, in the order they are drawn. Build is the
+// threads, held cards and queue; the other three read the orchestrator's
+// tests, deploys and accounts. A tab whose data the orchestrator did not send
+// (one that predates it) is not offered.
+export const Tabs = {
+  BUILD: 'build',
+  TESTING: 'testing',
+  DEPLOYMENT: 'deployment',
+  ACCOUNTS: 'accounts',
+};
+
+const TAB_FIELDS = {
+  [Tabs.BUILD]: null,
+  [Tabs.TESTING]: 'tests',
+  [Tabs.DEPLOYMENT]: 'deploys',
+  [Tabs.ACCOUNTS]: 'accounts',
+};
+
+export const availableTabs = (view) =>
+  Object.keys(TAB_FIELDS).filter((tab) => {
+    const field = TAB_FIELDS[tab];
+    return field === null || !!(view && view[field]);
+  });
+
+// The tab to show: the remembered one when this view offers it, Build
+// otherwise — a remembered tab is never lost, only not shown while an older
+// orchestrator cannot fill it.
+export const activeTab = (remembered, view) =>
+  availableTabs(view).includes(remembered) ? remembered : Tabs.BUILD;
+
+export const isTab = (value) => Object.values(Tabs).includes(value);
+
+// The collapsed header's extra chips: the smoke gate's stages running and
+// waiting, the deployments holding a lane (and the cards behind them), and
+// the Claude accounts at their usage limit. null for a part the orchestrator
+// did not send.
+export const summarizeTabs = (view) => {
+  const tests = view && view.tests;
+  const deploys = view && view.deploys;
+  const accounts = view && view.accounts;
+
+  return {
+    tests: tests ? { running: tests.running || 0, waiting: tests.waiting || 0 } : null,
+    deploys: deploys ? { deploying: deploys.deploying || 0, waiting: deploys.waiting || 0 } : null,
+    limited: accounts ? accounts.filter((account) => account.limited).map(({ name }) => name) : [],
+  };
+};
+
+// Gate stages grouped by card, cards in first-seen order (the orchestrator
+// sends waiting stages first, so a card with one waiting leads).
+export const groupStagesByCard = (stages) => {
+  const groups = [];
+  const byCard = {};
+
+  (stages || []).forEach((stage) => {
+    if (!byCard[stage.cardId]) {
+      byCard[stage.cardId] = {
+        cardId: stage.cardId,
+        cardName: stage.cardName,
+        cardBoardId: stage.cardBoardId,
+        stages: [],
+      };
+      groups.push(byCard[stage.cardId]);
+    }
+
+    byCard[stage.cardId].stages.push(stage);
+  });
+
+  return groups;
+};
+
+// How far through its suite a running stage is, 0..100, or null when there is
+// no usable denominator — none learned yet, or one a count has already
+// passed, which proves it was another workload's.
+export const stagePercent = (stage) => {
+  if (!stage || !stage.total || !stage.done || stage.done > stage.total) {
+    return null;
+  }
+
+  return Math.floor((100 * stage.done) / stage.total);
+};
+
+// Seconds from nowMs to an ISO time, or null when the time is missing or past.
+export const secondsUntil = (iso, nowMs) => {
+  if (!iso) {
+    return null;
+  }
+
+  const at = Date.parse(iso);
+
+  if (Number.isNaN(at) || at < nowMs) {
+    return null;
+  }
+
+  return Math.floor((at - nowMs) / 1000);
+};
+
+// A reset or a start as a person reads it: the time alone when it is today,
+// with the date when it is not — a reset three days out must not read as a
+// time this afternoon.
+export const formatWhen = (iso, nowMs, locale) => {
+  const at = new Date(iso);
+
+  if (!iso || Number.isNaN(at.getTime())) {
+    return '';
+  }
+
+  const now = new Date(nowMs);
+  const sameDay =
+    at.getFullYear() === now.getFullYear() &&
+    at.getMonth() === now.getMonth() &&
+    at.getDate() === now.getDate();
+
+  const time = at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+
+  if (sameDay) {
+    return time;
+  }
+
+  return `${at.toLocaleDateString(locale, { month: 'short', day: 'numeric' })}, ${time}`;
+};
+
+// The date a history starts on: "24 Sep".
+export const formatDay = (iso, locale) => {
+  const at = new Date(iso);
+
+  if (!iso || Number.isNaN(at.getTime())) {
+    return '';
+  }
+
+  return at.toLocaleDateString(locale, { month: 'short', day: 'numeric' });
+};
+
+// The three usage windows an account can report, in the order they are shown.
+export const USAGE_WINDOWS = ['5h', 'week', 'week_fable'];
+
+// How a usage window is coloured: by the endpoint's own verdict when it gave
+// one — the threshold it warns at is the account's, not a number the strip can
+// know — and only by the percentage when it gave none.
+export const usageLevel = (window) => {
+  if (window.status === 'refused' || window.status === 'warning' || window.status === 'ok') {
+    return window.status;
+  }
+
+  return window.percent >= 90 ? 'warning' : 'ok';
+};

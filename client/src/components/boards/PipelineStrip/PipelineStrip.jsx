@@ -19,25 +19,34 @@ import Paths from '../../../constants/Paths';
 import ToastTypes from '../../../constants/ToastTypes';
 import {
   RaiseOutcomes,
+  Tabs,
+  activeTab,
   applyRaise,
+  availableTabs,
   formatDuration,
   groupByAccount,
+  isTab,
   isThreadBusy,
   previewRaise,
   progressPercent,
   secondsSince,
   summarize,
+  summarizeTabs,
 } from '../../../utils/pipeline-strip';
 import ConfirmationStep from '../../common/ConfirmationStep';
 import * as api from './api';
 import usePipeline, { Statuses } from './use-pipeline';
 import ThreadBar from './ThreadBar';
 import QueuePanel from './QueuePanel';
+import TestingTab from './TestingTab';
+import DeploymentTab from './DeploymentTab';
+import AccountsTab from './AccountsTab';
 
 import styles from './PipelineStrip.module.scss';
 
 const EXPANDED_KEY = 'planka_pipelineStrip_expanded';
 const QUEUE_OPENED_KEY = 'planka_pipelineStrip_queueOpened';
+const TAB_KEY = 'planka_pipelineStrip_tab';
 const CSS_VAR = '--pipeline-strip-height';
 
 const readFlag = (key) => {
@@ -61,6 +70,30 @@ const writeFlag = (key, value) => {
   }
 };
 
+const readTab = () => {
+  try {
+    const value = localStorage.getItem(TAB_KEY);
+    return isTab(value) ? value : Tabs.BUILD;
+  } catch {
+    return Tabs.BUILD;
+  }
+};
+
+const writeTab = (value) => {
+  try {
+    localStorage.setItem(TAB_KEY, value);
+  } catch {
+    // Storage disabled: the tab lasts for this page only.
+  }
+};
+
+const TAB_TITLE_KEYS = {
+  [Tabs.BUILD]: 'pipeline.tabBuild',
+  [Tabs.TESTING]: 'pipeline.tabTesting',
+  [Tabs.DEPLOYMENT]: 'pipeline.tabDeployment',
+  [Tabs.ACCOUNTS]: 'pipeline.tabAccounts',
+};
+
 const showToast = (params) => {
   toast({
     type: ToastTypes.PIPELINE_STRIP,
@@ -82,6 +115,8 @@ const PipelineStrip = React.memo(({ boardId }) => {
   // null: follow the rule (open when every thread is busy); true/false: the
   // person opened or closed it themselves.
   const [queueOpened, setQueueOpened] = useState(() => readFlag(QUEUE_OPENED_KEY));
+  // The last tab opened, remembered across boards and reloads.
+  const [rememberedTab, setRememberedTab] = useState(readTab);
 
   const { status, view, error, hidden, act, serverNow } = usePipeline(boardId, expanded);
 
@@ -142,6 +177,14 @@ const PipelineStrip = React.memo(({ boardId }) => {
   );
 
   const summary = useMemo(() => summarize(view), [view]);
+  const tabSummary = useMemo(() => summarizeTabs(view), [view]);
+  const tabs = useMemo(() => availableTabs(view), [view]);
+  const tab = activeTab(rememberedTab, view);
+
+  const handleTabSelect = useCallback((next) => {
+    writeTab(next);
+    setRememberedTab(next);
+  }, []);
   const allBusy = summary.total > 0 && summary.busy === summary.total;
   const isQueueOpen = queueOpened === null ? allBusy : queueOpened;
 
@@ -444,9 +487,76 @@ const PipelineStrip = React.memo(({ boardId }) => {
                 {t('pipeline.dispatchHeld')}
               </Label>
             )}
+            {tabSummary.tests && (
+              <Label size="mini" className={styles.chip} data-chip="tests">
+                {t('pipeline.testsChip', tabSummary.tests)}
+              </Label>
+            )}
+            {tabSummary.deploys && (
+              <Label
+                size="mini"
+                className={styles.chip}
+                title={t('pipeline.deploysChipTitle', tabSummary.deploys)}
+                data-chip="deploys"
+              >
+                {t('pipeline.deploysChip', { count: tabSummary.deploys.deploying })}
+              </Label>
+            )}
+            {tabSummary.limited.length > 0 && (
+              <Label
+                size="mini"
+                className={classNames(styles.chip, styles.chipRefused)}
+                data-chip="limited"
+              >
+                ⛔ {t('pipeline.limitedChip', { names: tabSummary.limited.join(', ') })}
+              </Label>
+            )}
           </span>
         </div>
-        {expanded && (
+        {expanded && tabs.length > 1 && (
+          <div className={styles.tabs} role="tablist">
+            {tabs.map((item) => (
+              <button
+                key={item}
+                type="button"
+                role="tab"
+                aria-selected={item === tab}
+                className={classNames(styles.tabButton, item === tab && styles.tabButtonActive)}
+                data-tab={item}
+                onClick={() => handleTabSelect(item)}
+              >
+                {t(TAB_TITLE_KEYS[item])}
+                {item === Tabs.ACCOUNTS && tabSummary.limited.length > 0 && ' ⛔'}
+              </button>
+            ))}
+          </div>
+        )}
+        {expanded && tab === Tabs.TESTING && (
+          <div className={styles.body}>
+            <TestingTab
+              tests={view.tests}
+              nowMs={nowMs}
+              durationUnits={durationUnits}
+              onOpenCard={handleOpenCard}
+            />
+          </div>
+        )}
+        {expanded && tab === Tabs.DEPLOYMENT && (
+          <div className={styles.body}>
+            <DeploymentTab
+              deploys={view.deploys}
+              nowMs={nowMs}
+              durationUnits={durationUnits}
+              onOpenCard={handleOpenCard}
+            />
+          </div>
+        )}
+        {expanded && tab === Tabs.ACCOUNTS && (
+          <div className={styles.body}>
+            <AccountsTab accounts={view.accounts} nowMs={nowMs} durationUnits={durationUnits} />
+          </div>
+        )}
+        {expanded && tab === Tabs.BUILD && (
           <div className={styles.body}>
             <div className={styles.controls}>
               {drain.active && (
