@@ -121,7 +121,7 @@ const PIPELINE_ROWS = [
     kind: Kinds.RATE,
     value: (w) => {
       const totals = sessionTotals(w);
-      return ratio(totals.failed, totals.sessions);
+      return ratio(totals.failed, totals.judged);
     },
     better: 'down',
   },
@@ -392,6 +392,23 @@ StageTable.propTypes = {
   durationUnits: PropTypes.object.isRequired, // eslint-disable-line react/forbid-prop-types
 };
 
+// A kind's failure share and spend in one period. A kind whose attempts record
+// no outcome (e2e) shows its spend alone: a 100% failure share there would be
+// the container being stopped, not the sessions failing.
+const kindDetail = (t, current, failed, locale) => {
+  if (current.sessions === 0) {
+    return null;
+  }
+
+  const spend = formatUsd(current.spendUsd, locale);
+
+  if (current.outcomeUnknown) {
+    return t('pipeline.statsKindSpend', { spend });
+  }
+
+  return t('pipeline.statsKindDetail', { percent: percentOf(failed), spend });
+};
+
 // Agent sessions by kind, one row per kind, with each period's failure share
 // and spend.
 function SessionTable({ stats, durationUnits }) {
@@ -422,14 +439,7 @@ function SessionTable({ stats, durationUnits }) {
                   key={key}
                   current={current.sessions}
                   previous={previous.sessions}
-                  detail={
-                    current.sessions > 0
-                      ? t('pipeline.statsKindDetail', {
-                          percent: percentOf(failed),
-                          spend: formatUsd(current.spendUsd, i18n && i18n.language),
-                        })
-                      : null
-                  }
+                  detail={kindDetail(t, current, failed, i18n && i18n.language)}
                   durationUnits={durationUnits}
                 />
               );

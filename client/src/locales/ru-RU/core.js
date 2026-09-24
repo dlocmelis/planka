@@ -649,6 +649,7 @@ export default {
       statsGateRuns: 'Прогонов стадий тестов',
       statsGateSince: 'Результаты тестов записываются с {{date}}',
       statsKindDetail: '{{percent}}% неудачных · {{spend}}',
+      statsKindSpend: '{{spend}} (результат не записывается)',
       statsLoading: 'Загрузка статистики…',
       statsMedianToDone: 'Медианное время от поступления на доску до готовности',
       statsPercent: '{{percent}}%',

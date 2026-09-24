@@ -585,14 +585,17 @@ export const sessionsOf = (window, kind) =>
     spendUsd: 0,
   };
 
-// A window's session totals over every kind.
+// A window's session totals over every kind. `judged` leaves out the kinds
+// whose attempts record no outcome (e2e: the orchestrator's outcomeUnknown),
+// and is what a failure rate is over.
 export const sessionTotals = (window) =>
   ((window && window.sessions) || []).reduce(
     (total, item) => ({
       sessions: total.sessions + item.sessions,
       failed: total.failed + item.failed,
+      judged: total.judged + (item.outcomeUnknown ? 0 : item.sessions),
     }),
-    { sessions: 0, failed: 0 },
+    { sessions: 0, failed: 0, judged: 0 },
   );
 
 // Dollars as a person reads them: "$1,234.56", "$0.42".

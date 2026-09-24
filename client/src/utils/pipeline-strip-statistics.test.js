@@ -39,6 +39,7 @@ const stats = {
           { kind: 'review', sessions: 40, failed: 4, spendUsd: 90 },
           { kind: 'build', sessions: 60, failed: 9, spendUsd: 400 },
           { kind: 'triage', sessions: 40, failed: 0, spendUsd: 1 },
+          { kind: 'e2e', sessions: 5, failed: 0, spendUsd: 0, outcomeUnknown: true },
         ]),
       },
       previous: { from: '2026-07-26T12:00:00Z', ...statsWindow() },
@@ -104,7 +105,12 @@ describe('statistics', () => {
       failed: 0,
       spendUsd: 0,
     });
-    expect(sessionTotals(stats.periods[2].current)).toEqual({ sessions: 140, failed: 13 });
+    // An e2e session is counted, but a failure rate is not over it.
+    expect(sessionTotals(stats.periods[2].current)).toEqual({
+      sessions: 145,
+      failed: 13,
+      judged: 140,
+    });
   });
 
   test('dollars read as dollars', () => {

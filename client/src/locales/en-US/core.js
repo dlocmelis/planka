@@ -744,6 +744,7 @@ export default {
       statsGateRuns: 'Test gate stage runs',
       statsGateSince: 'Test gate results are recorded since {{date}}',
       statsKindDetail: '{{percent}}% failed · {{spend}}',
+      statsKindSpend: '{{spend}} (outcome not recorded)',
       statsLoading: 'Loading statistics…',
       statsMedianToDone: 'Median time from entering the board to done',
       statsPercent: '{{percent}}%',

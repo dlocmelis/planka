@@ -158,6 +158,7 @@ const pipelineWindow = (key, side) => {
       ? [
           { kind: 'build', sessions: 30, failed: 3, spendUsd: 420.5 },
           { kind: 'review', sessions: 20, failed: 0, spendUsd: 100 },
+          { kind: 'e2e', sessions: 10, failed: 0, spendUsd: 0, outcomeUnknown: true },
         ]
       : [{ kind: 'build', sessions: 25, failed: 5, spendUsd: 300 }],
     spendUsd: current ? 520.5 : 300,
@@ -347,7 +348,8 @@ test('the pipeline figures, the stage table and the sessions by kind are shown',
   // Nothing ran before: a rate over nothing has no comparison.
   expect(cell('pipeline', 'gatePassRate', 0).direction).toBeNull();
   expect(cell('pipeline', 'deploysFailed', 0).className).toContain('statsDeltaBad');
-  expect(cell('pipeline', 'sessions', 0).text).toContain('50');
+  // Sixty sessions, but the failure rate is over the fifty with an outcome.
+  expect(cell('pipeline', 'sessions', 0).text).toContain('60');
   expect(cell('pipeline', 'sessionFailureRate', 0).text).toContain(
     'pipeline.statsPercent{"percent":6}',
   );
@@ -381,9 +383,13 @@ test('the pipeline figures, the stage table and the sessions by kind are shown',
   const kinds = [...panel().querySelectorAll('[data-session-kind]')].map((row) =>
     row.getAttribute('data-session-kind'),
   );
-  expect(kinds).toEqual(['build', 'review']);
+  expect(kinds).toEqual(['build', 'review', 'e2e']);
   const build = panel().querySelector('[data-session-kind="build"]');
   expect(build.textContent).toContain('pipeline.statsKindDetail{"percent":10,"spend":"$420.50"}');
+  // An e2e session's recorded error is its container being stopped: no share.
+  const e2e = panel().querySelector('[data-session-kind="e2e"]');
+  expect(e2e.textContent).toContain('pipeline.statsKindSpend{"spend":"$0.00"}');
+  expect(e2e.textContent).not.toContain('statsKindDetail');
 });
 
 test('an orchestrator without the statistics route still shows the board flow', async () => {
