@@ -189,6 +189,28 @@ describe('pipeline statistics (board flow)', () => {
     expect(result.since).to.equal(null);
   });
 
+  // The limit the file header documents: Planka writes no action for a move
+  // between boards, and the card's createCard stays on the board it came
+  // from, so the moves on this board are all there is of it here.
+  it('never counts a card moved in from another board as entered, nor times it', () => {
+    const actions = [
+      moved('T', ago(10 * HOUR), 'In Development', 'Ready for Testing'),
+      moved('T', ago(2 * HOUR), 'Ready for Testing', 'Done'),
+    ];
+    const result = compute({ actions, now: NOW });
+
+    expect(period(result, '24h').current).to.include({
+      entered: 0,
+      completed: 1,
+      testingSent: 1,
+      testingAccepted: 1,
+      medianSecondsToDone: null,
+      timedToDone: 0,
+    });
+    expect(missingCreations(actions)).to.deep.equal(['T']);
+    expect(secondsToDoneByCardId(actions).has('T')).to.equal(false);
+  });
+
   it('names the completed cards whose creation lies before the read', () => {
     expect(
       missingCreations([
