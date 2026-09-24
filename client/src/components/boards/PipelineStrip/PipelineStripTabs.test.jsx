@@ -383,7 +383,7 @@ describe('expanded', () => {
     localStorage.setItem('planka_pipelineStrip_expanded', 'true');
   });
 
-  test('offers Build, Testing, Deployment and Accounts, and opens on Build', async () => {
+  test('offers Build, Testing, Deployment, Accounts and Statistics, and opens on Build', async () => {
     await renderStrip();
 
     const tabs = [...container.querySelectorAll('[role="tab"]')];
@@ -392,6 +392,7 @@ describe('expanded', () => {
       'testing',
       'deployment',
       'accounts',
+      'statistics',
     ]);
     expect(tabs[0].getAttribute('aria-selected')).toBe('true');
     // The Build tab is the strip as it was: the threads and the queue toggle.

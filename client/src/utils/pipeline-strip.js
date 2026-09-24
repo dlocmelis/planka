@@ -306,14 +306,19 @@ export const POLL_COLLAPSED_MS = 30000;
 export const pollInterval = (expanded) => (expanded ? POLL_EXPANDED_MS : POLL_COLLAPSED_MS);
 
 // The expanded strip's tabs, in the order they are drawn. Build is the
-// threads, held cards and queue; the other three read the orchestrator's
+// threads, held cards and queue; the next three read the orchestrator's
 // tests, deploys and accounts. A tab whose data the orchestrator did not send
-// (one that predates it) is not offered.
+// (one that predates it) is not offered. Statistics fetches its own figures
+// (StatisticsTab), half of them from Planka itself, but it is offered only
+// beside the other three: an orchestrator that predates the tabs keeps the
+// strip exactly as it was, and one that has them but not the statistics route
+// is told apart inside the tab ("keeps no pipeline statistics").
 export const Tabs = {
   BUILD: 'build',
   TESTING: 'testing',
   DEPLOYMENT: 'deployment',
   ACCOUNTS: 'accounts',
+  STATISTICS: 'statistics',
 };
 
 const TAB_FIELDS = {
@@ -321,6 +326,7 @@ const TAB_FIELDS = {
   [Tabs.TESTING]: 'tests',
   [Tabs.DEPLOYMENT]: 'deploys',
   [Tabs.ACCOUNTS]: 'accounts',
+  [Tabs.STATISTICS]: 'tests',
 };
 
 export const availableTabs = (view) =>
@@ -451,3 +457,149 @@ export const usageLevel = (window) => {
 
   return window.percent >= 90 ? 'warning' : 'ok';
 };
+
+// The Statistics tab. Every figure is shown for the last 24 hours, 7 days and
+// 30 days, beside the period of the same length before it. The board-flow
+// half is Planka's GET /api/boards/:id/pipeline-statistics; the pipeline half
+// is the orchestrator's GET /_term/pipeline/stats. Both answer
+// {periods: [{key, seconds, current, previous}]} in this order.
+export const STATS_PERIODS = ['24h', '7d', '30d'];
+
+// The statistics poll: they are read over two months of history and move by
+// the minute at most.
+export const STATS_POLL_MS = 60000;
+
+export const statsPeriod = (stats, key) =>
+  (stats && stats.periods && stats.periods.find((period) => period.key === key)) || null;
+
+// part / whole, or null when there is no whole: "nothing ran" is not "all
+// failed".
+export const ratio = (part, whole) => (whole > 0 ? part / whole : null);
+
+export const Directions = {
+  UP: 'up',
+  DOWN: 'down',
+  FLAT: 'flat',
+};
+
+// How a figure moved against the previous period: its direction and the
+// change in percent of the previous value — null when the previous value was
+// 0, where a percentage means nothing, and a direction of null when either
+// side is unknown.
+export const compareCounts = (current, previous) => {
+  if (current === null || current === undefined || previous === null || previous === undefined) {
+    return { direction: null, percent: null };
+  }
+
+  if (current === previous) {
+    return { direction: Directions.FLAT, percent: 0 };
+  }
+
+  const direction = current > previous ? Directions.UP : Directions.DOWN;
+
+  if (previous === 0) {
+    return { direction, percent: null };
+  }
+
+  return { direction, percent: Math.round((100 * Math.abs(current - previous)) / previous) };
+};
+
+// A rate (0..1) moves in percentage POINTS: 40% to 50% is ten points, not a
+// quarter.
+export const compareRates = (current, previous) => {
+  if (current === null || current === undefined || previous === null || previous === undefined) {
+    return { direction: null, points: null };
+  }
+
+  const points = Math.round(100 * (current - previous));
+
+  if (points === 0) {
+    return { direction: Directions.FLAT, points: 0 };
+  }
+
+  return { direction: points > 0 ? Directions.UP : Directions.DOWN, points: Math.abs(points) };
+};
+
+// Whether a move is good news: `better` is the direction a figure should go
+// (up for completions, down for failures), null for one that is neither.
+export const deltaTone = (direction, better) => {
+  if (!better || !direction || direction === Directions.FLAT) {
+    return null;
+  }
+
+  return direction === better ? 'good' : 'bad';
+};
+
+// When a history starts inside the periods on screen — the smoke gate's since
+// the day it began to be recorded — the tab says "since 24 Sep" rather than
+// let the missing days read as a quiet stretch. The date to say, or null when
+// the history covers every period shown, the 30 days before the last 30
+// included.
+export const historyStartsInside = (since, stats) => {
+  const month = statsPeriod(stats, '30d');
+
+  if (!since || !month) {
+    return null;
+  }
+
+  const sinceMs = Date.parse(since);
+  const fromMs = Date.parse(month.previous.from);
+
+  if (Number.isNaN(sinceMs) || Number.isNaN(fromMs)) {
+    return null;
+  }
+
+  return sinceMs > fromMs ? since : null;
+};
+
+// The kinds of agent session any period saw, busiest over the last 30 days
+// first, so every row of the table lines up across the periods.
+export const sessionKinds = (stats) => {
+  const totals = {};
+
+  ((stats && stats.periods) || []).forEach((period) => {
+    [period.current, period.previous].forEach((window) => {
+      (window.sessions || []).forEach(({ kind }) => {
+        totals[kind] = totals[kind] || 0;
+      });
+    });
+  });
+
+  const month = statsPeriod(stats, '30d');
+
+  if (month) {
+    (month.current.sessions || []).forEach(({ kind, sessions }) => {
+      totals[kind] = sessions;
+    });
+  }
+
+  return Object.keys(totals).sort((a, b) => totals[b] - totals[a] || a.localeCompare(b));
+};
+
+// One kind's row in a window: zeros when the window saw none of it.
+export const sessionsOf = (window, kind) =>
+  ((window && window.sessions) || []).find((item) => item.kind === kind) || {
+    kind,
+    sessions: 0,
+    failed: 0,
+    spendUsd: 0,
+  };
+
+// A window's session totals over every kind.
+export const sessionTotals = (window) =>
+  ((window && window.sessions) || []).reduce(
+    (total, item) => ({
+      sessions: total.sessions + item.sessions,
+      failed: total.failed + item.failed,
+    }),
+    { sessions: 0, failed: 0 },
+  );
+
+// Dollars as a person reads them: "$1,234.56", "$0.42".
+export const formatUsd = (value, locale) =>
+  new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+    minimumFractionDigits: 2,
+  }).format(Number(value) || 0);

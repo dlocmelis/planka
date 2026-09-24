@@ -41,6 +41,7 @@ import QueuePanel from './QueuePanel';
 import TestingTab from './TestingTab';
 import DeploymentTab from './DeploymentTab';
 import AccountsTab from './AccountsTab';
+import StatisticsTab from './StatisticsTab';
 
 import styles from './PipelineStrip.module.scss';
 
@@ -92,6 +93,7 @@ const TAB_TITLE_KEYS = {
   [Tabs.TESTING]: 'pipeline.tabTesting',
   [Tabs.DEPLOYMENT]: 'pipeline.tabDeployment',
   [Tabs.ACCOUNTS]: 'pipeline.tabAccounts',
+  [Tabs.STATISTICS]: 'pipeline.tabStatistics',
 };
 
 const showToast = (params) => {
@@ -554,6 +556,11 @@ const PipelineStrip = React.memo(({ boardId }) => {
         {expanded && tab === Tabs.ACCOUNTS && (
           <div className={styles.body}>
             <AccountsTab accounts={view.accounts} nowMs={nowMs} durationUnits={durationUnits} />
+          </div>
+        )}
+        {expanded && tab === Tabs.STATISTICS && (
+          <div className={styles.body}>
+            <StatisticsTab boardId={boardId} durationUnits={durationUnits} />
           </div>
         )}
         {expanded && tab === Tabs.BUILD && (
