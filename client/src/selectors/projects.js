@@ -6,6 +6,7 @@
 import { createSelector } from 'redux-orm';
 
 import orm from '../orm';
+import { selectIsFavoritesEnabled } from './core';
 import { selectPath } from './router';
 import { selectCurrentUserId } from './users';
 import { isLocalId } from '../utils/local-id';
@@ -310,6 +311,29 @@ export const selectIsCurrentUserManagerForCurrentProject = createSelector(
   },
 );
 
+// The favorites bar is a home page element only: inside a project the header already
+// names the project, so its favorite card there is redundant and takes space from the board.
+export const selectIsFavoritesActiveForCurrentUser = createSelector(
+  orm,
+  (state) => selectCurrentUserId(state),
+  (state) => selectIsFavoritesEnabled(state),
+  (state) => selectPath(state).projectId,
+  ({ User }, id, isFavoritesEnabled, projectId) => {
+    if (!id || projectId !== undefined) {
+      return false;
+    }
+
+    const userModel = User.withId(id);
+
+    if (!userModel) {
+      return false;
+    }
+
+    // TODO: use selectFavoriteProjectIdsForCurrentUser instead
+    return isFavoritesEnabled && userModel.getFavoriteProjectsModelArray().length > 0;
+  },
+);
+
 export default {
   makeSelectProjectById,
   selectProjectById,
@@ -331,4 +355,5 @@ export default {
   selectBaseCustomFieldGroupsForCurrentProject,
   selectBoardIdsForCurrentProject,
   selectIsCurrentUserManagerForCurrentProject,
+  selectIsFavoritesActiveForCurrentUser,
 };
