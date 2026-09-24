@@ -14,6 +14,17 @@
 // so a 30-day comparison works from the first day. The orchestrator's own
 // column history only starts on 18 September.
 //
+// A card moved in from ANOTHER board is where that history falls short.
+// Planka writes no action for a move between boards (helpers/cards/update-one.js
+// leaves it a TODO), and a card's earlier actions keep the board they were
+// written on. So such a card never counts as entered, and it is left out of
+// the median time to done (and so fails any time-to-done filter): its
+// createCard is on the other board, and this board's reads never see it. Its
+// later moves here count as any card's do. Counting the arrival needs a
+// transfer action Planka does not record yet. Pinned by "never counts a card
+// moved in from another board as entered, nor times it" in
+// server/test/utils/pipeline-statistics.test.js.
+//
 // A move is read by the NAMES of its columns, exactly as the orchestrator
 // reads the board (devteam-orchestrator, internal/fsm/fsm.go): these are its
 // column names, and a board that does not use them simply counts zero. The
