@@ -96,6 +96,60 @@ const TAB_TITLE_KEYS = {
   [Tabs.STATISTICS]: 'pipeline.tabStatistics',
 };
 
+// Where each header chip takes the person: the tab it opens and, on Build,
+// the section it scrolls to (a `data-section` in the expanded strip).
+const Sections = {
+  THREADS: 'threads',
+  QUEUE: 'queue',
+  PAUSED: 'paused',
+  CONTROLS: 'controls',
+};
+
+const CHIP_DESTINATIONS = {
+  threads: { tab: Tabs.BUILD, section: Sections.THREADS },
+  queue: { tab: Tabs.BUILD, section: Sections.QUEUE },
+  paused: { tab: Tabs.BUILD, section: Sections.PAUSED },
+  draining: { tab: Tabs.BUILD, section: Sections.CONTROLS },
+  held: { tab: Tabs.BUILD, section: Sections.CONTROLS },
+  tests: { tab: Tabs.TESTING },
+  deploys: { tab: Tabs.DEPLOYMENT },
+  limited: { tab: Tabs.ACCOUNTS },
+};
+
+// A header chip: a real button, so it takes Tab, Enter and Space. Its tooltip
+// names the tab it opens unless it has its own, rather than inheriting the
+// header's "expand".
+const HeaderChip = React.memo(({ chip, className, title, onClick, children }) => {
+  const [t] = useTranslation();
+
+  return (
+    <Label
+      as="button"
+      type="button"
+      size="mini"
+      className={classNames(styles.chip, styles.chipButton, className)}
+      title={title || t(TAB_TITLE_KEYS[CHIP_DESTINATIONS[chip].tab])}
+      data-chip={chip}
+      onClick={onClick}
+    >
+      {children}
+    </Label>
+  );
+});
+
+HeaderChip.propTypes = {
+  chip: PropTypes.oneOf(Object.keys(CHIP_DESTINATIONS)).isRequired,
+  className: PropTypes.string,
+  title: PropTypes.string,
+  onClick: PropTypes.func.isRequired,
+  children: PropTypes.node.isRequired,
+};
+
+HeaderChip.defaultProps = {
+  className: undefined,
+  title: undefined,
+};
+
 const showToast = (params) => {
   toast({
     type: ToastTypes.PIPELINE_STRIP,
@@ -196,6 +250,49 @@ const PipelineStrip = React.memo(({ boardId }) => {
       return !prev;
     });
   }, []);
+
+  // The section a chip asked for, scrolled to once the strip has drawn it. A
+  // fresh object per click, so the same chip twice scrolls twice.
+  const [scrollRequest, setScrollRequest] = useState(null);
+
+  useEffect(() => {
+    const element =
+      scrollRequest &&
+      wrapperRef.current &&
+      wrapperRef.current.querySelector(`[data-section="${scrollRequest.section}"]`);
+
+    // jsdom has no scrollIntoView.
+    if (element && element.scrollIntoView) {
+      element.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [scrollRequest]);
+
+  // A header chip navigates: it opens the strip (never closes it), picks its
+  // tab the way clicking the tab would, opens the queue for the queue chip and
+  // scrolls to its section. It does not also toggle the header.
+  const handleChipClick = useCallback(
+    (event) => {
+      event.stopPropagation();
+
+      const destination = CHIP_DESTINATIONS[event.currentTarget.dataset.chip];
+
+      writeFlag(EXPANDED_KEY, true);
+      setExpanded(true);
+      handleTabSelect(destination.tab);
+
+      if (destination.section === Sections.QUEUE) {
+        // Opened the way the toggle opens it: remembered only when the rule
+        // would have kept it closed.
+        const remembered = allBusy ? null : true;
+
+        writeFlag(QUEUE_OPENED_KEY, remembered);
+        setQueueOpened(remembered);
+      }
+
+      setScrollRequest(destination.section ? { section: destination.section } : null);
+    },
+    [handleTabSelect, allBusy],
+  );
 
   const handleQueueToggle = useCallback(() => {
     const next = !isQueueOpen;
@@ -423,6 +520,11 @@ const PipelineStrip = React.memo(({ boardId }) => {
           title={t(expanded ? 'pipeline.collapse' : 'pipeline.expand')}
           onClick={handleToggle}
           onKeyDown={(event) => {
+            // Enter and Space on a chip are the chip's own click.
+            if (event.target !== event.currentTarget) {
+              return;
+            }
+
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
               handleToggle();
@@ -457,61 +559,48 @@ const PipelineStrip = React.memo(({ boardId }) => {
             })}
           </span>
           <span className={styles.chips} data-summary>
-            <Label size="mini" className={styles.chip} data-chip="threads">
+            <HeaderChip chip="threads" onClick={handleChipClick}>
               {t('pipeline.threadsBusy', {
                 busy: summary.busy,
                 total: summary.total,
               })}
-            </Label>
-            <Label size="mini" className={styles.chip} data-chip="queue">
+            </HeaderChip>
+            <HeaderChip chip="queue" onClick={handleChipClick}>
               {t('pipeline.queueCount', { count: summary.queued })}
-            </Label>
+            </HeaderChip>
             {summary.paused > 0 && (
-              <Label
-                size="mini"
-                className={classNames(styles.chip, styles.chipPaused)}
-                data-chip="paused"
-              >
+              <HeaderChip chip="paused" className={styles.chipPaused} onClick={handleChipClick}>
                 ⏸ {t('pipeline.pausedCount', { count: summary.paused })}
-              </Label>
+              </HeaderChip>
             )}
             {summary.draining && (
-              <Label
-                size="mini"
-                className={classNames(styles.chip, styles.chipDraining)}
-                data-chip="draining"
-              >
+              <HeaderChip chip="draining" className={styles.chipDraining} onClick={handleChipClick}>
                 {t('pipeline.draining')}
-              </Label>
+              </HeaderChip>
             )}
             {!summary.draining && view.dispatching === false && (
-              <Label size="mini" className={styles.chip} data-chip="held">
+              <HeaderChip chip="held" onClick={handleChipClick}>
                 {t('pipeline.dispatchHeld')}
-              </Label>
+              </HeaderChip>
             )}
             {tabSummary.tests && (
-              <Label size="mini" className={styles.chip} data-chip="tests">
+              <HeaderChip chip="tests" onClick={handleChipClick}>
                 {t('pipeline.testsChip', tabSummary.tests)}
-              </Label>
+              </HeaderChip>
             )}
             {tabSummary.deploys && (
-              <Label
-                size="mini"
-                className={styles.chip}
+              <HeaderChip
+                chip="deploys"
                 title={t('pipeline.deploysChipTitle', tabSummary.deploys)}
-                data-chip="deploys"
+                onClick={handleChipClick}
               >
                 {t('pipeline.deploysChip', { count: tabSummary.deploys.deploying })}
-              </Label>
+              </HeaderChip>
             )}
             {tabSummary.limited.length > 0 && (
-              <Label
-                size="mini"
-                className={classNames(styles.chip, styles.chipRefused)}
-                data-chip="limited"
-              >
+              <HeaderChip chip="limited" className={styles.chipRefused} onClick={handleChipClick}>
                 ⛔ {t('pipeline.limitedChip', { names: tabSummary.limited.join(', ') })}
-              </Label>
+              </HeaderChip>
             )}
           </span>
         </div>
@@ -565,7 +654,7 @@ const PipelineStrip = React.memo(({ boardId }) => {
         )}
         {expanded && tab === Tabs.BUILD && (
           <div className={styles.body}>
-            <div className={styles.controls}>
+            <div className={styles.controls} data-section={Sections.CONTROLS}>
               {drain.active && (
                 <span className={styles.detail} data-drain-status>
                   ⏸{' '}
@@ -601,7 +690,7 @@ const PipelineStrip = React.memo(({ boardId }) => {
                   </ConfirmationPopup>
                 ))}
             </div>
-            <div className={styles.threads}>
+            <div className={styles.threads} data-section={Sections.THREADS}>
               {groupByAccount(view.threads).map((group) => (
                 <div key={group.account} className={styles.account}>
                   <div className={styles.accountName}>
@@ -623,7 +712,7 @@ const PipelineStrip = React.memo(({ boardId }) => {
               ))}
             </div>
             {view.paused.length > 0 && (
-              <div className={styles.paused} data-paused-row>
+              <div className={styles.paused} data-section={Sections.PAUSED} data-paused-row>
                 <span className={styles.sectionTitle}>
                   ⏸ {t('pipeline.pausedCards', { count: view.paused.length })}
                 </span>
@@ -661,7 +750,7 @@ const PipelineStrip = React.memo(({ boardId }) => {
                 })}
               </div>
             )}
-            <div className={styles.queue}>
+            <div className={styles.queue} data-section={Sections.QUEUE}>
               <button
                 type="button"
                 className={styles.sectionToggle}
