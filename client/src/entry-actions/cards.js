@@ -83,6 +83,16 @@ const moveCard = (id, listId, index = 0) => ({
   },
 });
 
+const moveCards = (ids, listId, index, draggedId) => ({
+  type: EntryActionTypes.CARDS_MOVE,
+  payload: {
+    ids,
+    listId,
+    index,
+    draggedId,
+  },
+});
+
 const moveCurrentCard = (listId, index = 0, autoClose = false) => ({
   type: EntryActionTypes.CURRENT_CARD_MOVE,
   payload: {
@@ -237,6 +247,7 @@ export default {
   updateCurrentCard,
   handleCardUpdate,
   moveCard,
+  moveCards,
   moveCurrentCard,
   moveCardToArchive,
   moveCurrentCardToArchive,

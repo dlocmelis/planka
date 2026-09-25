@@ -3,7 +3,7 @@
  * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
  */
 
-import { call, fork, join, put, race, select, take } from 'redux-saga/effects';
+import { all, call, fork, join, put, race, select, take } from 'redux-saga/effects';
 import toast from 'react-hot-toast';
 import { LOCATION_CHANGE_HANDLE } from '../../../lib/redux-router';
 
@@ -14,6 +14,7 @@ import actions from '../../../actions';
 import api from '../../../api';
 import i18n from '../../../i18n';
 import { createLocalId } from '../../../utils/local-id';
+import { getGroupMovePositions, orderGroupCards } from '../../../utils/card-group-move';
 import { isListArchiveOrTrash, isListFinite } from '../../../utils/record-helpers';
 import ActionTypes from '../../../constants/ActionTypes';
 import ClipboardTypes from '../../../constants/ClipboardTypes';
@@ -379,6 +380,44 @@ export function* moveCard(id, listId, index) {
   }
 
   yield call(updateCard, id, data);
+}
+
+// Moves several cards to one spot as a contiguous block, in the order they already have on
+// the board. Positions are worked out once up front and each card then goes through the same
+// updateCard a single-card move uses, so list-type rules and server calls stay identical
+export function* moveCards(ids, listId, index, draggedId) {
+  const cards = yield select((state) =>
+    ids.map((id) => selectors.selectCardById(state, id)).filter(Boolean),
+  );
+
+  if (cards.length === 0) {
+    return;
+  }
+
+  const listIds = yield select(selectors.selectKanbanListIdsForCurrentBoard);
+  const movingIds = orderGroupCards(cards, listIds || []).map((card) => card.id);
+
+  const list = yield select(selectors.selectListById, listId);
+
+  if (!list) {
+    return;
+  }
+
+  if (!isListFinite(list)) {
+    yield all(movingIds.map((id) => call(updateCard, id, { listId })));
+    return;
+  }
+
+  // The cards the list renders, which is what the drop index counts over
+  const listCards = yield select((state) =>
+    selectors
+      .selectFilteredCardIdsByListId(state, listId)
+      .map((id) => selectors.selectCardById(state, id)),
+  );
+
+  const positions = getGroupMovePositions(listCards, movingIds, draggedId, index);
+
+  yield all(positions.map(({ id, position }) => call(updateCard, id, { listId, position })));
 }
 
 export function* moveCurrentCard(listId, index, autoClose) {
@@ -795,6 +834,7 @@ export default {
   updateCurrentCard,
   handleCardUpdate,
   moveCard,
+  moveCards,
   moveCurrentCard,
   moveCardToArchive,
   moveCurrentCardToArchive,

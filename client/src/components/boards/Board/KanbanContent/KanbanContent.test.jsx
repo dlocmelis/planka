@@ -19,6 +19,7 @@ const mockDragDropContextPropsList = [];
 const mockListPropsList = [];
 
 let mockListIds;
+let mockSelectedCardIds;
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => [(key) => key],
@@ -49,6 +50,7 @@ jest.mock('../../../../selectors', () => ({
   __esModule: true,
   default: {
     selectKanbanListIdsForCurrentBoard: () => mockListIds,
+    selectSelectedCardIds: () => mockSelectedCardIds,
     selectIsEditModeEnabled: () => false,
     selectCurrentUserMembershipForCurrentBoard: () => null,
   },
@@ -59,13 +61,22 @@ jest.mock('../../../../entry-actions', () => ({
   default: {
     moveList: (id, index) => ({ type: 'list-move', payload: { id, index } }),
     moveCard: (id, listId, index) => ({ type: 'card-move', payload: { id, listId, index } }),
+    moveCards: (ids, listId, index, draggedId) => ({
+      type: 'cards-move',
+      payload: { ids, listId, index, draggedId },
+    }),
     clearCardSelection: () => ({ type: 'card-selection-clear' }),
   },
 }));
 
-jest.mock('../../../lists/List', () => (props) => {
-  mockListPropsList.push(props);
-  return null;
+jest.mock('../../../lists/List', () => {
+  const { useContext } = jest.requireActual('react');
+  const { CardDragContext } = jest.requireActual('../../../../contexts');
+
+  return (props) => {
+    mockListPropsList.push({ ...props, cardDrag: useContext(CardDragContext) });
+    return null;
+  };
 });
 
 jest.mock('../../../cards/BulkActionsBar', () => () => null);
@@ -106,10 +117,16 @@ const dragEnd = (result) => {
 const lastIsDragActive = () => mockListPropsList[mockListPropsList.length - 1].isDragActive;
 
 const moveActions = () =>
-  dispatchedActions.filter((action) => ['card-move', 'list-move'].includes(action.type));
+  dispatchedActions.filter((action) =>
+    ['card-move', 'cards-move', 'list-move', 'card-selection-clear'].includes(action.type),
+  );
+
+// What DraggableCard reads from the drag context, as the last List render saw it
+const lastCardDrag = () => mockListPropsList[mockListPropsList.length - 1].cardDrag;
 
 beforeEach(() => {
   mockListIds = ['list-1', 'list-2'];
+  mockSelectedCardIds = [];
   mockDragDropContextPropsList.length = 0;
   mockListPropsList.length = 0;
 
@@ -221,5 +238,133 @@ describe('card drag latch passed to lists', () => {
     });
 
     expect(lastIsDragActive()).toBe(false);
+  });
+});
+
+describe('dragging a card while several cards are selected', () => {
+  test('moves every selected card to the drop point and clears the selection', () => {
+    mockSelectedCardIds = ['card-3', 'card-1', 'card-7'];
+    renderContent();
+
+    beforeCapture('card:card-1');
+    dragEnd({
+      draggableId: 'card:card-1',
+      type: 'CARD',
+      source: { droppableId: 'list:list-1', index: 0 },
+      destination: { droppableId: 'list:list-2', index: 2 },
+    });
+
+    expect(moveActions()).toEqual([
+      {
+        type: 'cards-move',
+        payload: {
+          ids: ['card-3', 'card-1', 'card-7'],
+          listId: 'list-2',
+          index: 2,
+          draggedId: 'card-1',
+        },
+      },
+      { type: 'card-selection-clear' },
+    ]);
+  });
+
+  test('gathers the selection even when the dragged card lands back where it started', () => {
+    mockSelectedCardIds = ['card-1', 'card-2'];
+    renderContent();
+
+    beforeCapture('card:card-1');
+    dragEnd({
+      draggableId: 'card:card-1',
+      type: 'CARD',
+      source: { droppableId: 'list:list-1', index: 0 },
+      destination: { droppableId: 'list:list-1', index: 0 },
+    });
+
+    expect(moveActions().map(({ type }) => type)).toEqual(['cards-move', 'card-selection-clear']);
+  });
+
+  test('moves only the dragged card, and keeps the selection, when it is not selected', () => {
+    mockSelectedCardIds = ['card-3', 'card-7'];
+    renderContent();
+
+    beforeCapture('card:card-1');
+    dragEnd({
+      draggableId: 'card:card-1',
+      type: 'CARD',
+      source: { droppableId: 'list:list-1', index: 0 },
+      destination: { droppableId: 'list:list-2', index: 2 },
+    });
+
+    expect(moveActions()).toEqual([
+      { type: 'card-move', payload: { id: 'card-1', listId: 'list-2', index: 2 } },
+    ]);
+  });
+
+  test('moves only the dragged card when it is the only one selected', () => {
+    mockSelectedCardIds = ['card-1'];
+    renderContent();
+
+    beforeCapture('card:card-1');
+    dragEnd({
+      draggableId: 'card:card-1',
+      type: 'CARD',
+      source: { droppableId: 'list:list-1', index: 0 },
+      destination: { droppableId: 'list:list-2', index: 2 },
+    });
+
+    expect(moveActions()).toEqual([
+      { type: 'card-move', payload: { id: 'card-1', listId: 'list-2', index: 2 } },
+    ]);
+  });
+
+  test('moves nothing and keeps the selection when the drop has no destination', () => {
+    mockSelectedCardIds = ['card-1', 'card-2'];
+    renderContent();
+
+    beforeCapture('card:card-1');
+    dragEnd({
+      draggableId: 'card:card-1',
+      type: 'CARD',
+      source: { droppableId: 'list:list-1', index: 0 },
+      destination: null,
+    });
+
+    expect(moveActions()).toEqual([]);
+  });
+});
+
+describe('card drag context read by the cards', () => {
+  test('carries the dragged card and the selection size while a selected card is dragged', () => {
+    mockSelectedCardIds = ['card-1', 'card-2', 'card-3'];
+    renderContent();
+
+    expect(lastCardDrag()).toEqual({ draggingCardId: null, groupSize: 0 });
+
+    beforeCapture('card:card-2');
+    expect(lastCardDrag()).toEqual({ draggingCardId: 'card-2', groupSize: 3 });
+
+    dragEnd({
+      draggableId: 'card:card-2',
+      type: 'CARD',
+      source: { droppableId: 'list:list-1', index: 1 },
+      destination: null,
+    });
+    expect(lastCardDrag()).toEqual({ draggingCardId: null, groupSize: 0 });
+  });
+
+  test('has no group while a card that is not selected is dragged', () => {
+    mockSelectedCardIds = ['card-1', 'card-2'];
+    renderContent();
+
+    beforeCapture('card:card-9');
+    expect(lastCardDrag()).toEqual({ draggingCardId: 'card-9', groupSize: 0 });
+  });
+
+  test('is not set for a list drag', () => {
+    mockSelectedCardIds = ['card-1', 'card-2'];
+    renderContent();
+
+    beforeCapture('list:list-1');
+    expect(lastCardDrag()).toEqual({ draggingCardId: null, groupSize: 0 });
   });
 });
