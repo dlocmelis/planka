@@ -325,7 +325,14 @@ const compute = ({ actions, creations = [], now, since = null, range = null, car
 // as "$1.97" — or "unpriced", which is no cost at all.
 const COST_FIELD_NAME = 'Est. Cost (USD)';
 
-const MAX_RANGE_SECONDS = 366 * DAY_SECONDS;
+// The longest custom period, in days. The client counts local calendar days
+// (statsRange in client/src/utils/pipeline-strip.js), and 366 of them can span
+// two autumn clock changes and one spring one (28 Oct 2023 - 27 Oct 2024 in
+// Europe): 366 days and an hour. The cap allows that hour, so the client never
+// sends a period the server refuses. The orchestrator's MaxStatsRange
+// (devteam-orchestrator, internal/cardterm/pipelinestats.go) is the same.
+const MAX_RANGE_DAYS = 366;
+const MAX_RANGE_SECONDS = MAX_RANGE_DAYS * DAY_SECONDS + 60 * 60;
 const MAX_SEARCH_LENGTH = 256;
 const MAX_LIST_LENGTH = 100;
 
@@ -441,9 +448,7 @@ const parseFilters = (query = {}) => {
     }
 
     if (toMs - fromMs > MAX_RANGE_SECONDS * 1000) {
-      throw new FilterError(
-        `the period from - to must be at most ${MAX_RANGE_SECONDS / DAY_SECONDS} days`,
-      );
+      throw new FilterError(`the period from - to must be at most ${MAX_RANGE_DAYS} days`);
     }
 
     range = { fromMs, toMs };
@@ -732,6 +737,7 @@ module.exports = {
   COST_FIELD_NAME,
   CUSTOM_PERIOD_KEY,
   FilterError,
+  MAX_RANGE_DAYS,
   MAX_RANGE_SECONDS,
   PERIODS,
   REACH_SECONDS,

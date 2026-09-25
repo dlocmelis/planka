@@ -564,8 +564,17 @@ describe('pipeline statistics filters', () => {
       const at366 = new Date(Date.parse(from) + 366 * DAY).toISOString();
 
       expect(parseFilters({ from, to: at366 }).range.toMs).to.equal(Date.parse(at366));
+      // An hour over, for 366 local days across two autumn clock changes and
+      // one spring one, as the client sends them from Riga: 28 Oct 2023 -
+      // 27 Oct 2024.
+      expect(
+        parseFilters({ from: '2023-10-27T21:00:00.000Z', to: '2024-10-27T22:00:00.000Z' }).range,
+      ).to.deep.equal({
+        fromMs: Date.parse('2023-10-27T21:00:00.000Z'),
+        toMs: Date.parse('2024-10-27T22:00:00.000Z'),
+      });
       expect(() =>
-        parseFilters({ from, to: new Date(Date.parse(at366) + 1000).toISOString() }),
+        parseFilters({ from, to: new Date(Date.parse(at366) + HOUR + 1000).toISOString() }),
       ).to.throw(FilterError, '366 days');
     });
   });

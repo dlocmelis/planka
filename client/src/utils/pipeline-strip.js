@@ -703,7 +703,10 @@ export const statsRange = (filters) => {
   }
 
   // Counted in calendar days, so a clock change inside the period does not
-  // push a 366-day pick an hour over the server's cap.
+  // make a 366-day pick read as 367. 366 of them can still be an hour over 366
+  // days (two autumn clock changes and one spring one), which is why the
+  // server's cap allows that hour (MAX_RANGE_SECONDS in
+  // server/utils/pipeline-statistics.js).
   const [fromDay, toDay] = [from, to].map((at) =>
     Date.UTC(at.getFullYear(), at.getMonth(), at.getDate()),
   );
