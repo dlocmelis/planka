@@ -133,7 +133,8 @@ beforeEach(() => {
   dispatchedActions = [];
   store = createStore((state, action) => {
     dispatchedActions.push(action);
-    return state;
+    // A fresh state makes useSelector re-run, the way a Card or List table change does
+    return action.type === 'store-change' ? { ...state } : state;
   }, {});
 
   container = document.createElement('div');
@@ -366,5 +367,54 @@ describe('card drag context read by the cards', () => {
 
     beforeCapture('list:list-1');
     expect(lastCardDrag()).toEqual({ draggingCardId: null, groupSize: 0 });
+  });
+});
+
+describe('card drag context identity', () => {
+  // selectSelectedCardIds is a redux-orm selector: it hands back a new array whenever the Card
+  // or List tables change, so these simulate that with a new array and a new store state
+  const changeStore = (selectedCardIds) => {
+    mockSelectedCardIds = selectedCardIds;
+    const rendersBefore = mockListPropsList.length;
+
+    act(() => {
+      store.dispatch({ type: 'store-change' });
+    });
+
+    // Guards the tests below against passing only because nothing re-rendered
+    expect(mockListPropsList.length).toBeGreaterThan(rendersBefore);
+  };
+
+  test('stays the same object across store changes while nothing is dragged', () => {
+    mockSelectedCardIds = ['card-1', 'card-2'];
+    renderContent();
+    const before = lastCardDrag();
+
+    changeStore(['card-1', 'card-2']);
+    expect(lastCardDrag()).toBe(before);
+
+    changeStore(['card-1', 'card-2', 'card-3']);
+    expect(lastCardDrag()).toBe(before);
+  });
+
+  test('stays the same object during a drag while the group size is unchanged', () => {
+    mockSelectedCardIds = ['card-1', 'card-2'];
+    renderContent();
+
+    beforeCapture('card:card-1');
+    const during = lastCardDrag();
+
+    changeStore(['card-1', 'card-2']);
+    expect(lastCardDrag()).toBe(during);
+  });
+
+  test('changes when the group size changes during a drag', () => {
+    mockSelectedCardIds = ['card-1', 'card-2'];
+    renderContent();
+
+    beforeCapture('card:card-1');
+    changeStore(['card-1', 'card-2', 'card-3']);
+
+    expect(lastCardDrag()).toEqual({ draggingCardId: 'card-1', groupSize: 3 });
   });
 });
