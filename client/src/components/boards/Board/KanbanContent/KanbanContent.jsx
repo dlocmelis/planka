@@ -196,15 +196,19 @@ const KanbanContent = React.memo(() => {
     [dispatch],
   );
 
+  const groupSize =
+    draggingCardId && selectedCardIds.length > 1 && selectedCardIds.includes(draggingCardId)
+      ? selectedCardIds.length
+      : 0;
+
+  // Keyed on primitives, not on the selector's array: that array is rebuilt on every Card or
+  // List change (socket updates included), which would re-render every DraggableCard
   const cardDragContextValue = useMemo(
     () => ({
       draggingCardId,
-      groupSize:
-        draggingCardId && selectedCardIds.length > 1 && selectedCardIds.includes(draggingCardId)
-          ? selectedCardIds.length
-          : 0,
+      groupSize,
     }),
-    [draggingCardId, selectedCardIds],
+    [draggingCardId, groupSize],
   );
 
   useDidUpdate(() => {
