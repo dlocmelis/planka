@@ -3,7 +3,7 @@
  * Licensed under the Fair Use License: https://github.com/plankanban/planka/blob/master/LICENSE.md
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { useTranslation } from 'react-i18next';
@@ -13,6 +13,7 @@ import { closePopup } from '../../../../lib/popup';
 
 import selectors from '../../../../selectors';
 import entryActions from '../../../../entry-actions';
+import { CardDragContext } from '../../../../contexts';
 import parseDndId, { isCardDndId } from '../../../../utils/parse-dnd-id';
 import DroppableTypes from '../../../../constants/DroppableTypes';
 import { BoardMembershipRoles } from '../../../../constants/Enums';
@@ -26,6 +27,7 @@ import globalStyles from '../../../../styles.module.scss';
 
 const KanbanContent = React.memo(() => {
   const listIds = useSelector(selectors.selectKanbanListIdsForCurrentBoard);
+  const selectedCardIds = useSelector(selectors.selectSelectedCardIds);
 
   const canAddList = useSelector((state) => {
     const isEditModeEnabled = selectors.selectIsEditModeEnabled(state); // TODO: move out?
@@ -42,6 +44,7 @@ const KanbanContent = React.memo(() => {
   const [t] = useTranslation();
   const [isAddListOpened, setIsAddListOpened] = useState(false);
   const [isCardDragActive, setIsCardDragActive] = useState(false);
+  const [draggingCardId, setDraggingCardId] = useState(null);
 
   const wrapperRef = useRef(null);
   const prevPositionRef = useRef(null);
@@ -55,6 +58,7 @@ const KanbanContent = React.memo(() => {
     // state before react-beautiful-dnd captures Droppable dimensions
     ReactDOM.flushSync(() => {
       setIsCardDragActive(true);
+      setDraggingCardId(parseDndId(draggableId));
     });
   }, []);
 
@@ -66,18 +70,29 @@ const KanbanContent = React.memo(() => {
   const handleDragEnd = useCallback(
     ({ draggableId, type, source, destination }) => {
       document.body.classList.remove(globalStyles.dragging);
+      setDraggingCardId(null);
 
       if (!destination) {
         setIsCardDragActive(false);
         return;
       }
 
-      if (source.droppableId === destination.droppableId && source.index === destination.index) {
+      const id = parseDndId(draggableId);
+
+      // Dragging a selected card carries the whole selection along; dragging any other card
+      // moves just that one and leaves the selection alone
+      const isGroupMove =
+        type === DroppableTypes.CARD && selectedCardIds.length > 1 && selectedCardIds.includes(id);
+
+      // A group dropped back where it was still gathers the other selected cards there
+      if (
+        !isGroupMove &&
+        source.droppableId === destination.droppableId &&
+        source.index === destination.index
+      ) {
         setIsCardDragActive(false);
         return;
       }
-
-      const id = parseDndId(draggableId);
 
       switch (type) {
         case DroppableTypes.LIST:
@@ -85,9 +100,22 @@ const KanbanContent = React.memo(() => {
 
           break;
         case DroppableTypes.CARD:
-          dispatch(
-            entryActions.moveCard(id, parseDndId(destination.droppableId), destination.index),
-          );
+          if (isGroupMove) {
+            dispatch(
+              entryActions.moveCards(
+                selectedCardIds,
+                parseDndId(destination.droppableId),
+                destination.index,
+                id,
+              ),
+            );
+
+            dispatch(entryActions.clearCardSelection());
+          } else {
+            dispatch(
+              entryActions.moveCard(id, parseDndId(destination.droppableId), destination.index),
+            );
+          }
 
           break;
         default:
@@ -95,7 +123,7 @@ const KanbanContent = React.memo(() => {
 
       setIsCardDragActive(false);
     },
-    [dispatch],
+    [selectedCardIds, dispatch],
   );
 
   const handleAddListClick = useCallback(() => {
@@ -168,6 +196,17 @@ const KanbanContent = React.memo(() => {
     [dispatch],
   );
 
+  const cardDragContextValue = useMemo(
+    () => ({
+      draggingCardId,
+      groupSize:
+        draggingCardId && selectedCardIds.length > 1 && selectedCardIds.includes(draggingCardId)
+          ? selectedCardIds.length
+          : 0,
+    }),
+    [draggingCardId, selectedCardIds],
+  );
+
   useDidUpdate(() => {
     if (isAddListOpened) {
       window.scroll(document.body.scrollWidth, 0);
@@ -183,39 +222,41 @@ const KanbanContent = React.memo(() => {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <Droppable droppableId="board" type={DroppableTypes.LIST} direction="horizontal">
-            {({ innerRef, droppableProps, placeholder }) => (
-              <div
-                {...droppableProps} // eslint-disable-line react/jsx-props-no-spreading
-                data-drag-scroller
-                ref={innerRef}
-                className={styles.lists}
-              >
-                {listIds.map((listId, index) => (
-                  <List key={listId} id={listId} index={index} isDragActive={isCardDragActive} />
-                ))}
-                {placeholder}
-                {canAddList && (
-                  <div data-drag-scroller className={styles.list}>
-                    {isAddListOpened ? (
-                      <AddList onClose={handleAddListClose} />
-                    ) : (
-                      <button
-                        type="button"
-                        className={styles.addListButton}
-                        onClick={handleAddListClick}
-                      >
-                        <PlusMathIcon className={styles.addListButtonIcon} />
-                        <span className={styles.addListButtonText}>
-                          {listIds.length > 0 ? t('action.addAnotherList') : t('action.addList')}
-                        </span>
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </Droppable>
+          <CardDragContext.Provider value={cardDragContextValue}>
+            <Droppable droppableId="board" type={DroppableTypes.LIST} direction="horizontal">
+              {({ innerRef, droppableProps, placeholder }) => (
+                <div
+                  {...droppableProps} // eslint-disable-line react/jsx-props-no-spreading
+                  data-drag-scroller
+                  ref={innerRef}
+                  className={styles.lists}
+                >
+                  {listIds.map((listId, index) => (
+                    <List key={listId} id={listId} index={index} isDragActive={isCardDragActive} />
+                  ))}
+                  {placeholder}
+                  {canAddList && (
+                    <div data-drag-scroller className={styles.list}>
+                      {isAddListOpened ? (
+                        <AddList onClose={handleAddListClose} />
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.addListButton}
+                          onClick={handleAddListClick}
+                        >
+                          <PlusMathIcon className={styles.addListButtonIcon} />
+                          <span className={styles.addListButtonText}>
+                            {listIds.length > 0 ? t('action.addAnotherList') : t('action.addList')}
+                          </span>
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </Droppable>
+          </CardDragContext.Provider>
         </DragDropContext>
       </div>
       <BulkActionsBar />

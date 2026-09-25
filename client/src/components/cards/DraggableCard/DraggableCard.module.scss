@@ -4,8 +4,31 @@
  */
 
 :global(#app) {
+  .groupBadge {
+    background: #2185d0;
+    border-radius: 11px;
+    box-shadow: 0 1px 2px rgba(9, 30, 66, 0.3);
+    color: #fff;
+    font-size: 12px;
+    font-weight: bold;
+    inset-inline-end: -6px;
+    line-height: 22px;
+    min-width: 22px;
+    padding: 0 6px;
+    pointer-events: none;
+    position: absolute;
+    text-align: center;
+    top: -6px;
+  }
+
   .wrapper {
     cursor: auto;
     outline: none;
+    position: relative;
+  }
+
+  .wrapperFaded {
+    opacity: 0.35;
+    transition: opacity 0.15s ease;
   }
 }
