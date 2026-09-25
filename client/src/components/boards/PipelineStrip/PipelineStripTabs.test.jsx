@@ -526,3 +526,169 @@ describe('expanded', () => {
     }
   });
 });
+
+describe('the header chips take you to their area', () => {
+  let scrolledTo;
+  const { scrollIntoView } = Element.prototype;
+
+  const header = () => container.querySelector('[data-pipeline-strip="ok"] [role="button"]');
+  const selectedTab = () => {
+    const tab = container.querySelector('[role="tab"][aria-selected="true"]');
+    return tab && tab.getAttribute('data-tab');
+  };
+  const scrolledSections = () => scrolledTo.map((element) => element.getAttribute('data-section'));
+
+  const clickChip = async (name) => {
+    click(container.querySelector(`[data-chip="${name}"]`));
+    await flush();
+  };
+
+  beforeEach(() => {
+    scrolledTo = [];
+    // jsdom has none; the strip calls it on the section a chip names.
+    Element.prototype.scrollIntoView = jest.fn(function record() {
+      scrolledTo.push(this);
+    });
+  });
+
+  afterEach(() => {
+    Element.prototype.scrollIntoView = scrollIntoView;
+  });
+
+  test.each([
+    ['threads', 'build', 'threads'],
+    ['queue', 'build', 'queue'],
+    ['paused', 'build', 'paused'],
+    ['draining', 'build', 'controls'],
+    ['tests', 'testing', 'none'],
+    ['deploys', 'deployment', 'none'],
+    ['limited', 'accounts', 'none'],
+  ])(
+    'the %s chip opens the collapsed strip on the %s tab (section: %s)',
+    async (chip, tab, section) => {
+      // Start on another tab, so landing on the chip's tab is the chip's doing.
+      localStorage.setItem('planka_pipelineStrip_tab', tab === 'build' ? 'statistics' : 'build');
+
+      await renderStrip();
+      expect(header().getAttribute('aria-expanded')).toBe('false');
+
+      await clickChip(chip);
+
+      expect(header().getAttribute('aria-expanded')).toBe('true');
+      expect(localStorage.getItem('planka_pipelineStrip_expanded')).toBe('true');
+      expect(selectedTab()).toBe(tab);
+      // Remembered the same as clicking the tab.
+      expect(localStorage.getItem('planka_pipelineStrip_tab')).toBe(tab);
+
+      if (tab === 'build') {
+        expect(container.querySelector('[data-tab-panel]')).toBeNull();
+      } else {
+        expect(panel(tab)).not.toBeNull();
+      }
+
+      expect(scrolledSections()).toEqual(section === 'none' ? [] : [section]);
+    },
+  );
+
+  test('the dispatch-held chip goes to the pause/resume pipeline controls', async () => {
+    getAnswer = () => jsonResponse(200, view({ drain: { active: false }, dispatching: false }));
+
+    await renderStrip();
+    expect(container.querySelector('[data-chip="draining"]')).toBeNull();
+
+    await clickChip('held');
+
+    expect(selectedTab()).toBe('build');
+    expect(scrolledSections()).toEqual(['controls']);
+    expect(
+      container.querySelector('[data-section="controls"] [data-action="drain-on"]'),
+    ).not.toBeNull();
+  });
+
+  test('the queue chip opens the queue section and remembers it open', async () => {
+    await renderStrip();
+
+    await clickChip('queue');
+
+    // Two of three threads busy: the rule keeps the queue shut, so opening it
+    // is a choice worth remembering, as the section's own toggle does.
+    const toggle = container.querySelector('[data-section="queue"] [aria-expanded]');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(container.querySelectorAll('[data-job]')).toHaveLength(3);
+    expect(localStorage.getItem('planka_pipelineStrip_queueOpened')).toBe('true');
+  });
+
+  test('a chip for where you already are keeps the strip open instead of toggling it', async () => {
+    localStorage.setItem('planka_pipelineStrip_expanded', 'true');
+    localStorage.setItem('planka_pipelineStrip_tab', 'testing');
+
+    await renderStrip();
+    expect(selectedTab()).toBe('testing');
+
+    await clickChip('tests');
+    await clickChip('threads');
+    await clickChip('threads');
+
+    expect(header().getAttribute('aria-expanded')).toBe('true');
+    expect(selectedTab()).toBe('build');
+    // The same chip twice scrolls twice.
+    expect(scrolledSections()).toEqual(['threads', 'threads']);
+  });
+
+  test('the empty header and the title still expand and collapse it', async () => {
+    await renderStrip();
+
+    click(header());
+    await flush();
+    expect(header().getAttribute('aria-expanded')).toBe('true');
+
+    click(header().querySelector('span'));
+    await flush();
+    expect(header().getAttribute('aria-expanded')).toBe('false');
+    expect(scrolledTo).toEqual([]);
+  });
+
+  test('chips are buttons: reachable by Tab, and Enter on one does not toggle the header', async () => {
+    await renderStrip();
+
+    const chips = [...container.querySelectorAll('[data-chip]')];
+    expect(chips.map((chip) => chip.getAttribute('data-chip'))).toEqual([
+      'threads',
+      'queue',
+      'paused',
+      'draining',
+      'tests',
+      'deploys',
+      'limited',
+    ]);
+    chips.forEach((chip) => {
+      expect(chip.tagName).toBe('BUTTON');
+      expect(chip.getAttribute('type')).toBe('button');
+      expect(chip.className).toContain('chipButton');
+    });
+    // Each names where it goes, not the header's "expand".
+    expect(chips.map((chip) => chip.getAttribute('title'))).toEqual([
+      'pipeline.tabBuild',
+      'pipeline.tabBuild',
+      'pipeline.tabBuild',
+      'pipeline.tabBuild',
+      'pipeline.tabTesting',
+      'pipeline.deploysChipTitle{"deploying":1,"waiting":2}',
+      'pipeline.tabAccounts',
+    ]);
+
+    // A button turns Enter and Space into its own click; the header must not
+    // also read the key as its own toggle.
+    act(() => {
+      chips[4].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    await flush();
+    expect(header().getAttribute('aria-expanded')).toBe('false');
+
+    act(() => {
+      header().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    await flush();
+    expect(header().getAttribute('aria-expanded')).toBe('true');
+  });
+});

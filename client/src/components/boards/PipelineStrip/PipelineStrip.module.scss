@@ -109,6 +109,21 @@ $phone: 600px;
     white-space: nowrap;
   }
 
+  // The header's chips are buttons that open their tab.
+  .chipButton {
+    cursor: pointer;
+    font-family: inherit;
+
+    &:hover {
+      filter: brightness(0.88);
+    }
+
+    &:focus-visible {
+      outline: 2px solid #fff;
+      outline-offset: 1px;
+    }
+  }
+
   .chipPaused {
     background: $paused !important;
     color: rgba(0, 0, 0, 0.87) !important;
