@@ -531,7 +531,7 @@ describe('the header chips take you to their area', () => {
   let scrolledTo;
   const { scrollIntoView } = Element.prototype;
 
-  const header = () => container.querySelector('[data-pipeline-strip="ok"] [role="button"]');
+  const header = () => container.querySelector('[data-pipeline-strip="ok"] [data-toggle]');
   const selectedTab = () => {
     const tab = container.querySelector('[role="tab"][aria-selected="true"]');
     return tab && tab.getAttribute('data-tab');
@@ -648,7 +648,7 @@ describe('the header chips take you to their area', () => {
     expect(scrolledTo).toEqual([]);
   });
 
-  test('chips are buttons: reachable by Tab, and Enter on one does not toggle the header', async () => {
+  test('chips are buttons of their own: reachable by Tab, and not inside the toggle', async () => {
     await renderStrip();
 
     const chips = [...container.querySelectorAll('[data-chip]')];
@@ -677,17 +677,22 @@ describe('the header chips take you to their area', () => {
       'pipeline.tabAccounts',
     ]);
 
-    // A button turns Enter and Space into its own click; the header must not
-    // also read the key as its own toggle.
-    act(() => {
-      chips[4].dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    // A button's descendants are presentational to a screen reader, so a
+    // chip inside the toggle (or inside anything role=button) would not be
+    // announced as a button of its own: the toggle is the chips' sibling.
+    expect(header().tagName).toBe('BUTTON');
+    expect(header().getAttribute('type')).toBe('button');
+    chips.forEach((chip) => {
+      expect(chip.parentElement.closest('button, [role="button"]')).toBeNull();
+      expect(header().contains(chip)).toBe(false);
     });
-    await flush();
-    expect(header().getAttribute('aria-expanded')).toBe('false');
+    expect(container.querySelector('[data-pipeline-strip="ok"] [role="button"]')).toBeNull();
 
-    act(() => {
-      header().dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    });
+    // Pressing a chip navigates without also toggling the header.
+    click(chips[4]);
+    await flush();
+    expect(header().getAttribute('aria-expanded')).toBe('true');
+    click(chips[4]);
     await flush();
     expect(header().getAttribute('aria-expanded')).toBe('true');
   });

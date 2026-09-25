@@ -313,7 +313,7 @@ test('the collapsed summary counts busy threads, the queue, paused cards and the
 test('clicking the summary expands the strip and remembers it', async () => {
   await renderStrip();
 
-  click(container.querySelector('[role="button"][aria-expanded="false"]'));
+  click(container.querySelector('[data-toggle][aria-expanded="false"]'));
   // Expanding asks again at once, rather than waiting out the collapsed 30 s.
   await flush();
   expect(fetchCalls).toHaveLength(2);
