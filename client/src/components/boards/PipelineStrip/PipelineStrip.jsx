@@ -116,9 +116,9 @@ const CHIP_DESTINATIONS = {
   limited: { tab: Tabs.ACCOUNTS },
 };
 
-// A header chip: a real button, so it takes Tab, Enter and Space. Its tooltip
-// names the tab it opens unless it has its own, rather than inheriting the
-// header's "expand".
+// A header chip: a real button, so it takes Tab, Enter and Space, and a
+// sibling of the header's toggle rather than inside it. Its tooltip names the
+// tab it opens unless it has its own.
 const HeaderChip = React.memo(({ chip, className, title, onClick, children }) => {
   const [t] = useTranslation();
 
@@ -269,11 +269,9 @@ const PipelineStrip = React.memo(({ boardId }) => {
 
   // A header chip navigates: it opens the strip (never closes it), picks its
   // tab the way clicking the tab would, opens the queue for the queue chip and
-  // scrolls to its section. It does not also toggle the header.
+  // scrolls to its section.
   const handleChipClick = useCallback(
     (event) => {
-      event.stopPropagation();
-
       const destination = CHIP_DESTINATIONS[event.currentTarget.dataset.chip];
 
       writeFlag(EXPANDED_KEY, true);
@@ -512,52 +510,46 @@ const PipelineStrip = React.memo(({ boardId }) => {
   return (
     <div ref={wrapperRef} className={styles.outer} data-pipeline-strip="ok">
       <div className={classNames(styles.wrapper, expanded && styles.wrapperExpanded)}>
-        <div
-          role="button"
-          tabIndex={0}
-          className={styles.header}
-          aria-expanded={expanded}
-          title={t(expanded ? 'pipeline.collapse' : 'pipeline.expand')}
-          onClick={handleToggle}
-          onKeyDown={(event) => {
-            // Enter and Space on a chip are the chip's own click.
-            if (event.target !== event.currentTarget) {
-              return;
-            }
+        {/* The toggle and the chips are siblings, not one inside the other: a
+            button's descendants are presentational to a screen reader, so
+            chips inside the toggle would not be announced as buttons. */}
+        <div className={styles.header}>
+          <button
+            type="button"
+            className={styles.toggle}
+            aria-expanded={expanded}
+            title={t(expanded ? 'pipeline.collapse' : 'pipeline.expand')}
+            data-toggle
+            onClick={handleToggle}
+          >
+            <span className={styles.title}>
+              <Icon name={expanded ? 'caret down' : 'caret right'} />
+              {t('pipeline.title')}
+            </span>
+            <span className={styles.segments}>
+              {view.threads.map((thread) => {
+                const percent = progressPercent(thread.progress);
 
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              handleToggle();
-            }
-          }}
-        >
-          <span className={styles.title}>
-            <Icon name={expanded ? 'caret down' : 'caret right'} />
-            {t('pipeline.title')}
-          </span>
-          <span className={styles.segments}>
-            {view.threads.map((thread) => {
-              const percent = progressPercent(thread.progress);
-
-              return (
-                <span
-                  key={thread.name}
-                  className={classNames(
-                    styles.segment,
-                    styles[`state${upperFirst(thread.paused ? 'paused' : thread.state)}`],
-                  )}
-                  title={thread.cardName ? `${thread.name}: ${thread.cardName}` : thread.name}
-                >
-                  {isThreadBusy(thread) && (
-                    <span
-                      className={styles.segmentFill}
-                      style={{ width: `${percent === null ? 100 : percent}%` }}
-                    />
-                  )}
-                </span>
-              );
-            })}
-          </span>
+                return (
+                  <span
+                    key={thread.name}
+                    className={classNames(
+                      styles.segment,
+                      styles[`state${upperFirst(thread.paused ? 'paused' : thread.state)}`],
+                    )}
+                    title={thread.cardName ? `${thread.name}: ${thread.cardName}` : thread.name}
+                  >
+                    {isThreadBusy(thread) && (
+                      <span
+                        className={styles.segmentFill}
+                        style={{ width: `${percent === null ? 100 : percent}%` }}
+                      />
+                    )}
+                  </span>
+                );
+              })}
+            </span>
+          </button>
           <span className={styles.chips} data-summary>
             <HeaderChip chip="threads" onClick={handleChipClick}>
               {t('pipeline.threadsBusy', {
