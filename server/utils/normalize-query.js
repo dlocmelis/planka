@@ -23,12 +23,15 @@
  * protection by refusing to copy a `__proto__` key across (assigning one onto an ordinary
  * object is exactly the prototype write the CVE fix exists to prevent).
  *
- * Cost, so that nobody has to measure it at 2am: the `plainObjects: true` parser returns a
- * null-prototype object for the query as a WHOLE, not only for bracketed parameters, so this
- * does rebuild `req.query` on every single request -- one shallow copy of a handful of strings.
- * Nested values are returned by identity when nothing beneath them needed rebuilding, so the
- * copy stays shallow for the requests that carry no bracketed parameter, which is almost all of
- * them.
+ * express 4.22.1 reverted that parser change (CVE-2024-51999 was rejected), and the express in
+ * the lockfile -- 4.22.2, pinned by sails 1.5.18 -- hands over ordinary objects again. This stays
+ * as a guard: on an ordinary query it returns the very same reference and copies nothing, and it
+ * keeps the 500 above from coming back should a parser ever produce null-prototype objects again.
+ *
+ * Cost, so that nobody has to measure it at 2am: under a `plainObjects: true` parser the query
+ * as a WHOLE is null-prototype, not only its bracketed parameters, so this would rebuild
+ * `req.query` on every request -- one shallow copy of a handful of strings. Nested values are
+ * returned by identity when nothing beneath them needed rebuilding, so the copy stays shallow.
  */
 
 // qs stops nesting at depth 5; this is only a backstop against a pathological input.
