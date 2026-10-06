@@ -67,17 +67,25 @@ const PERCENT_ENCODED_CURSOR_QUERY_STRING =
 
 describe('normalize-query', () => {
   describe('the express 4.22.0 behaviour this exists for', () => {
-    it('should hand bracketed query parameters over as null-prototype objects', async () => {
-      const query = await parseQueryThroughExpress(CURSOR_QUERY_STRING);
+    // express 4.22.0 parsed the extended query with `qs`'s `plainObjects: true`, which hands every
+    // bracketed parameter over as a null-prototype object; 4.22.1 reverted that (CVE-2024-51999
+    // was rejected) and the express in the lockfile -- sails 1.5.18 pins 4.22.2 -- is back to
+    // ordinary objects. The crash it caused is pinned on a hand-built null-prototype object, so
+    // that the reason this middleware exists does not depend on which express is installed.
+    it("should make rttc.validate('json', ...) throw on a null-prototype object", () => {
+      const cursor = Object.create(null);
+      cursor.listChangedAt = '2024-01-01T00:00:00.000Z';
+      cursor.id = '1357158568008091264';
 
-      expect(Object.getPrototypeOf(query.before)).to.be.equal(null);
-      expect(Object.keys(query.before)).to.have.members(['listChangedAt', 'id']);
+      expect(() => rttc.validate('json', cursor)).to.throw(/reading 'name'/);
     });
 
-    it("should make rttc.validate('json', ...) throw on such an object", async () => {
+    it('should get ordinary objects for bracketed query parameters from the express in the lockfile', async () => {
       const query = await parseQueryThroughExpress(CURSOR_QUERY_STRING);
 
-      expect(() => rttc.validate('json', query.before)).to.throw(/reading 'name'/);
+      expect(Object.getPrototypeOf(query.before)).to.be.equal(Object.prototype);
+      expect(Object.keys(query.before)).to.have.members(['listChangedAt', 'id']);
+      expect(() => rttc.validate('json', query.before)).to.not.throw();
     });
   });
 
@@ -185,15 +193,33 @@ describe('normalize-query', () => {
       expect(query).to.be.eql({ search: 'text', userIds: '1,2' });
     });
 
-    it('should still rebuild the query object itself, because express makes that null-prototype too', async () => {
-      // `plainObjects: true` applies to the query as a whole, not only to bracketed parameters,
-      // so this middleware copies `req.query` on EVERY request. Pinned because the cost of the
-      // middleware is exactly this copy, and a future reader should not have to measure it.
-      const raw = await parseQueryThroughExpress('search=text');
+    it('should leave an ordinary query object in place, by reference', async () => {
+      // The express in the lockfile hands `req.query` over with an ordinary prototype, so on an
+      // ordinary request this middleware must cost nothing: no copy, the same object.
       const normalized = await parseQueryThroughExpress('search=text', [normalizeQuery]);
-
-      expect(Object.getPrototypeOf(raw)).to.be.equal(null);
       expect(Object.getPrototypeOf(normalized)).to.be.equal(Object.prototype);
+
+      const query = { search: 'text' };
+      const req = { query };
+      let nextCalled = false;
+      normalizeQuery(req, {}, () => {
+        nextCalled = true;
+      });
+
+      expect(req.query).to.be.equal(query);
+      expect(nextCalled).to.be.equal(true);
+    });
+
+    it('should replace a null-prototype query object itself, should express ever hand one over again', () => {
+      const query = Object.create(null);
+      query.search = 'text';
+      const req = { query };
+
+      normalizeQuery(req, {}, () => {});
+
+      expect(req.query).to.not.be.equal(query);
+      expect(Object.getPrototypeOf(req.query)).to.be.equal(Object.prototype);
+      expect(req.query).to.be.eql({ search: 'text' });
     });
 
     it('should keep nested values by identity, so the copy stays shallow', () => {
@@ -312,7 +338,7 @@ describe('normalize-query', () => {
       expect(before.custom).to.be.a('function');
     });
 
-    it('should accept a null-prototype cursor from express through its declared type', async () => {
+    it('should accept the cursor from express through its declared type', async () => {
       const query = await parseQueryThroughExpress(CURSOR_QUERY_STRING);
 
       expect(() => rttc.validate(before.type, query.before)).to.not.throw();
