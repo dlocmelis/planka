@@ -90,6 +90,9 @@
   "overrides": {
     "react-mentions": {
       "@babel/runtime": "^7.28.6"
+    },
+    "markdown-it": {
+      "linkify-it": "^5.0.2"
     }
   },
   "dependencies": {
